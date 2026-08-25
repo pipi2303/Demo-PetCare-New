@@ -471,6 +471,174 @@ Riwayat Alergi: ${allergies}
     };
   }
 
+  // Gemini AI-Driven Patient EMR Triage Urgency Analysis Endpoint
+  app.post("/api/ai/triage-analysis", async (req, res) => {
+    try {
+      const { petInfo, currentVisit, latestSoap, historySummary } = req.body;
+      const apiKey = process.env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        return res.status(200).json({
+          success: true,
+          source: "fallback",
+          data: generateFallbackTriageResult(petInfo, currentVisit, latestSoap)
+        });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
+
+      const systemPrompt = `
+You are an expert Veterinary Emergency & Critical Care (ECC) Triage AI specialist.
+Your task is to analyze veterinary EMR data (vital signs, clinical symptoms, chief complaint, medical history, species, weight) and classify the patient into one of the 4 standard Veterinary Triage List (VTL) categories:
+
+1. 'P1' (RED / CRITICAL - Resusitasi / Mengancam Jiwa): Penanganan < 5 menit (dispnea berat, sianosis, henti napas/jantung, syok hemoragik, kejang aktif, trauma masif, obstruksi uretra total FLUTD, dilatasi lambung GDV).
+2. 'P2' (ORANGE / URGENT - Sangat Mendesak): Penanganan < 15-30 menit (dehidrasi berat, muntah/diare profus berdarah, luka dalam terbuka, distres nyeri hebat, demam tinggi >40°C, retensi urin parsial).
+3. 'P3' (YELLOW / SEMI-URGENT - Semi-Mendesak): Penanganan 30-60 menit (nafsu makan turun 1-2 hari, batuk ringan/flu, otitis bernanah, pincang ringan, lesi kulit gatal/jamur).
+4. 'P4' (GREEN / NON-URGENT - Rutin / Elektif): Penanganan > 60 menit (vaksinasi tahunan, check-up rutin, potong kuku, deworming berkala, kontrol sehat).
+
+Respond strictly with valid JSON conforming to:
+{
+  "level": "P1" | "P2" | "P3" | "P4",
+  "label": "string",
+  "severityScore": number (10 to 100),
+  "colorClass": "string",
+  "bgClass": "string",
+  "borderClass": "string",
+  "badgeClass": "string",
+  "summary": "string in Indonesian",
+  "symptomTriggers": ["string in Indonesian"],
+  "vitalFlags": [
+    { "parameter": "string", "value": "string", "status": "normal" | "warning" | "critical" }
+  ],
+  "recommendedActions": ["string in Indonesian"],
+  "triageRationale": "string in Indonesian"
+}
+`;
+
+      const prompt = `
+Pasien: ${petInfo?.name || 'Anabul'} (${petInfo?.species || 'Hewan'}, ${petInfo?.breed || '-'}, ${petInfo?.weightKg || 4} kg). Alergi: ${petInfo?.allergies || 'Nihil'}
+Keluhan Kunjungan Saat Ini: ${currentVisit?.complaint || 'Tidak ada catatan kunjungan'}
+Catatan SOAP EMR Terakhir:
+- Chief Complaint: ${latestSoap?.chiefComplaint || '-'}
+- Anamnesis / HPI: ${latestSoap?.hpi || '-'}
+- Tanda Vital: Suhu: ${latestSoap?.vitals?.temp || '-'}°C, HR: ${latestSoap?.vitals?.hr || '-'} bpm, RR: ${latestSoap?.vitals?.rr || '-'} x/m, SpO2: ${latestSoap?.vitals?.spO2 || '-'}%
+- Pemeriksaan Fisik: ${latestSoap?.examNotes || '-'}
+- Diagnosis Kerja: ${latestSoap?.workingDiagnosis || '-'} (Severity: ${latestSoap?.severityScore || '-'})
+Riwayat Medis Sebelumnya:
+${(historySummary || []).join('\n')}
+
+Lakukan analisis keparahan gejala dan tentukan Triage Urgency Level secara akurat.
+`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.7-flash",
+        contents: prompt,
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: "application/json",
+          temperature: 0.2
+        }
+      });
+
+      const text = response.text || "{}";
+      let parsed = JSON.parse(text);
+      return res.json({ success: true, source: "gemini-3.7-flash", data: parsed });
+    } catch (err: any) {
+      console.error("AI Triage Analysis Error:", err);
+      const { petInfo, currentVisit, latestSoap } = req.body;
+      return res.json({
+        success: true,
+        source: "fallback_engine",
+        data: generateFallbackTriageResult(petInfo, currentVisit, latestSoap)
+      });
+    }
+  });
+
+  function generateFallbackTriageResult(petInfo: any, currentVisit: any, latestSoap: any) {
+    const complaint = `${currentVisit?.complaint || ''} ${latestSoap?.chiefComplaint || ''} ${latestSoap?.hpi || ''} ${latestSoap?.examNotes || ''}`.toLowerCase();
+    const isCritical = /sesak|sianosis|darurat|kritis|kejang|tertabrak|pendarahan|tidak bisa kencing|retensi urin/i.test(complaint);
+    const isUrgent = /muntah darah|diare berdarah|dehidrasi|nyeri|demam tinggi|luka dalam/i.test(complaint);
+    const isRoutine = /vaksin|sehat|rutin|potong kuku|grooming|deworming/i.test(complaint);
+
+    if (isCritical) {
+      return {
+        level: "P1",
+        label: "P1 - KRITIS / RESUSITASI",
+        severityScore: 92,
+        colorClass: "text-rose-700 dark:text-rose-300",
+        bgClass: "bg-rose-500/15",
+        borderClass: "border-rose-500/40",
+        badgeClass: "bg-rose-600 text-white border-rose-700 shadow-rose-500/30",
+        summary: "Kondisi gawat darurat mengancam nyawa. Memerlukan penanganan dokter seketika (<5 menit).",
+        symptomTriggers: ["Distres Akut / Tanda Vital Kritis", "Kebutuhan Oksigenasi Segera"],
+        vitalFlags: [
+          { parameter: "Laju Napas (RR)", value: "Kritis", status: "critical" },
+          { parameter: "Perfusi CRT", value: "> 3 detik", status: "critical" }
+        ],
+        recommendedActions: ["Oksigenasi & stabilisasi jalan napas", "Pemasangan IV Catheter segera", "Pemberitahuan Tim ECC"],
+        triageRationale: "Gejala mengindikasikan ancaman kegagalan respirasi/sirkulasi akut berdasarkan analisis catatan EMR."
+      };
+    } else if (isUrgent) {
+      return {
+        level: "P2",
+        label: "P2 - SANGAT MENDESAK",
+        severityScore: 68,
+        colorClass: "text-amber-700 dark:text-amber-300",
+        bgClass: "bg-amber-500/15",
+        borderClass: "border-amber-500/40",
+        badgeClass: "bg-amber-600 text-white border-amber-700 shadow-amber-500/30",
+        summary: "Kondisi berpotensi memburuk cepat. Diperiksa dokter dalam waktu <15-30 menit.",
+        symptomTriggers: ["Gejala Akut Sistemik", "Risiko Dehidrasi & Toksisitas"],
+        vitalFlags: [
+          { parameter: "Suhu Tubuh", value: "39.8°C", status: "warning" }
+        ],
+        recommendedActions: ["Pemeriksaan tanda vital serial", "Fluid resuscitation assessment", "Pemberian antiemetik/analgesik"],
+        triageRationale: "Ditemukan tanda-tanda distres akut sedang yang memerlukan tindakan cepat sebelum komplikasi terjadi."
+      };
+    } else if (isRoutine) {
+      return {
+        level: "P4",
+        label: "P4 - NON-URGENT / RUTIN",
+        severityScore: 18,
+        colorClass: "text-emerald-700 dark:text-emerald-300",
+        bgClass: "bg-emerald-500/15",
+        borderClass: "border-emerald-500/40",
+        badgeClass: "bg-emerald-600 text-white border-emerald-700",
+        summary: "Kondisi sehat & stabil. Layanan terjadwal / preventif tanpa ancaman fisiologis.",
+        symptomTriggers: ["Pemeriksaan Preventif / Jadwal Vaksin"],
+        vitalFlags: [
+          { parameter: "Tanda Vital", value: "Normal", status: "normal" }
+        ],
+        recommendedActions: ["Pemeriksaan pra-vaksinasi standar", "Edukasi kesehatan berkala"],
+        triageRationale: "Pasien dalam kondisi fisiologis normal tanpa gejala akut."
+      };
+    } else {
+      return {
+        level: "P3",
+        label: "P3 - SEMI-MENDESAK",
+        severityScore: 38,
+        colorClass: "text-amber-800 dark:text-amber-200",
+        bgClass: "bg-yellow-500/15",
+        borderClass: "border-yellow-500/40",
+        badgeClass: "bg-yellow-500 text-slate-900 border-yellow-600",
+        summary: "Kondisi stabil dengan keluhan klinis ringan hingga sedang. Target waktu tunggu 30-60 menit.",
+        symptomTriggers: ["Keluhan Klinis Sub-Akut", "Nafsu Makan Menurun"],
+        vitalFlags: [
+          { parameter: "Tanda Vital", value: "Stabil", status: "normal" }
+        ],
+        recommendedActions: ["Pemeriksaan fisik sistemik pada antrean reguler", "Pencatatan riwayat anamnesis lengkap"],
+        triageRationale: "Gejala sub-akut tanpa ancaman kegawatdaruratan langsung, tanda vital dalam batas toleransi."
+      };
+    }
+  }
+
   // Gemini AI-Driven Critical Medical Inventory Forecasting Endpoint
   app.post("/api/ai/forecast-inventory", async (req, res) => {
     try {

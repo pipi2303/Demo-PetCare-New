@@ -40,6 +40,12 @@ import {
 import * as Types from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import { DailyPetDiaryModal } from '../common/DailyPetDiaryModal';
+import { BookingCalendarView } from '../booking/BookingCalendarView';
+import {
+  Calendar as CalendarIcon,
+  LayoutGrid,
+  Table as TableIcon
+} from 'lucide-react';
 
 interface ServicesModuleProps {
   activeModule?: 'booking' | 'grooming' | 'petHotel' | 'telehealth' | 'ambulance' | string;
@@ -99,6 +105,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   // ---------------------------------------------------------------------------
   // 1. BOOKING STATE & HANDLERS
   // ---------------------------------------------------------------------------
+  const [bookingSubView, setBookingSubView] = useState<'calendar' | 'table'>('calendar');
   const [showAddBookingModal, setShowAddBookingModal] = useState(false);
   const [bookingType, setBookingType] = useState<'Dokter' | 'Grooming' | 'Pet Hotel'>('Dokter');
   const [bookingCustId, setBookingCustId] = useState(customers[0]?.id || '');
@@ -404,193 +411,243 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       {/* TAB 1: BOOKING & ANTRIAN */}
       {/* ========================================================================= */}
       {currentTab === 'booking' && (
-        <div className="space-y-6">
-          {/* Quick Stats Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-[#FFFDF9] rounded-xl p-4 border border-[#E1D6BE] shadow-2xs space-y-1">
-              <span className="text-xs text-[#6B6656] font-semibold">Total Janji Temu Hari Ini</span>
-              <p className="text-2xl font-extrabold text-[#1B2A45] font-display">{doctorBookings.length}</p>
-              <p className="text-[10px] text-emerald-700 font-medium">Terjadwal & Terkonfirmasi</p>
-            </div>
-            <div className="bg-[#FFFDF9] rounded-xl p-4 border border-[#E1D6BE] shadow-2xs space-y-1">
-              <span className="text-xs text-[#6B6656] font-semibold">Siap Check-In</span>
-              <p className="text-2xl font-extrabold text-[#B8905A] font-display">
-                {doctorBookings.filter((b) => b.status === 'Terkonfirmasi').length}
-              </p>
-              <p className="text-[10px] text-[#6B6656]">Dapat dipindah ke Antrean Live</p>
-            </div>
-            <div className="bg-[#FFFDF9] rounded-xl p-4 border border-[#E1D6BE] shadow-2xs space-y-1">
-              <span className="text-xs text-[#6B6656] font-semibold">Sudah Selesai Periksa</span>
-              <p className="text-2xl font-extrabold text-emerald-700 font-display">
-                {doctorBookings.filter((b) => b.status === 'Selesai').length}
-              </p>
-              <p className="text-[10px] text-emerald-600 font-medium">Layanan Selesai</p>
-            </div>
-            <div className="bg-[#FFFDF9] rounded-xl p-4 border border-[#E1D6BE] shadow-2xs space-y-1">
-              <span className="text-xs text-[#6B6656] font-semibold">Dibatalkan / Reschedule</span>
-              <p className="text-2xl font-extrabold text-rose-700 font-display">
-                {doctorBookings.filter((b) => b.status === 'Batal').length}
-              </p>
-              <p className="text-[10px] text-rose-600 font-medium">Slot Dibebaskan</p>
-            </div>
-          </div>
-
-          {/* Action Bar & Filter */}
-          <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
-            <div className="flex items-center gap-2 overflow-x-auto">
-              <Filter className="w-4 h-4 text-[#B8905A] shrink-0" />
-              <span className="text-xs font-bold text-[#1B2A45] shrink-0">Status:</span>
-              {['Semua', 'Terkonfirmasi', 'Menunggu', 'Selesai', 'Batal'].map((st) => (
-                <button
-                  key={st}
-                  onClick={() => setBookingFilterStatus(st)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 ${
-                    bookingFilterStatus === st
-                      ? 'bg-[#1B2A45] text-[#FFFDF9]'
-                      : 'bg-[#F6F1E6] text-[#22242B] hover:bg-[#E1D6BE]/60'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setShowAddBookingModal(true)}
-              className="px-4 py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 shrink-0"
-            >
-              <Plus className="w-4 h-4" /> Buat Janji Temu Baru
-            </button>
-          </div>
-
-          {/* Dropdown Quick Selector for Booking Patients */}
-          <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-3.5 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <label className="text-xs font-bold text-[#1B2A45] flex items-center gap-1.5 shrink-0">
-              <User className="w-4 h-4 text-[#B8905A]" /> Dropdown List Booking Pasien:
-            </label>
-            <div className="flex-1 max-w-xl">
-              <select
-                value={selectedBookingPatientId}
-                onChange={(e) => setSelectedBookingPatientId(e.target.value)}
-                className="w-full bg-[#F6F1E6] hover:bg-white text-[#1B2A45] text-xs font-bold rounded-lg px-3 py-2 border border-[#E1D6BE] focus:outline-hidden focus:border-[#B8905A] shadow-2xs transition-all cursor-pointer"
-              >
-                {doctorBookings.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.bookingNo}: {b.petName} ({b.petSpecies}) • {b.customerName} @ {b.date} {b.timeSlot} [{b.status}]
-                  </option>
-                ))}
-              </select>
-            </div>
-            {selectedBookingPatientId && (
-              <div className="flex items-center gap-2">
-                {(() => {
-                  const b = doctorBookings.find((item) => item.id === selectedBookingPatientId);
-                  if (!b) return null;
-                  return (
-                    <>
-                      {b.status === 'Terkonfirmasi' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            checkInDoctorBooking(b.id);
-                            addToast(`Pasien ${b.petName} berhasil check-in ke antrean klinik!`, 'success');
-                          }}
-                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Check-in Pasien Ini
-                        </button>
-                      )}
-                    </>
-                  );
-                })()}
+        <div className="space-y-4">
+          {/* Sub-view Switcher: Drag-and-Drop Visual Calendar vs Data Table */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-3 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-amber-500/15 text-[#B8905A]">
+                <CalendarCheck className="w-5 h-5" />
               </div>
-            )}
-          </div>
-
-          {/* Bookings List Table */}
-          <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-3">
-              <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
-                <CalendarCheck className="w-4 h-4 text-[#B8905A]" /> Daftar Jadwal Booking Pasien
-              </h3>
-              <span className="text-xs text-[#6B6656]">Menampilkan {filteredBookings.length} Jadwal</span>
+              <div>
+                <h3 className="font-bold text-sm text-[#1B2A45] font-display">Manajemen Janji Temu & Antrean Pasien</h3>
+                <p className="text-[11px] text-[#6B6656]">Kelola jadwal dokter secara visual dengan drag & drop atau tabel data</p>
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-[#22242B]">
-                <thead className="bg-[#F6F1E6] text-[#1B2A45] font-bold uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3">No. Booking</th>
-                    <th className="p-3">Pasien & Pemilik</th>
-                    <th className="p-3">Tanggal & Jam Slot</th>
-                    <th className="p-3">Keluhan</th>
-                    <th className="p-3">Dokter / Petugas</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Aksi Operasional</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E1D6BE]">
-                  {filteredBookings.map((b) => (
-                    <tr key={b.id} className="hover:bg-[#F6F1E6]/40 transition-colors">
-                      <td className="p-3 font-mono font-bold text-[#1B2A45]">{b.bookingNo}</td>
-                      <td className="p-3">
-                        <span className="font-bold text-[#1B2A45] block">{b.petName} ({b.petSpecies})</span>
-                        <span className="text-[11px] text-[#6B6656]">{b.customerName}</span>
-                      </td>
-                      <td className="p-3 font-semibold">
-                        <span className="flex items-center gap-1 text-[#1B2A45]">
-                          <Clock className="w-3.5 h-3.5 text-[#B8905A]" /> {b.date} @ {b.timeSlot}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 rounded bg-[#E1D6BE]/40 text-[#1B2A45] font-semibold text-[11px]">
-                          {b.complaint}
-                        </span>
-                      </td>
-                      <td className="p-3 font-medium">{b.doctorName || 'drh. Budi Santoso'}</td>
-                      <td className="p-3">
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            b.status === 'Terkonfirmasi'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                              : b.status === 'Menunggu'
-                              ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                              : b.status === 'Selesai'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                              : 'bg-rose-100 text-rose-800 border border-rose-300'
-                          }`}
-                        >
-                          {b.status}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
+            <div className="flex items-center bg-[#F6F1E6] p-1 rounded-xl border border-[#E1D6BE]">
+              <button
+                type="button"
+                onClick={() => setBookingSubView('calendar')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  bookingSubView === 'calendar'
+                    ? 'bg-[#1B2A45] text-white shadow-2xs'
+                    : 'text-[#6B6656] hover:text-[#1B2A45]'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5 text-amber-400" />
+                <span>Kalender Drag & Drop (Visual)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBookingSubView('table')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  bookingSubView === 'table'
+                    ? 'bg-[#1B2A45] text-white shadow-2xs'
+                    : 'text-[#6B6656] hover:text-[#1B2A45]'
+                }`}
+              >
+                <TableIcon className="w-3.5 h-3.5" />
+                <span>Tabel Data List</span>
+              </button>
+            </div>
+          </div>
+
+          {/* If Visual Calendar Sub-view */}
+          {bookingSubView === 'calendar' ? (
+            <BookingCalendarView
+              onCheckInToClinicQueue={handleCheckInBookingToQueue}
+              setActiveModule={setActiveModule}
+            />
+          ) : (
+            <div className="space-y-6">
+              {/* Quick Stats Bar */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-[#FFFDF9] rounded-xl p-4 border border-[#E1D6BE] shadow-2xs space-y-1">
+                  <span className="text-xs text-[#6B6656] font-semibold">Total Janji Temu Hari Ini</span>
+                  <p className="text-2xl font-extrabold text-[#1B2A45] font-display">{doctorBookings.length}</p>
+                  <p className="text-[10px] text-emerald-700 font-medium">Terjadwal & Terkonfirmasi</p>
+                </div>
+                <div className="bg-[#FFFDF9] rounded-xl p-4 border border-[#E1D6BE] shadow-2xs space-y-1">
+                  <span className="text-xs text-[#6B6656] font-semibold">Siap Check-In</span>
+                  <p className="text-2xl font-extrabold text-[#B8905A] font-display">
+                    {doctorBookings.filter((b) => b.status === 'Terkonfirmasi').length}
+                  </p>
+                  <p className="text-[10px] text-[#6B6656]">Dapat dipindah ke Antrean Live</p>
+                </div>
+                <div className="bg-[#FFFDF9] rounded-xl p-4 border border-[#E1D6BE] shadow-2xs space-y-1">
+                  <span className="text-xs text-[#6B6656] font-semibold">Sudah Selesai Periksa</span>
+                  <p className="text-2xl font-extrabold text-emerald-700 font-display">
+                    {doctorBookings.filter((b) => b.status === 'Selesai').length}
+                  </p>
+                  <p className="text-[10px] text-emerald-600 font-medium">Layanan Selesai</p>
+                </div>
+                <div className="bg-[#FFFDF9] rounded-xl p-4 border border-[#E1D6BE] shadow-2xs space-y-1">
+                  <span className="text-xs text-[#6B6656] font-semibold">Dibatalkan / Reschedule</span>
+                  <p className="text-2xl font-extrabold text-rose-700 font-display">
+                    {doctorBookings.filter((b) => b.status === 'Batal').length}
+                  </p>
+                  <p className="text-[10px] text-rose-600 font-medium">Slot Dibebaskan</p>
+                </div>
+              </div>
+
+              {/* Action Bar & Filter */}
+              <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
+                <div className="flex items-center gap-2 overflow-x-auto">
+                  <Filter className="w-4 h-4 text-[#B8905A] shrink-0" />
+                  <span className="text-xs font-bold text-[#1B2A45] shrink-0">Status:</span>
+                  {['Semua', 'Terkonfirmasi', 'Menunggu', 'Selesai', 'Batal'].map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setBookingFilterStatus(st)}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                        bookingFilterStatus === st
+                          ? 'bg-[#1B2A45] text-[#FFFDF9]'
+                          : 'bg-[#F6F1E6] text-[#22242B] hover:bg-[#E1D6BE]/60'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setShowAddBookingModal(true)}
+                  className="px-4 py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Buat Janji Temu Baru
+                </button>
+              </div>
+
+              {/* Dropdown Quick Selector for Booking Patients */}
+              <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-3.5 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <label className="text-xs font-bold text-[#1B2A45] flex items-center gap-1.5 shrink-0">
+                  <User className="w-4 h-4 text-[#B8905A]" /> Dropdown List Booking Pasien:
+                </label>
+                <div className="flex-1 max-w-xl">
+                  <select
+                    value={selectedBookingPatientId}
+                    onChange={(e) => setSelectedBookingPatientId(e.target.value)}
+                    className="w-full bg-[#F6F1E6] hover:bg-white text-[#1B2A45] text-xs font-bold rounded-lg px-3 py-2 border border-[#E1D6BE] focus:outline-hidden focus:border-[#B8905A] shadow-2xs transition-all cursor-pointer"
+                  >
+                    {doctorBookings.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.bookingNo}: {b.petName} ({b.petSpecies}) • {b.customerName} @ {b.date} {b.timeSlot || 'Unscheduled'} [{b.status}]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {selectedBookingPatientId && (
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const b = doctorBookings.find((item) => item.id === selectedBookingPatientId);
+                      if (!b) return null;
+                      return (
+                        <>
                           {b.status === 'Terkonfirmasi' && (
                             <button
-                              onClick={() => handleCheckInBookingToQueue(b)}
-                              className="px-2.5 py-1 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-[11px] rounded-lg shadow-2xs transition-all flex items-center gap-1"
+                              type="button"
+                              onClick={() => {
+                                checkInDoctorBooking(b.id);
+                                addToast(`Pasien ${b.petName} berhasil check-in ke antrean klinik!`, 'success');
+                              }}
+                              className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer"
                             >
-                              <CheckCircle2 className="w-3 h-3 text-[#D9B98A]" /> Check-In Antrean
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Check-in Pasien Ini
                             </button>
                           )}
-                          <a
-                            href={`https://wa.me/6281234567890?text=${encodeURIComponent(
-                              `Halo Kak ${b.customerName}, mengingatkan jadwal periksa ${b.petName} pada ${b.date} pukul ${b.timeSlot} di Klinik PetCare ERP. Terima kasih!`
-                            )}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] rounded-lg transition-all flex items-center gap-1"
-                          >
-                            <Smartphone className="w-3 h-3" /> WA Reminder
-                          </a>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Bookings List Table */}
+              <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-3">
+                  <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
+                    <CalendarCheck className="w-4 h-4 text-[#B8905A]" /> Daftar Jadwal Booking Pasien
+                  </h3>
+                  <span className="text-xs text-[#6B6656]">Menampilkan {filteredBookings.length} Jadwal</span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-[#22242B]">
+                    <thead className="bg-[#F6F1E6] text-[#1B2A45] font-bold uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3">No. Booking</th>
+                        <th className="p-3">Pasien & Pemilik</th>
+                        <th className="p-3">Tanggal & Jam Slot</th>
+                        <th className="p-3">Keluhan</th>
+                        <th className="p-3">Dokter / Petugas</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3 text-right">Aksi Operasional</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E1D6BE]">
+                      {filteredBookings.map((b) => (
+                        <tr key={b.id} className="hover:bg-[#F6F1E6]/40 transition-colors">
+                          <td className="p-3 font-mono font-bold text-[#1B2A45]">{b.bookingNo}</td>
+                          <td className="p-3">
+                            <span className="font-bold text-[#1B2A45] block">{b.petName} ({b.petSpecies})</span>
+                            <span className="text-[11px] text-[#6B6656]">{b.customerName}</span>
+                          </td>
+                          <td className="p-3 font-semibold">
+                            <span className="flex items-center gap-1 text-[#1B2A45]">
+                              <Clock className="w-3.5 h-3.5 text-[#B8905A]" /> {b.date} @ {b.timeSlot || 'Belum Terjadwal'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded bg-[#E1D6BE]/40 text-[#1B2A45] font-semibold text-[11px]">
+                              {b.complaint}
+                            </span>
+                          </td>
+                          <td className="p-3 font-medium">{b.doctorName || 'drh. Budi Santoso'}</td>
+                          <td className="p-3">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                b.status === 'Terkonfirmasi'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                  : b.status === 'Menunggu'
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                  : b.status === 'Selesai'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-rose-100 text-rose-800 border border-rose-300'
+                              }`}
+                            >
+                              {b.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {b.status === 'Terkonfirmasi' && (
+                                <button
+                                  onClick={() => handleCheckInBookingToQueue(b)}
+                                  className="px-2.5 py-1 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-[11px] rounded-lg shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                  <CheckCircle2 className="w-3 h-3 text-[#D9B98A]" /> Check-In Antrean
+                                </button>
+                              )}
+                              <a
+                                href={`https://wa.me/6281234567890?text=${encodeURIComponent(
+                                  `Halo Kak ${b.customerName}, mengingatkan jadwal periksa ${b.petName} pada ${b.date} pukul ${b.timeSlot || 'segera'} di Klinik PetCare ERP. Terima kasih!`
+                                )}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] rounded-lg transition-all flex items-center gap-1"
+                              >
+                                <Smartphone className="w-3 h-3" /> WA Reminder
+                              </a>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

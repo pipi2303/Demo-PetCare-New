@@ -48,6 +48,7 @@ interface DataContextType {
   clinicVisits: Types.ClinicVisit[];
   addClinicVisit: (v: Omit<Types.ClinicVisit, 'id' | 'visitNo' | 'queueNo' | 'status' | 'queuedAt'>) => Types.ClinicVisit;
   updateVisitStatus: (id: string, status: Types.VisitStatus) => void;
+  updateClinicVisit: (id: string, updates: Partial<Types.ClinicVisit>) => void;
 
   soapNotes: Types.SOAPNote[];
   saveSOAPNote: (soap: Omit<Types.SOAPNote, 'id'>) => void;
@@ -659,6 +660,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Edit', 'Poli & Antrean', visit?.visitNo || id, `Status kunjungan poli diubah menjadi: ${status}`);
   };
 
+  const updateClinicVisit = (id: string, updates: Partial<Types.ClinicVisit>) => {
+    const visit = clinicVisits.find((v) => v.id === id);
+    setClinicVisits((prev) =>
+      prev.map((v) => (v.id === id ? { ...v, ...updates } : v))
+    );
+    if (updates.triageUrgency) {
+      addAuditLog(
+        'Edit',
+        'Triase & Urgensi Klinis',
+        visit?.visitNo || id,
+        `Tingkat urgensi triase diubah menjadi ${updates.triageUrgency} (${updates.triageRationale || 'Rekomendasi AI'})`,
+        { severity: updates.triageUrgency === 'P1' ? 'Kritis' : updates.triageUrgency === 'P2' ? 'Warning' : 'Info' }
+      );
+    }
+  };
+
   const saveSOAPNote = (soapData: Omit<Types.SOAPNote, 'id'>) => {
     const existing = soapNotes.find((s) => s.visitId === soapData.visitId);
     let soapId = existing?.id;
@@ -1245,6 +1262,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clinicVisits,
         addClinicVisit,
         updateVisitStatus,
+        updateClinicVisit,
         soapNotes,
         saveSOAPNote,
         inpatients,

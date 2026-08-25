@@ -3,6 +3,9 @@ import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Customer, Pet, Employee, Supplier, ServiceItem, MembershipTier } from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { TriageUrgencyBadge } from '../clinic/TriageUrgencyBadge';
+import { TriageUrgencyModal } from '../clinic/TriageUrgencyModal';
+import { computeClientTriageUrgency } from '../../utils/aiTriageUrgency';
 import {
   Users,
   Dog,
@@ -50,7 +53,9 @@ export const MasterDataModule: React.FC = () => {
     suppliers = [],
     addSupplier,
     updateSupplier,
-    deleteSupplier
+    deleteSupplier,
+    clinicVisits = [],
+    soapNotes = []
   } = useData();
   const { addToast } = useToast();
 
@@ -58,6 +63,7 @@ export const MasterDataModule: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [tierFilter, setTierFilter] = useState<string>('All');
   const [speciesFilter, setSpeciesFilter] = useState<string>('All');
+  const [triageFilter, setTriageFilter] = useState<string>('All');
   const [serviceCatFilter, setServiceCatFilter] = useState<string>('All');
 
   // Modals visibility
@@ -67,6 +73,11 @@ export const MasterDataModule: React.FC = () => {
   const [showAddPetModal, setShowAddPetModal] = useState(false);
   const [editingPet, setEditingPet] = useState<Pet | null>(null);
   const [selectedPetForPassport, setSelectedPetForPassport] = useState<Pet | null>(null);
+  const [selectedPetForTriageModal, setSelectedPetForTriageModal] = useState<{
+    pet: Pet;
+    clinicVisit?: any;
+    soapNote?: any;
+  } | null>(null);
 
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
@@ -428,6 +439,35 @@ export const MasterDataModule: React.FC = () => {
     setShowAddSupplierModal(true);
   };
 
+  // Helper to get triage result for any pet
+  const getPetTriage = (p: Pet) => {
+    const visit = clinicVisits.find((v) => v.petId === p.id);
+    const soap = soapNotes.find((s) => s.petId === p.id || (visit && s.visitId === visit.id));
+    return {
+      triage: computeClientTriageUrgency(p, visit, soap),
+      visit,
+      soap
+    };
+  };
+
+  const petTriageMap = React.useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getPetTriage>>();
+    pets.forEach((p) => {
+      map.set(p.id, getPetTriage(p));
+    });
+    return map;
+  }, [pets, clinicVisits, soapNotes]);
+
+  const triageCounts = React.useMemo(() => {
+    const counts = { P1: 0, P2: 0, P3: 0, P4: 0 };
+    petTriageMap.forEach(({ triage }) => {
+      if (counts[triage.level] !== undefined) {
+        counts[triage.level]++;
+      }
+    });
+    return counts;
+  }, [petTriageMap]);
+
   // Filters
   const filteredCustomers = customers.filter((c) => {
     const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm);
@@ -442,7 +482,9 @@ export const MasterDataModule: React.FC = () => {
       p.breed.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.microchipNo.includes(searchTerm);
     const matchesSpecies = speciesFilter === 'All' || p.species === speciesFilter;
-    return matchesSearch && matchesSpecies;
+    const triageData = petTriageMap.get(p.id);
+    const matchesTriage = triageFilter === 'All' || triageData?.triage.level === triageFilter;
+    return matchesSearch && matchesSpecies && matchesTriage;
   });
 
   const filteredServices = services.filter((s) => {
@@ -592,19 +634,36 @@ export const MasterDataModule: React.FC = () => {
         )}
 
         {activeTab === 'pets' && (
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-bold text-[#1B2A45]">Filter Spesies:</span>
-            <select
-              value={speciesFilter}
-              onChange={(e) => setSpeciesFilter(e.target.value)}
-              className="bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none"
-            >
-              <option value="All">Semua Spesies</option>
-              <option value="Anjing">Anjing</option>
-              <option value="Kucing">Kucing</option>
-              <option value="Kelinci">Kelinci</option>
-              <option value="Hamster">Hamster</option>
-            </select>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-[#1B2A45]">Spesies:</span>
+              <select
+                value={speciesFilter}
+                onChange={(e) => setSpeciesFilter(e.target.value)}
+                className="bg-white border border-[#E1D6BE] rounded-lg px-2.5 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none"
+              >
+                <option value="All">Semua Spesies</option>
+                <option value="Anjing">Anjing</option>
+                <option value="Kucing">Kucing</option>
+                <option value="Kelinci">Kelinci</option>
+                <option value="Hamster">Hamster</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-[#1B2A45]">Triage:</span>
+              <select
+                value={triageFilter}
+                onChange={(e) => setTriageFilter(e.target.value)}
+                className="bg-white border border-[#E1D6BE] rounded-lg px-2.5 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none"
+              >
+                <option value="All">Semua Tingkat Triage</option>
+                <option value="P1">🔴 P1 - Kritis / Gawat Darurat ({triageCounts.P1})</option>
+                <option value="P2">🟠 P2 - Sangat Mendesak ({triageCounts.P2})</option>
+                <option value="P3">🟡 P3 - Semi-Mendesak ({triageCounts.P3})</option>
+                <option value="P4">🟢 P4 - Rutin / Non-Urgent ({triageCounts.P4})</option>
+              </select>
+            </div>
           </div>
         )}
 
@@ -714,78 +773,279 @@ export const MasterDataModule: React.FC = () => {
         </div>
       )}
 
-      {/* Tab 2: Pets Cards Grid */}
+      {/* Tab 2: Pets Cards Grid with AI Triage Urgency Indicators */}
       {activeTab === 'pets' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredPets.length === 0 ? (
-            <div className="col-span-full py-12 bg-white rounded-xl border border-[#E1D6BE] text-center text-xs text-[#1B2A45]/60 font-medium">
-              Tidak ada data pasien hewan ditemukan.
-            </div>
-          ) : (
-            filteredPets.map((p) => (
-              <div
-                key={p.id}
-                className="bg-white border border-[#E1D6BE] rounded-xl p-4 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-3"
-              >
-                <div className="flex items-start gap-3">
-                  <img
-                    src={p.photoUrl || 'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=400'}
-                    alt={p.name}
-                    className="w-16 h-16 rounded-xl object-cover border border-[#E1D6BE] shrink-0"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <h4 className="font-bold text-sm text-[#1B2A45] truncate">{p.name}</h4>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#F6F1E6] text-[#1B2A45] border border-[#E1D6BE]">
-                        {p.species}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#1B2A45]/70 font-medium mt-0.5">Ras: {p.breed} • {p.gender}</p>
-                    <p className="text-xs text-[#1B2A45] mt-1">
-                      Pemilik: <span className="font-bold">{p.customerName}</span>
-                    </p>
-                  </div>
+        <div className="space-y-4">
+          {/* AI Triage Urgency Summary Dashboard Banner */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-[#1B2A45] via-[#223657] to-[#101A2C] border border-[#B8905A]/40 text-[#FFFDF9] shadow-sm">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+                  <AlertTriangle className="w-5 h-5 animate-pulse" />
                 </div>
-
-                <div className="pt-3 border-t border-[#E1D6BE]/60 space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between text-[#1B2A45]/70">
-                    <span>Microchip ID:</span>
-                    <span className="font-mono text-[#1B2A45] font-bold">{p.microchipNo}</span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full bg-[#B8905A]/30 text-[#D9B98A] border border-[#B8905A]/40 text-[10px] font-extrabold uppercase tracking-wider">
+                      AI Triage Urgency Engine
+                    </span>
+                    <span className="text-[11px] text-emerald-300 font-bold flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                      Real-time EMR Analysis
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between text-[#1B2A45]/70">
-                    <span>Berat Badan:</span>
-                    <span className="font-bold text-emerald-700">{p.weightKg} kg</span>
-                  </div>
-                  {p.allergies && (
-                    <div className="flex items-center gap-1 text-rose-700 font-semibold text-[11px]">
-                      <AlertTriangle className="w-3.5 h-3.5" /> Alergi: {p.allergies}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 pt-2 border-t border-[#E1D6BE]/60">
-                  <button
-                    onClick={() => setSelectedPetForPassport(p)}
-                    className="flex-1 py-2 bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Award className="w-4 h-4 text-[#1B2A45]" /> Paspor Digital
-                  </button>
-                  <button
-                    onClick={() => startEditPet(p)}
-                    className="p-2 border border-[#E1D6BE] hover:bg-[#F6F1E6] text-[#1B2A45] rounded-lg transition-colors"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeletePet(p)}
-                    className="p-2 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <h3 className="font-bold text-sm text-[#FFFDF9] mt-0.5 font-display">
+                    Sistem Skrining & Triase Urgensi Pasien Rawat Jalan & Darurat
+                  </h3>
+                  <p className="text-xs text-[#EDE6D6]/80 mt-0.5">
+                    Menganalisis keluhan utama, tanda vital, dan catatan SOAP untuk memprioritaskan penanganan medis hewan.
+                  </p>
                 </div>
               </div>
-            ))
-          )}
+
+              {/* Triage Quick Filter Tabs */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full lg:w-auto shrink-0">
+                <button
+                  onClick={() => setTriageFilter(triageFilter === 'P1' ? 'All' : 'P1')}
+                  className={`px-3 py-2 rounded-lg border text-left transition-all ${
+                    triageFilter === 'P1'
+                      ? 'bg-rose-500/30 border-rose-400 ring-2 ring-rose-400/50'
+                      : 'bg-rose-950/40 border-rose-800/60 hover:bg-rose-900/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-rose-300 uppercase">P1 Kritis</span>
+                    <span className="text-xs font-black text-white px-1.5 py-0.2 rounded bg-rose-600/60">
+                      {triageCounts.P1}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-rose-200/70 mt-0.5 truncate">Gawat Darurat Segera</p>
+                </button>
+
+                <button
+                  onClick={() => setTriageFilter(triageFilter === 'P2' ? 'All' : 'P2')}
+                  className={`px-3 py-2 rounded-lg border text-left transition-all ${
+                    triageFilter === 'P2'
+                      ? 'bg-amber-500/30 border-amber-400 ring-2 ring-amber-400/50'
+                      : 'bg-amber-950/40 border-amber-800/60 hover:bg-amber-900/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-amber-300 uppercase">P2 Mendesak</span>
+                    <span className="text-xs font-black text-white px-1.5 py-0.2 rounded bg-amber-600/60">
+                      {triageCounts.P2}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-amber-200/70 mt-0.5 truncate">&lt; 15 Menit</p>
+                </button>
+
+                <button
+                  onClick={() => setTriageFilter(triageFilter === 'P3' ? 'All' : 'P3')}
+                  className={`px-3 py-2 rounded-lg border text-left transition-all ${
+                    triageFilter === 'P3'
+                      ? 'bg-yellow-500/30 border-yellow-400 ring-2 ring-yellow-400/50'
+                      : 'bg-yellow-950/40 border-yellow-800/60 hover:bg-yellow-900/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-yellow-300 uppercase">P3 Semi-Mendesak</span>
+                    <span className="text-xs font-black text-white px-1.5 py-0.2 rounded bg-yellow-600/60">
+                      {triageCounts.P3}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-yellow-200/70 mt-0.5 truncate">&lt; 60 Menit</p>
+                </button>
+
+                <button
+                  onClick={() => setTriageFilter(triageFilter === 'P4' ? 'All' : 'P4')}
+                  className={`px-3 py-2 rounded-lg border text-left transition-all ${
+                    triageFilter === 'P4'
+                      ? 'bg-emerald-500/30 border-emerald-400 ring-2 ring-emerald-400/50'
+                      : 'bg-emerald-950/40 border-emerald-800/60 hover:bg-emerald-900/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-emerald-300 uppercase">P4 Rutin</span>
+                    <span className="text-xs font-black text-white px-1.5 py-0.2 rounded bg-emerald-600/60">
+                      {triageCounts.P4}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-emerald-200/70 mt-0.5 truncate">Standar Antrian</p>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredPets.length === 0 ? (
+              <div className="col-span-full py-12 bg-white rounded-xl border border-[#E1D6BE] text-center text-xs text-[#1B2A45]/60 font-medium">
+                Tidak ada data pasien hewan ditemukan untuk filter yang dipilih.
+              </div>
+            ) : (
+              filteredPets.map((p) => {
+                const triageData = petTriageMap.get(p.id);
+                const triage = triageData?.triage || computeClientTriageUrgency(p);
+                const visit = triageData?.visit;
+                const soap = triageData?.soap;
+
+                // Border accent styling per severity level
+                const severityBorderClass =
+                  triage.level === 'P1'
+                    ? 'border-l-4 border-l-rose-500 border-rose-200 bg-rose-50/20'
+                    : triage.level === 'P2'
+                    ? 'border-l-4 border-l-amber-500 border-amber-200 bg-amber-50/20'
+                    : triage.level === 'P3'
+                    ? 'border-l-4 border-l-yellow-500 border-yellow-200 bg-yellow-50/20'
+                    : 'border-l-4 border-l-emerald-500 border-[#E1D6BE]';
+
+                return (
+                  <div
+                    key={p.id}
+                    className={`bg-white border rounded-xl p-4 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-3 relative overflow-hidden ${severityBorderClass}`}
+                  >
+                    <div>
+                      {/* Top Header: Pet image, Name, and Triage Urgency Badge */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <img
+                            src={p.photoUrl || 'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=400'}
+                            alt={p.name}
+                            className="w-14 h-14 rounded-xl object-cover border border-[#E1D6BE] shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="font-bold text-sm text-[#1B2A45] truncate">{p.name}</h4>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#F6F1E6] text-[#1B2A45] border border-[#E1D6BE]">
+                                {p.species}
+                              </span>
+                            </div>
+                            <p className="text-xs text-[#1B2A45]/70 font-medium mt-0.5 truncate">
+                              Ras: {p.breed} • {p.gender}
+                            </p>
+                            <p className="text-xs text-[#1B2A45] mt-0.5 truncate">
+                              Pemilik: <span className="font-bold">{p.customerName}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Interactive Triage Urgency Badge */}
+                        <div className="shrink-0">
+                          <TriageUrgencyBadge
+                            pet={p}
+                            clinicVisit={visit}
+                            soapNote={soap}
+                            onClick={() =>
+                              setSelectedPetForTriageModal({
+                                pet: p,
+                                clinicVisit: visit,
+                                soapNote: soap
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      {/* Triage Triggers / Symptom severity box if available */}
+                      {triage.triggers && triage.triggers.length > 0 && (
+                        <div className="mt-2.5 p-2 rounded-lg bg-[#F6F1E6]/70 border border-[#E1D6BE]/70 text-[11px] space-y-1">
+                          <div className="flex items-center justify-between text-[#1B2A45] font-semibold">
+                            <span className="flex items-center gap-1 text-[10px] text-[#B8905A] uppercase tracking-wider font-extrabold">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              Indikasi Triase:
+                            </span>
+                            <button
+                              onClick={() =>
+                                setSelectedPetForTriageModal({
+                                  pet: p,
+                                  clinicVisit: visit,
+                                  soapNote: soap
+                                })
+                              }
+                              className="text-[10px] text-[#1B2A45] hover:text-[#B8905A] font-bold underline cursor-pointer"
+                            >
+                              Detail AI &rarr;
+                            </button>
+                          </div>
+                          <p className="text-[#1B2A45]/80 text-[11px] font-medium line-clamp-2">
+                            {triage.reasoning}
+                          </p>
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {triage.triggers.slice(0, 3).map((trig, idx) => (
+                              <span
+                                key={idx}
+                                className="px-1.5 py-0.2 rounded bg-white text-[#1B2A45] border border-[#E1D6BE] text-[9px] font-bold"
+                              >
+                                {trig}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-[#E1D6BE]/60 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between text-[#1B2A45]/70">
+                        <span>Microchip ID:</span>
+                        <span className="font-mono text-[#1B2A45] font-bold">{p.microchipNo}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[#1B2A45]/70">
+                        <span>Berat Badan:</span>
+                        <span className="font-bold text-emerald-700">{p.weightKg} kg</span>
+                      </div>
+                      {p.allergies && (
+                        <div className="flex items-center gap-1 text-rose-700 font-semibold text-[11px]">
+                          <AlertTriangle className="w-3.5 h-3.5" /> Alergi: {p.allergies}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-[#E1D6BE]/60">
+                      <button
+                        onClick={() =>
+                          setSelectedPetForTriageModal({
+                            pet: p,
+                            clinicVisit: visit,
+                            soapNote: soap
+                          })
+                        }
+                        className={`flex-1 py-1.5 px-2 font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer border ${
+                          triage.level === 'P1'
+                            ? 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
+                            : triage.level === 'P2'
+                            ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                            : 'bg-[#101A2C] text-[#D9B98A] border-[#B8905A]/40 hover:bg-[#1B2A45]'
+                        }`}
+                        title="Buka Analisis Triase AI & Rekomendasi Klinis EMR"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" /> Triase AI
+                      </button>
+                      <button
+                        onClick={() => setSelectedPetForPassport(p)}
+                        className="py-1.5 px-2.5 bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1"
+                        title="Buka Paspor Digital"
+                      >
+                        <Award className="w-3.5 h-3.5 text-[#1B2A45]" /> Paspor
+                      </button>
+                      <button
+                        onClick={() => startEditPet(p)}
+                        className="p-1.5 border border-[#E1D6BE] hover:bg-[#F6F1E6] text-[#1B2A45] rounded-lg transition-colors"
+                        title="Edit Data Pasien"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeletePet(p)}
+                        className="p-1.5 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
+                        title="Hapus Pasien"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
 
@@ -1633,6 +1893,17 @@ export const MasterDataModule: React.FC = () => {
             </p>
           </div>
         </div>
+      )}
+
+      {/* AI Triage Urgency Analysis Modal */}
+      {selectedPetForTriageModal && (
+        <TriageUrgencyModal
+          isOpen={true}
+          onClose={() => setSelectedPetForTriageModal(null)}
+          pet={selectedPetForTriageModal.pet}
+          clinicVisit={selectedPetForTriageModal.clinicVisit}
+          soapNote={selectedPetForTriageModal.soapNote}
+        />
       )}
     </div>
   );

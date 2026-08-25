@@ -6,6 +6,8 @@ import { VitalSignsSummary } from '../clinic/VitalSignsSummary';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import { InformedConsentModal } from '../clinic/InformedConsentModal';
 import { PetHealthPassportModal } from '../clinic/PetHealthPassportModal';
+import { TriageUrgencyBadge } from '../clinic/TriageUrgencyBadge';
+import { TriageUrgencyModal } from '../clinic/TriageUrgencyModal';
 import { useAutoSaveDraft } from '../../hooks/useAutoSaveDraft';
 import { NavModule } from '../layout/Sidebar';
 import {
@@ -98,6 +100,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     eFormSubmissions = [],
     addEFormSubmission,
     updateVisitStatus,
+    updateClinicVisit,
     carePlans = [],
     addCarePlan,
     toggleCarePlanTask,
@@ -191,6 +194,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
   // New Clinical Feature Modals
   const [showInformedConsentModal, setShowInformedConsentModal] = useState(false);
   const [showPetPassportModal, setShowPetPassportModal] = useState(false);
+  const [showTriageModal, setShowTriageModal] = useState(false);
 
   // AI Medical History to SOAP Modal State
   const [showAiSoapModal, setShowAiSoapModal] = useState(false);
@@ -331,6 +335,31 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
 
     setShowAiSoapModal(false);
     addToast('Seluruh hasil ringkasan SOAP AI berhasil diterapkan ke form SOAP pasien ini!', 'success');
+  };
+
+  const handleApplyTriageSuggestion = (result: any) => {
+    let mappedSeverity: 'Kritis' | 'Berat' | 'Sedang' | 'Ringan' = 'Sedang';
+    if (result.level === 'P1') mappedSeverity = 'Kritis';
+    else if (result.level === 'P2') mappedSeverity = 'Berat';
+    else if (result.level === 'P3') mappedSeverity = 'Sedang';
+    else mappedSeverity = 'Ringan';
+
+    updateDraft({
+      severity: mappedSeverity
+    });
+
+    if (selectedVisit?.id) {
+      updateClinicVisit(selectedVisit.id, {
+        triageUrgency: result.level,
+        triageRationale: result.triageRationale,
+        triageScore: result.severityScore
+      });
+    }
+
+    addToast(
+      `Saran Triase AI (${result.level} - ${result.label}) berhasil diterapkan! Indikator Urgensi Pasien & Keparahan SOAP diperbarui.`,
+      'success'
+    );
   };
 
   const addDrugToPrescription = () => {
@@ -618,6 +647,17 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
             </div>
 
             <div className="flex items-center flex-wrap gap-2">
+              {selectedPet && (
+                <TriageUrgencyBadge
+                  pet={selectedPet}
+                  clinicVisit={selectedVisit}
+                  draftSoap={soapDraft}
+                  soapNote={soapNotes.find((s) => s.petId === selectedPet.id || s.visitId === selectedVisit.id)}
+                  onApplyTriage={handleApplyTriageSuggestion}
+                  onClick={() => setShowTriageModal(true)}
+                />
+              )}
+
               <button
                 type="button"
                 onClick={() => setShowInformedConsentModal(true)}
@@ -818,16 +858,26 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
                   />
                 </div>
                 <div className="md:col-span-1">
-                  <label className="text-xs font-semibold text-[#1B2A45] block mb-1">Tingkat Keparahan</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-[#1B2A45] block">Tingkat Keparahan</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowTriageModal(true)}
+                      className="text-[10px] text-[#B8905A] hover:text-[#9E7848] font-bold flex items-center gap-1 cursor-pointer"
+                      title="Buka Saran Triase AI & Otomatis Isi Indikator Urgensi"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-500" /> Saran Triase AI
+                    </button>
+                  </div>
                   <select
                     value={soapDraft.severity}
                     onChange={(e) => updateDraft({ severity: e.target.value as any })}
                     className="w-full text-xs p-2.5 rounded-lg bg-[#F6F1E6] border border-[#E1D6BE] font-bold text-[#1B2A45]"
                   >
-                    <option value="Ringan">Ringan</option>
-                    <option value="Sedang">Sedang</option>
-                    <option value="Berat">Berat</option>
-                    <option value="Kritis">Kritis</option>
+                    <option value="Ringan">Ringan (P4 Routine)</option>
+                    <option value="Sedang">Sedang (P3 Semi-Urgent)</option>
+                    <option value="Berat">Berat (P2 Urgent)</option>
+                    <option value="Kritis">Kritis (P1 Emergency)</option>
                   </select>
                 </div>
               </div>
@@ -1695,6 +1745,19 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
         <PetHealthPassportModal
           onClose={() => setShowPetPassportModal(false)}
           defaultPetId={selectedVisit?.petId}
+        />
+      )}
+
+      {/* AI Triage Urgency Modal */}
+      {showTriageModal && selectedPet && (
+        <TriageUrgencyModal
+          isOpen={true}
+          onClose={() => setShowTriageModal(false)}
+          pet={selectedPet}
+          clinicVisit={selectedVisit}
+          draftSoap={soapDraft}
+          soapNote={soapNotes.find((s) => s.petId === selectedPet.id || s.visitId === selectedVisit.id)}
+          onApplyTriage={handleApplyTriageSuggestion}
         />
       )}
     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   Building2,
@@ -9,6 +9,7 @@ import {
   Save,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   RotateCcw,
   Sparkles,
   Zap,
@@ -28,18 +29,39 @@ import {
   WifiOff,
   RefreshCw,
   Eye,
-  Camera
+  Camera,
+  CalendarCheck,
+  Calendar,
+  ExternalLink,
+  Lock
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { useData } from '../../context/DataContext';
 import { CloudBackupModule } from './CloudBackupModule';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { GoogleCalendarSyncModal } from '../booking/GoogleCalendarSyncModal';
+import {
+  loadGoogleCalendarConfig,
+  saveGoogleCalendarConfig,
+  getStoredAccessToken,
+  requestGoogleCalendarAuth,
+  clearGoogleCalendarAuth
+} from '../../utils/googleCalendar';
 
 export const SettingsModule: React.FC = () => {
   const { addToast } = useToast();
-  const { branches = [], activeBranchId } = useData();
+  const { branches = [], activeBranchId, doctorBookings = [] } = useData();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'invoice' | 'whatsapp' | 'printer' | 'backup'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'invoice' | 'whatsapp' | 'printer' | 'backup' | 'google_calendar'>('profile');
+
+  // Google Calendar Integration State in Settings
+  const [gcalConfig, setGcalConfig] = useState(loadGoogleCalendarConfig());
+  const [isGcalConnecting, setIsGcalConnecting] = useState(false);
+  const [showGcalModal, setShowGcalModal] = useState(false);
+
+  useEffect(() => {
+    setGcalConfig(loadGoogleCalendarConfig());
+  }, []);
 
   // Clinic Profile State
   const [clinicName, setClinicName] = useState('VetCare Animal Hospital & Pet Clinic');
@@ -120,6 +142,7 @@ export const SettingsModule: React.FC = () => {
           { id: 'invoice', label: 'Format Struk & PPN', icon: Receipt },
           { id: 'whatsapp', label: 'WhatsApp Gateway', icon: Smartphone },
           { id: 'printer', label: 'Printer Thermal', icon: Printer },
+          { id: 'google_calendar', label: 'Google Calendar Sync', icon: CalendarCheck },
           { id: 'backup', label: 'Cadangan & Cloud', icon: HardDrive }
         ]}
         activeTab={activeTab}
@@ -664,6 +687,266 @@ export const SettingsModule: React.FC = () => {
       {/* TAB 5: Backup & Cloud Snapshots */}
       {activeTab === 'backup' && (
         <CloudBackupModule />
+      )}
+
+      {/* TAB 6: Google Calendar Sync & Workspace */}
+      {activeTab === 'google_calendar' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Col: Connection & Auto-Sync Settings */}
+            <div className="lg:col-span-8 space-y-6">
+              {/* Card 1: Connection Status */}
+              <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-6 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center font-bold">
+                      <CalendarCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-base text-[#1B2A45] font-display">
+                        Integrasi Google Calendar & Workspace
+                      </h3>
+                      <p className="text-xs text-[#6B6656]">
+                        Sinkronisasi dua arah jadwal janji temu dokter & antrean klinik dengan Google Calendar.
+                      </p>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 border ${
+                      gcalConfig.isConnected && getStoredAccessToken()
+                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                        : 'bg-slate-100 text-slate-700 border-slate-300'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${gcalConfig.isConnected && getStoredAccessToken() ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                    {gcalConfig.isConnected && getStoredAccessToken() ? 'Terhubung Aktif' : 'Belum Terhubung'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div className="p-3.5 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] space-y-1">
+                    <span className="text-[#6B6656] text-[11px] block">Akun Google Terhubung</span>
+                    <strong className="text-[#1B2A45] font-mono text-xs block truncate">
+                      {gcalConfig.connectedEmail || 'Belum ada akun terhubung'}
+                    </strong>
+                    <span className="text-[10px] text-emerald-700 font-bold block mt-1">
+                      OAuth2 Scope: calendar.events (Read/Write)
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] space-y-1">
+                    <span className="text-[#6B6656] text-[11px] block">Kalender Target</span>
+                    <strong className="text-[#1B2A45] font-mono text-xs block">
+                      {gcalConfig.calendarId === 'primary' ? 'Kalender Utama (Primary)' : gcalConfig.calendarId}
+                    </strong>
+                    <span className="text-[10px] text-[#6B6656] block mt-1">
+                      Zona Waktu: Asia/Jakarta (WIB)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <div className="flex items-center gap-2">
+                    {gcalConfig.isConnected && getStoredAccessToken() ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearGoogleCalendarAuth();
+                          setGcalConfig(loadGoogleCalendarConfig());
+                          addToast('Akun Google Calendar berhasil diputus.', 'info');
+                        }}
+                        className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold text-xs rounded-xl cursor-pointer transition-all"
+                      >
+                        Putuskan Koneksi
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isGcalConnecting}
+                        onClick={async () => {
+                          setIsGcalConnecting(true);
+                          try {
+                            const res = await requestGoogleCalendarAuth();
+                            if (res.token) {
+                              setGcalConfig(loadGoogleCalendarConfig());
+                              addToast('Google Calendar berhasil dihubungkan!', 'success');
+                            }
+                          } catch (err: any) {
+                            addToast(err?.message || 'Gagal menghubungkan Google Calendar', 'error');
+                          } finally {
+                            setIsGcalConnecting(false);
+                          }
+                        }}
+                        className="px-4 py-2 bg-[#1B2A45] hover:bg-[#101A2C] text-white font-bold text-xs rounded-xl cursor-pointer transition-all shadow-xs flex items-center gap-2"
+                      >
+                        <CalendarCheck className="w-4 h-4 text-amber-400" />
+                        <span>{isGcalConnecting ? 'Menghubungkan...' : 'Hubungkan Akun Google'}</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowGcalModal(true)}
+                      className="px-4 py-2 bg-[#FFFDF9] hover:bg-[#F6F1E6] text-[#1B2A45] border border-[#E1D6BE] font-bold text-xs rounded-xl cursor-pointer transition-all flex items-center gap-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-[#B8905A]" />
+                      <span>Buka Dashboard Sinkronisasi</span>
+                    </button>
+                  </div>
+
+                  {gcalConfig.lastSyncTimestamp && (
+                    <span className="text-[11px] text-[#6B6656]">
+                      Sinkronisasi Terakhir:{' '}
+                      <strong>{new Date(gcalConfig.lastSyncTimestamp).toLocaleTimeString('id-ID')}</strong>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Card 2: Automatic Sync Automation Parameters */}
+              <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-6 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-3">
+                  <h4 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                    Parameter Sinkronisasi Otomatis (Background Automation)
+                  </h4>
+                  <span className="text-xs text-[#6B6656]">Real-time Sync</span>
+                </div>
+
+                <div className="space-y-3.5 text-xs">
+                  <label className="flex items-start gap-3 p-3 bg-[#F6F1E6]/70 hover:bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={gcalConfig.autoSyncBookings}
+                      onChange={(e) => {
+                        const updated = { ...gcalConfig, autoSyncBookings: e.target.checked };
+                        setGcalConfig(updated);
+                        saveGoogleCalendarConfig(updated);
+                        addToast('Preferensi otomatis sinkronisasi booking dokter diperbarui.', 'success');
+                      }}
+                      className="mt-0.5 rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                    />
+                    <div>
+                      <strong className="text-[#1B2A45] block text-xs">
+                        Otomatis Sinkron Janji Temu Dokter (Doctor Booking Sync)
+                      </strong>
+                      <p className="text-[#6B6656] text-[11px] mt-0.5">
+                        Setiap kali janji temu dokter baru dibuat, diubah slot waktunya (reschedule), atau dibatalkan, sistem akan langsung memperbarui agenda di Google Calendar dokter secara instan.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 p-3 bg-[#F6F1E6]/70 hover:bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={gcalConfig.autoSyncClinicQueue}
+                      onChange={(e) => {
+                        const updated = { ...gcalConfig, autoSyncClinicQueue: e.target.checked };
+                        setGcalConfig(updated);
+                        saveGoogleCalendarConfig(updated);
+                        addToast('Preferensi otomatis antrean klinik diperbarui.', 'success');
+                      }}
+                      className="mt-0.5 rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                    />
+                    <div>
+                      <strong className="text-[#1B2A45] block text-xs">
+                        Otomatis Sinkron Antrean Pemeriksaan Klinik (Live Clinic Queue Sync)
+                      </strong>
+                      <p className="text-[#6B6656] text-[11px] mt-0.5">
+                        Membuat event blok waktu dinamis saat pasien masuk ruang periksa klinik, sehingga dokter mengetahui alokasi waktu pemeriksaan real-time.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 p-3 bg-[#F6F1E6]/70 hover:bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={gcalConfig.syncReminders}
+                      onChange={(e) => {
+                        const updated = { ...gcalConfig, syncReminders: e.target.checked };
+                        setGcalConfig(updated);
+                        saveGoogleCalendarConfig(updated);
+                        addToast('Pengingat pop-up & email Google Calendar diperbarui.', 'success');
+                      }}
+                      className="mt-0.5 rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                    />
+                    <div>
+                      <strong className="text-[#1B2A45] block text-xs">
+                        Kirimkan Google Notification Pop-up & Email Reminder
+                      </strong>
+                      <p className="text-[#6B6656] text-[11px] mt-0.5">
+                        Menambahkan pengingat default 30 menit & 1 hari sebelum jadwal konsultasi dokter dimulai.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Col: Info & Quick Statistics */}
+            <div className="lg:col-span-4 space-y-6">
+              <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-6 shadow-2xs space-y-4">
+                <h4 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  Keamanan & Otorisasi Google
+                </h4>
+                <div className="space-y-2.5 text-xs text-[#6B6656]">
+                  <p>
+                    Aplikasi ini menggunakan <strong>Google Identity Services (GIS)</strong> dengan protokol OAuth 2.0 resmi dari Google Cloud Platform.
+                  </p>
+                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-950 font-medium space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" /> Client OAuth Aman
+                    </div>
+                    <p className="text-[11px]">
+                      Token otentikasi disimpan secara lokal dan aman di browser sesi kerja staf klinik.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-[#E1D6BE] space-y-2 text-xs">
+                  <span className="font-bold text-[#1B2A45] block">Statistik Booking Saat Ini:</span>
+                  <div className="flex justify-between text-[#6B6656]">
+                    <span>Total Janji Temu:</span>
+                    <strong className="text-[#1B2A45]">{doctorBookings.length} Pasien</strong>
+                  </div>
+                  <div className="flex justify-between text-[#6B6656]">
+                    <span>Tersinkron GCal:</span>
+                    <strong className="text-emerald-700 font-bold">
+                      {doctorBookings.filter((b) => b.googleCalendarEventId).length} Terpasang
+                    </strong>
+                  </div>
+                  <div className="flex justify-between text-[#6B6656]">
+                    <span>Belum Tersinkron:</span>
+                    <strong className="text-amber-700 font-bold">
+                      {doctorBookings.filter((b) => !b.googleCalendarEventId && b.status !== 'Batal').length} Pending
+                    </strong>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowGcalModal(true)}
+                  className="w-full py-2.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-white font-bold text-xs rounded-xl shadow-2xs hover:brightness-110 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Sinkronkan Semua Data Sekarang</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Mount */}
+          <GoogleCalendarSyncModal
+            isOpen={showGcalModal}
+            onClose={() => {
+              setShowGcalModal(false);
+              setGcalConfig(loadGoogleCalendarConfig());
+            }}
+            doctorBookings={doctorBookings}
+          />
+        </div>
       )}
     </div>
   );

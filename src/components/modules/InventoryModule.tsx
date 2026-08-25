@@ -3,6 +3,7 @@ import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { AIForecastingView } from './AIForecastingView';
 import { InventoryAuditAssistant } from './InventoryAuditAssistant';
+import { InventoryVelocityHeatmap } from '../inventory/InventoryVelocityHeatmap';
 import { StockItem } from '../../types';
 import { QuickPOModal, QuickPOLineItem } from '../common/QuickPOModal';
 import { StockMutationModal } from '../inventory/StockMutationModal';
@@ -55,9 +56,10 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
 
   const { addToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'stock' | 'auditAssistant' | 'movements' | 'transfer' | 'aiForecast'>(
+  const [activeTab, setActiveTab] = useState<'stock' | 'heatmap' | 'auditAssistant' | 'movements' | 'transfer' | 'aiForecast'>(
     'stock'
   );
+  const [showVelocityHeatmapWidget, setShowVelocityHeatmapWidget] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Semua');
@@ -180,6 +182,27 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
     setQuickPOTitle(`Quick PO — ${lowStockItems.length} Item Stok Menipis`);
     setQuickPONotes(
       `[INVENTORY REORDER ALERT] Pemesanan otomatis untuk ${lowStockItems.length} item inventaris di bawah batas minimum stok (${lowStockItems.map(i => `${i.name} [sisa ${i.stock} ${i.unit}]`).join(', ')}). Mohon segera diproses.`
+    );
+    setIsQuickPOModalOpen(true);
+  };
+
+  const handleOpenQuickPOForSingleItem = (item: StockItem) => {
+    const reorderQty = Math.max(item.minStock * 2, 10);
+    const lineItem: QuickPOLineItem = {
+      itemName: `${item.name} [${item.sku}]`,
+      sku: item.sku,
+      category: item.category,
+      currentStock: item.stock,
+      stockoutHorizonDays: item.stock <= item.minStock ? 3 : 14,
+      quantity: reorderQty,
+      unit: item.unit,
+      unitPrice: item.purchasePrice,
+      total: reorderQty * item.purchasePrice
+    };
+    setQuickPOItems([lineItem]);
+    setQuickPOTitle(`Quick PO — Reorder Cepat: ${item.name}`);
+    setQuickPONotes(
+      `[VELOCITY REORDER] Pemesanan stok cepat untuk item berkecepatan tinggi "${item.name}" (SKU: ${item.sku}). Stok saat ini: ${item.stock} ${item.unit}.`
     );
     setIsQuickPOModalOpen(true);
   };
@@ -312,6 +335,20 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
 
         <div className="flex flex-wrap items-center gap-2">
           <button
+            onClick={() => setActiveTab('heatmap')}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
+              activeTab === 'heatmap'
+                ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md font-extrabold'
+                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#15233B]'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
+            Heatmap Velocity
+            <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/30 text-emerald-300 text-[9px] font-extrabold uppercase">
+              Fast/Slow
+            </span>
+          </button>
+          <button
             onClick={() => setActiveTab('auditAssistant')}
             className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
               activeTab === 'auditAssistant'
@@ -391,8 +428,24 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
 
       {activeTab === 'aiForecast' && <AIForecastingView />}
 
+      {activeTab === 'heatmap' && (
+        <InventoryVelocityHeatmap
+          stockItems={stockItems}
+          stockMovements={stockMovements}
+          onOpenQuickPO={handleOpenQuickPOForSingleItem}
+          onApplyClearanceDiscount={handleToggleClearanceSale}
+        />
+      )}
+
       {activeTab === 'stock' && (
         <div className="space-y-5">
+          {/* Velocity Heatmap Dashboard Widget */}
+          <InventoryVelocityHeatmap
+            stockItems={stockItems}
+            stockMovements={stockMovements}
+            onOpenQuickPO={handleOpenQuickPOForSingleItem}
+            onApplyClearanceDiscount={handleToggleClearanceSale}
+          />
           {/* Visual Alert Badge Card: Expiring Items within 30 days & 1-Click Clearance Sale */}
           {expiringItems.length > 0 && (
             <div className="p-4.5 rounded-2xl bg-gradient-to-br from-rose-950 via-[#1B2A45] to-[#101A2C] border border-rose-500/40 text-[#FFFDF9] shadow-lg space-y-4">

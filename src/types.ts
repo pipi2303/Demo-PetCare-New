@@ -112,6 +112,10 @@ export interface DoctorBooking {
   complaint: string;
   createdAt: string;
   branchId?: string;
+  googleCalendarEventId?: string;
+  googleCalendarSyncStatus?: 'synced' | 'pending' | 'failed' | 'unsynced';
+  googleCalendarHtmlLink?: string;
+  lastSyncedAt?: string;
 }
 
 export interface GroomingBooking {
@@ -164,6 +168,13 @@ export interface ClinicVisit {
   completedAt?: string;
   slaMinutes?: number;
   branchId?: string;
+  triageUrgency?: TriageUrgencyLevel;
+  triageRationale?: string;
+  triageScore?: number;
+  googleCalendarEventId?: string;
+  googleCalendarSyncStatus?: 'synced' | 'pending' | 'failed' | 'unsynced';
+  googleCalendarHtmlLink?: string;
+  lastSyncedAt?: string;
 }
 
 export interface SOAPNote {
@@ -193,6 +204,8 @@ export interface SOAPNote {
   workingDiagnosis: string;
   differentialDiagnosis: string;
   severityScore?: 'Ringan' | 'Sedang' | 'Berat' | 'Kritis';
+  triageUrgency?: TriageUrgencyLevel;
+  triageRationale?: string;
   
   // Plan
   medicationPlan: string;
@@ -832,4 +845,82 @@ export interface StockMutationTransfer {
   driverName?: string;
   vehiclePlate?: string;
 }
+
+export type TriageUrgencyLevel = 'P1' | 'P2' | 'P3' | 'P4';
+
+export interface TriageUrgencyResult {
+  level: TriageUrgencyLevel; // P1 = Resusitasi / Kritis (Merah), P2 = Sangat Mendesak (Oranye), P3 = Semi-Mendesak (Kuning), P4 = Non-Urgent / Rutin (Hijau)
+  label: string; // e.g. "P1 - Darurat Kritis"
+  severityScore: number; // 0 - 100
+  colorClass: string;
+  bgClass: string;
+  borderClass: string;
+  badgeClass: string;
+  summary: string;
+  symptomTriggers: string[];
+  vitalFlags: {
+    parameter: string;
+    value: string | number;
+    status: 'normal' | 'warning' | 'critical';
+  }[];
+  recommendedActions: string[];
+  triageRationale: string;
+  analyzedAt: string;
+  source: 'ai_gemini' | 'clinical_rule_engine';
+}
+
+export interface GoogleCalendarEventItem {
+  id: string;
+  summary: string;
+  description?: string;
+  start: {
+    dateTime?: string;
+    date?: string;
+    timeZone?: string;
+  };
+  end: {
+    dateTime?: string;
+    date?: string;
+    timeZone?: string;
+  };
+  htmlLink?: string;
+  location?: string;
+  status?: string;
+  colorId?: string;
+  extendedProperties?: {
+    private?: Record<string, string>;
+  };
+}
+
+export interface GoogleCalendarSyncLog {
+  id: string;
+  timestamp: string;
+  type: 'doctor_booking' | 'clinic_visit' | 'doctor_shift' | 'telehealth' | 'bulk_sync';
+  referenceId: string;
+  referenceNo: string;
+  doctorName: string;
+  patientName: string;
+  action: 'create' | 'update' | 'delete' | 'sync_fetch';
+  status: 'success' | 'failed' | 'pending';
+  message: string;
+  googleEventId?: string;
+  htmlLink?: string;
+}
+
+export interface GoogleCalendarConfig {
+  isConnected: boolean;
+  userEmail?: string;
+  userName?: string;
+  userPhoto?: string;
+  calendarId: string;
+  calendarName: string;
+  autoSyncBookings: boolean;
+  autoSyncClinicQueue: boolean;
+  autoSyncDoctorShifts: boolean;
+  syncReminders: boolean;
+  reminderMinutes: number;
+  lastSyncedAt?: string;
+  clientId?: string;
+}
+
 
