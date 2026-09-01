@@ -580,17 +580,44 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
       item.category.toLowerCase().includes(icdSearchTerm.toLowerCase())
   );
 
+  const headerContent =
+    activeTab === 'carePlan'
+      ? {
+          icon: HeartPulse,
+          title: 'Rencana Care Plan Medis & Rehabilitasi Pasien',
+          description: 'Program terapi jangka panjang, milestone rehabilitasi pasca-operasi, dan pengobatan penyakit kronis pasien.',
+          badges: [
+            { label: `${carePlans.length} Program Care Plan`, variant: 'gold' as const },
+            { label: `${carePlans.filter(cp => cp.status === 'Aktif').length} Sedang Berjalan`, variant: 'emerald' as const, icon: Activity, pulse: true }
+          ]
+        }
+      : activeTab === 'eform'
+      ? {
+          icon: FileSignature,
+          title: 'E-Form Consent & Tanda Tangan Digital',
+          description: 'Persetujuan tindakan medis, anestesi, dan operasi dengan tanda tangan digital pemilik hewan.',
+          badges: [
+            { label: `${eFormSubmissions.length} Formulir Tersimpan`, variant: 'gold' as const }
+          ]
+        }
+      : {
+          icon: Stethoscope,
+          title: 'Pemeriksaan Klinik & Posologi Veteriner',
+          description: 'Sistem rekam medis terintegrasi: EMR SOAP, katalog ICD-10 Vet, peta anatomi, kalkulator dosis presisi, & care plan.',
+          badges: [
+            { label: 'EMR Medis Aktif', variant: 'emerald' as const, icon: Activity, pulse: true },
+            { label: `${clinicVisits.filter(v => v.status === 'Sedang Diperiksa').length} Antrean Aktif`, variant: 'gold' as const }
+          ]
+        };
+
   return (
     <div className="space-y-5">
       {/* Standardized Header */}
       <SystemNotificationHeader
-        icon={Stethoscope}
-        title="Pemeriksaan Klinik & Posologi Veteriner"
-        description="Sistem rekam medis terintegrasi: EMR SOAP, katalog ICD-10 Vet, peta anatomi, kalkulator dosis presisi, & care plan."
-        badges={[
-          { label: 'EMR Medis Aktif', variant: 'emerald', icon: Activity, pulse: true },
-          { label: `${clinicVisits.filter(v => v.status === 'Sedang Diperiksa').length} Antrean Aktif`, variant: 'gold' }
-        ]}
+        icon={headerContent.icon}
+        title={headerContent.title}
+        description={headerContent.description}
+        badges={headerContent.badges}
         tabs={[
           { id: 'soap', label: 'SOAP & Diagnosa', icon: Stethoscope },
           { id: 'vitals', label: 'Tanda Vital (Sparklines)', icon: Activity },
