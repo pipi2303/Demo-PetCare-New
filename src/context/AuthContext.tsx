@@ -15,7 +15,7 @@ export interface AuthContextType {
   setActiveBranchId: (branchId: string) => void;
   activeOwnership: string;
   setActiveOwnership: (ownership: string) => void;
-  login: (emailOrPhone: string, pass: string, options?: LoginOptions) => { success: boolean; message?: string };
+  login: (emailOrPhone: string, pass: string, options?: LoginOptions) => Promise<{ success: boolean; message?: string }>;
   loginWithPin: (pin: string, branchId?: string) => { success: boolean; message?: string };
   loginAsUser: (targetUser: User, options?: LoginOptions) => void;
   loginAsDemoUser: (userId: string, branchId?: string) => void;
@@ -110,7 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user]);
 
-  const login = (emailOrPhone: string, pass: string, options?: LoginOptions): { success: boolean; message?: string } => {
+  const login = async (emailOrPhone: string, pass: string, options?: LoginOptions): Promise<{ success: boolean; message?: string }> => {
     const cleanIdent = emailOrPhone.trim().toLowerCase();
     const found = INITIAL_USERS.find(
       (u) =>
@@ -120,6 +120,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     if (found) {
+      let passwordValid = false;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: found.email, password: pass })
+        });
+        const data = await res.json();
+        passwordValid = !!data.success;
+      } catch (e) {
+        recordSecurityLog('Login', found.email, 'Gagal menghubungi server autentikasi saat login.', null, 'Kritis');
+        return { success: false, message: 'Tidak dapat terhubung ke server autentikasi. Coba lagi.' };
+      }
+
+      if (!passwordValid) {
+        recordSecurityLog(
+          'Login',
+          found.email,
+          `Percobaan login gagal: kata sandi salah untuk ${found.email}`,
+          null,
+          'Warning'
+        );
+        return { success: false, message: 'Email, nomor HP, atau kata sandi tidak sesuai dengan database pengguna.' };
+      }
+
       const branchIdToUse = options?.branchId || found.branchId || activeBranchId || 'b1';
       const ownershipToUse = options?.ownershipType || found.ownershipType || activeOwnership || 'owner_klinik';
       

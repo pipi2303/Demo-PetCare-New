@@ -35,6 +35,7 @@ import { BranchesModule } from './components/modules/BranchesModule';
 import { NotificationsModule } from './components/modules/NotificationsModule';
 import { TenantAdminModule } from './components/modules/TenantAdminModule';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { ResetPasswordScreen } from './components/auth/ResetPasswordScreen';
 import { getRoleInfo } from './utils/roleUtils';
 import { UserRole } from './types';
 import {
@@ -111,6 +112,9 @@ const MainAppContent: React.FC = () => {
   const [showQueueDisplay, setShowQueueDisplay] = useState(false);
   const [showDoseCalcModal, setShowDoseCalcModal] = useState(false);
   const [showCctvModal, setShowCctvModal] = useState(false);
+  const [resetToken, setResetToken] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get('resetToken')
+  );
 
   const { user, isLoginScreenOpen, closeLoginScreen, activeOwnership } = useAuth();
   const { addToast } = useToast();
@@ -158,6 +162,18 @@ const MainAppContent: React.FC = () => {
   const openPublicBooking = () => {
     setShowQueueDisplay(true);
   };
+
+  if (resetToken) {
+    return (
+      <ResetPasswordScreen
+        token={resetToken}
+        onDone={() => {
+          window.history.replaceState({}, '', window.location.pathname);
+          setResetToken(null);
+        }}
+      />
+    );
+  }
 
   if (!user || isLoginScreenOpen) {
     return <LoginScreen onSuccessfulLogin={() => closeLoginScreen()} />;

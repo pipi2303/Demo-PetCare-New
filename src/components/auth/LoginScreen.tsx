@@ -38,6 +38,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccessfulLogin }) =
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotInput, setForgotInput] = useState('');
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
   // Selected ownership profile
   const selectedOwnership = activeOwnership || 'owner_klinik';
@@ -60,25 +61,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccessfulLogin }) =
   };
 
   // Handle standard credential login
-  const handleCredentialSubmit = (e: React.FormEvent) => {
+  const handleCredentialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      const result = login(emailOrPhone, password, {
-        branchId: selectedBranch,
-        ownershipType: selectedOwnership
-      });
+    const result = await login(emailOrPhone, password, {
+      branchId: selectedBranch,
+      ownershipType: selectedOwnership
+    });
 
-      setIsLoading(false);
-      if (result.success) {
-        addToast('Berhasil masuk ke portal sistem.', 'success');
-        if (onSuccessfulLogin) onSuccessfulLogin();
-      } else {
-        setErrorMessage(result.message || 'Email atau kata sandi tidak valid.');
-      }
-    }, 200);
+    setIsLoading(false);
+    if (result.success) {
+      addToast('Berhasil masuk ke portal sistem.', 'success');
+      if (onSuccessfulLogin) onSuccessfulLogin();
+    } else {
+      setErrorMessage(result.message || 'Email atau kata sandi tidak valid.');
+    }
   };
 
   // Handle PIN fast login
@@ -453,34 +452,51 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccessfulLogin }) =
             </div>
 
             <p className="text-xs text-[#EDE6D6]/70 leading-relaxed">
-              Masukkan email atau nomor WhatsApp terdaftar untuk menerima tautan pemulihan sandi.
+              Masukkan email terdaftar untuk menerima tautan pemulihan sandi.
             </p>
 
             <input
-              type="text"
+              type="email"
               value={forgotInput}
               onChange={(e) => setForgotInput(e.target.value)}
-              placeholder="08123456789 atau nama@petcare.id"
-              className="w-full px-3.5 py-2 rounded-xl bg-[#101A2C] border border-[#B8905A]/40 text-[#FFFDF9] text-xs focus:outline-none focus:border-[#B8905A]"
+              placeholder="nama@petcare.id"
+              disabled={isSendingReset}
+              className="w-full px-3.5 py-2 rounded-xl bg-[#101A2C] border border-[#B8905A]/40 text-[#FFFDF9] text-xs focus:outline-none focus:border-[#B8905A] disabled:opacity-50"
             />
 
             <div className="flex items-center justify-end gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setShowForgotModal(false)}
-                className="px-3 py-1.5 rounded-lg bg-[#101A2C] text-xs font-semibold text-[#EDE6D6] cursor-pointer"
+                disabled={isSendingReset}
+                className="px-3 py-1.5 rounded-lg bg-[#101A2C] text-xs font-semibold text-[#EDE6D6] cursor-pointer disabled:opacity-50"
               >
                 Batal
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  addToast('Petunjuk pemulihan sandi telah dikirim ke kontak Anda.', 'success');
-                  setShowForgotModal(false);
+                disabled={isSendingReset || !forgotInput.trim()}
+                onClick={async () => {
+                  setIsSendingReset(true);
+                  try {
+                    const res = await fetch('/api/auth/forgot-password', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email: forgotInput.trim() })
+                    });
+                    const data = await res.json();
+                    addToast(data.message || 'Petunjuk pemulihan sandi telah dikirim ke kontak Anda.', 'success');
+                  } catch (err) {
+                    addToast('Gagal menghubungi server. Coba lagi nanti.', 'error');
+                  } finally {
+                    setIsSendingReset(false);
+                    setShowForgotModal(false);
+                    setForgotInput('');
+                  }
                 }}
-                className="px-3.5 py-1.5 rounded-lg bg-[#B8905A] text-[#101A2C] font-bold text-xs cursor-pointer hover:bg-[#D9B98A]"
+                className="px-3.5 py-1.5 rounded-lg bg-[#B8905A] text-[#101A2C] font-bold text-xs cursor-pointer hover:bg-[#D9B98A] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Kirim Tautan
+                {isSendingReset ? 'Mengirim...' : 'Kirim Tautan'}
               </button>
             </div>
           </div>

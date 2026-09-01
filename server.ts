@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import path from "path";
+import nodemailer from "nodemailer";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import {
@@ -11,6 +12,14 @@ import {
   updateBackupConfig,
   verifySnapshotIntegrity
 } from "./server/backupService";
+import {
+  initAuthService,
+  verifyPassword,
+  setPassword,
+  userExists,
+  createResetToken,
+  consumeResetToken
+} from "./server/authService";
 
 async function startServer() {
   const app = express();
@@ -20,6 +29,9 @@ async function startServer() {
 
   // Initialize Background Daemon for Automatic End-of-Business-Day Backups
   initBackupBackgroundService();
+
+  // Initialize Password Store & Reset Token Cleanup Daemon
+  initAuthService();
 
   // API Health Endpoint
   app.get("/api/health", (_req, res) => {
@@ -126,6 +138,95 @@ async function startServer() {
       res.send(JSON.stringify(dataPayload, null, 2));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================
+  // AUTHENTICATION & PASSWORD RECOVERY ENDPOINTS
+  // ==========================================
+
+  function getMailTransporter() {
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+    if (!gmailUser || !gmailAppPassword) return null;
+    return nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: gmailUser, pass: gmailAppPassword }
+    });
+  }
+
+  // Validate email + password credentials against the server-side password store
+  app.post("/api/auth/login", (req, res) => {
+    try {
+      const { email, password } = req.body || {};
+      if (!email || !password) {
+        return res.status(400).json({ success: false, message: "Email dan kata sandi wajib diisi." });
+      }
+      const valid = verifyPassword(email, password);
+      if (!valid) {
+        return res.status(401).json({ success: false, message: "Email atau kata sandi tidak sesuai." });
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Request a password reset link to be emailed to the account owner
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    const genericMessage = "Kalau email tersebut terdaftar, tautan pemulihan sandi sudah dikirim.";
+    try {
+      const { email } = req.body || {};
+      if (!email || !userExists(email)) {
+        // Always respond with a generic success message to avoid user enumeration
+        return res.json({ success: true, message: genericMessage });
+      }
+
+      const transporter = getMailTransporter();
+      const token = createResetToken(email);
+      const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+      const resetLink = `${appUrl}/?resetToken=${token}`;
+
+      if (!transporter) {
+        console.warn(
+          `[AuthService] GMAIL_USER/GMAIL_APP_PASSWORD belum dikonfigurasi — email reset tidak dikirim. Link (dev only): ${resetLink}`
+        );
+        return res.json({ success: true, message: genericMessage });
+      }
+
+      await transporter.sendMail({
+        from: `"PetCare ERP" <${process.env.GMAIL_USER}>`,
+        to: email,
+        subject: "Pemulihan Kata Sandi - PetCare ERP",
+        html: `
+          <p>Kami menerima permintaan pemulihan kata sandi untuk akun PetCare ERP Anda.</p>
+          <p><a href="${resetLink}">Klik di sini untuk mengatur kata sandi baru</a></p>
+          <p>Tautan ini berlaku selama 30 menit. Jika Anda tidak meminta ini, abaikan email ini.</p>
+        `
+      });
+
+      res.json({ success: true, message: genericMessage });
+    } catch (err: any) {
+      console.error("[AuthService] Forgot Password Error:", err);
+      res.json({ success: true, message: genericMessage });
+    }
+  });
+
+  // Confirm a password reset using the token emailed to the user
+  app.post("/api/auth/reset-password", (req, res) => {
+    try {
+      const { token, newPassword } = req.body || {};
+      if (!token || !newPassword || newPassword.length < 6) {
+        return res.status(400).json({ success: false, message: "Token tidak valid atau kata sandi baru minimal 6 karakter." });
+      }
+      const email = consumeResetToken(token);
+      if (!email) {
+        return res.status(400).json({ success: false, message: "Tautan reset tidak valid atau sudah kedaluwarsa." });
+      }
+      setPassword(email, newPassword);
+      res.json({ success: true, message: "Kata sandi berhasil diperbarui. Silakan login dengan kata sandi baru." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
     }
   });
 
