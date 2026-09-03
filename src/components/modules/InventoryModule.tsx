@@ -51,7 +51,9 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
     addStockItem,
     updateStockItem,
     addStockMovement,
-    addPurchaseOrder
+    addPurchaseOrder,
+    productCategories = [],
+    warehouses = []
   } = useData();
 
   const { addToast } = useToast();
@@ -1057,13 +1059,9 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
                     onChange={(e) => setNewItemCategory(e.target.value as any)}
                     className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                   >
-                    <option value="Makanan">Makanan</option>
-                    <option value="Pasir Kucing">Pasir Kucing</option>
-                    <option value="Vitamin">Vitamin</option>
-                    <option value="Obat">Obat</option>
-                    <option value="Aksesoris">Aksesoris</option>
-                    <option value="Mainan">Mainan</option>
-                    <option value="Kandang">Kandang</option>
+                    {productCategories.map((c) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1073,10 +1071,9 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
                     onChange={(e) => setNewItemWarehouse(e.target.value as any)}
                     className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                   >
-                    <option value="Gudang Utama">Gudang Utama</option>
-                    <option value="Apotek">Apotek</option>
-                    <option value="Pet Shop">Pet Shop</option>
-                    <option value="Grooming Supply">Grooming Supply</option>
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.name}>{w.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>

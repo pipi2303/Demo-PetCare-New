@@ -333,6 +333,18 @@ export interface LabTest {
 
 export type GroomingStage = 'Booking' | 'Check-In' | 'Antri' | 'Proses Grooming' | 'Quality Control' | 'Pembayaran' | 'Selesai';
 
+export interface GroomingPackage {
+  id: string;
+  name: string;
+  packageType: 'Basic' | 'Regular' | 'Premium' | 'Medicinal';
+  priceSmall: number;
+  priceMedium: number;
+  priceLarge: number;
+  estimatedDurationMins: number;
+  description?: string;
+  isActive: boolean;
+}
+
 export interface GroomingSession {
   id: string;
   sessionNo: string;
@@ -348,6 +360,16 @@ export interface GroomingSession {
   price: number;
   beforePhotoUrl?: string;
   afterPhotoUrl?: string;
+  notes?: string;
+}
+
+export interface HotelRoom {
+  id: string;
+  roomNo: string;
+  roomType: 'Regular' | 'Small' | 'Medium' | 'Large' | 'VIP' | 'VIP AC' | 'VIP CCTV';
+  capacity: number;
+  dailyRate: number;
+  isActive: boolean;
   notes?: string;
 }
 
@@ -384,12 +406,22 @@ export interface DailyMonitoring {
   staffName: string;
 }
 
+export interface ProductCategory {
+  id: string;
+  name: string;
+}
+
+export interface Warehouse {
+  id: string;
+  name: string;
+}
+
 export interface StockItem {
   id: string;
   sku: string;
   name: string;
-  category: 'Makanan' | 'Vitamin' | 'Mainan' | 'Kandang' | 'Aksesoris' | 'Pasir Kucing' | 'Obat' | 'Vaksin';
-  warehouse: 'Gudang Utama' | 'Apotek' | 'Grooming Supply' | 'Pet Shop';
+  category: string; // Master Kategori Produk (dapat ditambah dari Menu Master > Kategori & Gudang)
+  warehouse: string; // Master Gudang/Lokasi (dapat ditambah dari Menu Master > Kategori & Gudang)
   stock: number;
   minStock: number;
   unit: string;

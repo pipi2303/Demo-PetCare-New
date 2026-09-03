@@ -7,6 +7,7 @@ import {
   Mail,
   Plus,
   Edit2,
+  Trash2,
   CheckCircle2,
   ArrowRightLeft,
   BarChart3,
@@ -41,13 +42,22 @@ interface InterBranchTransfer {
 }
 
 export const BranchesModule: React.FC = () => {
-  const { branches = [], activeBranchId, setActiveBranchId, stockItems = [] } = useData();
+  const {
+    branches = [],
+    activeBranchId,
+    setActiveBranchId,
+    stockItems = [],
+    addBranch,
+    updateBranch,
+    deleteBranch
+  } = useData();
   const { addToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'branchesList' | 'stockTransfer' | 'analytics'>('branchesList');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddBranchModal, setShowAddBranchModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
 
   // New Branch Form
   const [newBranchName, setNewBranchName] = useState('');
@@ -57,39 +67,8 @@ export const BranchesModule: React.FC = () => {
   const [newBranchEmail, setNewBranchEmail] = useState('');
   const [newBranchPic, setNewBranchPic] = useState('');
 
-  // Sample Multi-Branch data if default is small
-  const [allBranches, setAllBranches] = useState<Branch[]>([
-    {
-      id: 'branch-1',
-      name: 'Klinik Utama Kemang (Hospital Pusat)',
-      code: 'KMG-01',
-      address: 'Jl. Kemang Raya No. 45B, Jakarta Selatan',
-      phone: '+62 812-3456-7890',
-      email: 'kemang@vetcare-hospital.id',
-      isActive: true,
-      isMainBranch: true
-    },
-    {
-      id: 'branch-2',
-      name: 'Klinik & Pet Care BSD City',
-      code: 'BSD-02',
-      address: 'Ruko Golden Boulevard Blok W2 No. 8, BSD Serpong',
-      phone: '+62 813-9876-5432',
-      email: 'bsd@vetcare-hospital.id',
-      isActive: true,
-      isMainBranch: false
-    },
-    {
-      id: 'branch-3',
-      name: 'VetCare Express & Grooming Kelapa Gading',
-      code: 'GKG-03',
-      address: 'Jl. Boulevard Raya Blok TA2 No. 15, Kelapa Gading, Jakarta Utara',
-      phone: '+62 811-2233-4455',
-      email: 'gading@vetcare-hospital.id',
-      isActive: true,
-      isMainBranch: false
-    }
-  ]);
+  // Data cabang aktual dari DataContext - tersinkron dengan seluruh modul lain (filter cabang, dsb)
+  const allBranches = branches;
 
   // Sample Stock Transfers
   const [transfers, setTransfers] = useState<InterBranchTransfer[]>([
@@ -125,32 +104,71 @@ export const BranchesModule: React.FC = () => {
   const [transferItem, setTransferItem] = useState(stockItems[0]?.name || 'Amoxicillin 250mg');
   const [transferQty, setTransferQty] = useState<number>(5);
 
-  const handleAddBranch = (e: React.FormEvent) => {
+  const resetBranchForm = () => {
+    setNewBranchName('');
+    setNewBranchCode('');
+    setNewBranchAddress('');
+    setNewBranchPhone('');
+    setNewBranchEmail('');
+    setEditingBranch(null);
+  };
+
+  const openAddBranchModal = () => {
+    resetBranchForm();
+    setShowAddBranchModal(true);
+  };
+
+  const openEditBranchModal = (branch: Branch) => {
+    setEditingBranch(branch);
+    setNewBranchName(branch.name);
+    setNewBranchCode(branch.code);
+    setNewBranchAddress(branch.address);
+    setNewBranchPhone(branch.phone);
+    setNewBranchEmail(branch.email);
+    setShowAddBranchModal(true);
+  };
+
+  const handleSaveBranch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBranchName || !newBranchCode) {
       addToast('Nama dan Kode Cabang wajib diisi!', 'warning');
       return;
     }
 
-    const newBranch: Branch = {
-      id: `branch-${Date.now().toString().slice(-4)}`,
-      name: newBranchName,
-      code: newBranchCode.toUpperCase(),
-      address: newBranchAddress || 'Alamat cabang baru',
-      phone: newBranchPhone || '+62 812-0000-0000',
-      email: newBranchEmail || 'cabang@vetcare.id',
-      isActive: true,
-      isMainBranch: false
-    };
+    if (editingBranch) {
+      updateBranch(editingBranch.id, {
+        name: newBranchName,
+        code: newBranchCode.toUpperCase(),
+        address: newBranchAddress || editingBranch.address,
+        phone: newBranchPhone || editingBranch.phone,
+        email: newBranchEmail || editingBranch.email
+      });
+      addToast(`Cabang "${newBranchName}" berhasil diperbarui!`, 'success');
+    } else {
+      const created = addBranch({
+        name: newBranchName,
+        code: newBranchCode.toUpperCase(),
+        address: newBranchAddress || 'Alamat cabang baru',
+        phone: newBranchPhone || '+62 812-0000-0000',
+        email: newBranchEmail || 'cabang@vetcare.id',
+        isActive: true,
+        isMainBranch: false
+      });
+      addToast(`Cabang baru "${created.name}" berhasil didaftarkan!`, 'success');
+    }
 
-    setAllBranches([...allBranches, newBranch]);
     setShowAddBranchModal(false);
-    setNewBranchName('');
-    setNewBranchCode('');
-    setNewBranchAddress('');
-    setNewBranchPhone('');
-    setNewBranchEmail('');
-    addToast(`Cabang baru "${newBranch.name}" berhasil didaftarkan!`, 'success');
+    resetBranchForm();
+  };
+
+  const handleDeleteBranch = (branch: Branch) => {
+    if (branch.isMainBranch) {
+      addToast('Kantor pusat tidak dapat dihapus.', 'error');
+      return;
+    }
+    if (!window.confirm(`Hapus cabang "${branch.name}"? Data terkait cabang ini tidak akan otomatis terhapus.`)) return;
+    deleteBranch(branch.id);
+    addToast(`Cabang "${branch.name}" berhasil dihapus.`, 'success');
   };
 
   const handleCreateTransfer = (e: React.FormEvent) => {
@@ -192,7 +210,7 @@ export const BranchesModule: React.FC = () => {
         ]}
         actions={
           <button
-            onClick={() => setShowAddBranchModal(true)}
+            onClick={openAddBranchModal}
             className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:from-[#c79e65] hover:to-[#ae8652] text-[#101A2C] font-extrabold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer hover:shadow"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -254,11 +272,30 @@ export const BranchesModule: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-[#E1D6BE] flex items-center justify-between">
+                <div className="pt-3 border-t border-[#E1D6BE] flex items-center justify-between gap-2">
                   <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     Operasional Aktif
                   </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => openEditBranchModal(branch)}
+                      title="Edit Cabang"
+                      className="p-1.5 rounded-lg bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] border border-[#E1D6BE] cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    {!branch.isMainBranch && (
+                      <button
+                        onClick={() => handleDeleteBranch(branch)}
+                        title="Hapus Cabang"
+                        className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
 
                   <button
                     onClick={() => {
@@ -411,17 +448,17 @@ export const BranchesModule: React.FC = () => {
             <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-3">
               <h3 className="font-bold text-base text-[#1B2A45] font-display flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-[#B8905A]" />
-                Tambah Cabang Klinik Baru
+                {editingBranch ? 'Edit Data Cabang' : 'Tambah Cabang Klinik Baru'}
               </h3>
               <button
-                onClick={() => setShowAddBranchModal(false)}
+                onClick={() => { setShowAddBranchModal(false); resetBranchForm(); }}
                 className="text-xs font-bold text-rose-700 hover:bg-rose-50 px-2 py-1 rounded cursor-pointer"
               >
                 Tutup
               </button>
             </div>
 
-            <form onSubmit={handleAddBranch} className="space-y-3 text-xs">
+            <form onSubmit={handleSaveBranch} className="space-y-3 text-xs">
               <div>
                 <label className="font-bold text-[#1B2A45] block mb-1">Nama Cabang</label>
                 <input
@@ -481,7 +518,7 @@ export const BranchesModule: React.FC = () => {
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddBranchModal(false)}
+                  onClick={() => { setShowAddBranchModal(false); resetBranchForm(); }}
                   className="px-4 py-2.5 bg-[#E1D6BE]/60 text-[#1B2A45] font-bold rounded-xl hover:bg-[#E1D6BE]"
                 >
                   Batal
@@ -490,7 +527,7 @@ export const BranchesModule: React.FC = () => {
                   type="submit"
                   className="px-5 py-2.5 bg-[#B8905A] hover:bg-[#9E7848] text-[#101A2C] font-extrabold rounded-xl shadow-md"
                 >
-                  Simpan Cabang
+                  {editingBranch ? 'Simpan Perubahan' : 'Simpan Cabang'}
                 </button>
               </div>
             </form>

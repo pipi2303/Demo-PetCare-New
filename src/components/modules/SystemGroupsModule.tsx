@@ -49,8 +49,17 @@ export const SystemGroupsModule: React.FC = () => {
     branches = [],
     activeBranchId,
     pets = [],
-    invoices = []
+    invoices = [],
+    systemGroups,
+    addSystemGroup,
+    updateSystemGroup,
+    deleteSystemGroup,
+    customerTierGroups,
+    addCustomerTierGroup,
+    updateCustomerTierGroup,
+    deleteCustomerTierGroup
   } = useData();
+  const customerTiers = customerTierGroups;
   const { addToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'userGroups' | 'customerTiers' | 'matrixRBAC' | 'departmentHierarchy'>('userGroups');
@@ -62,152 +71,7 @@ export const SystemGroupsModule: React.FC = () => {
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
 
   // Initial Comprehensive System Groups
-  const [systemGroups, setSystemGroups] = useState<SystemGroup[]>([
-    {
-      id: 'grp-medis',
-      code: 'MED-VET',
-      name: 'Tim Medis & Dokter Hewan (EMR / Poliklinik)',
-      type: 'Staf & Medis',
-      description: 'Otorisasi diagnosa klinis, SOAP, EMR, tindakan bedah, radiologi, resep obat keras, dan rencana rawat inap.',
-      departmentHead: 'Drh. Ratna Permata, M.Si (Kepala Tim Medis)',
-      color: '#5BB076',
-      allowedRoles: ['dokter', 'perawat', 'owner_klinik', 'owner_petcare', 'superadmin'],
-      memberCount: 6,
-      isSystemDefault: true,
-      createdAt: '2026-01-10',
-      modulePermissions: [
-        { moduleId: 'clinic', moduleName: 'Pemeriksaan Klinik & EMR', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-        { moduleId: 'emr', moduleName: 'Rekam Medis & Riwayat Pasien', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-        { moduleId: 'vaccination', moduleName: 'Buku Vaksinasi & Paspor', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-        { moduleId: 'pharmacy', moduleName: 'Resep Obat & Lab Cito', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-        { moduleId: 'carePlan', moduleName: 'Care Plan & Rencana Terapi', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-        { moduleId: 'eForms', moduleName: 'E-Form Persetujuan Tindakan Bedah', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-        { moduleId: 'booking', moduleName: 'Antrean & Reservasi Pasien', canView: true, canCreate: true, canEdit: true, canDelete: false },
-        { moduleId: 'inventory', moduleName: 'Stok Obat & Gudang', canView: true, canCreate: false, canEdit: false, canDelete: false },
-        { moduleId: 'billing', moduleName: 'Kasir & Keuangan', canView: false, canCreate: false, canEdit: false, canDelete: false }
-      ]
-    },
-    {
-      id: 'grp-farmasi',
-      code: 'PHARM-LOG',
-      name: 'Departemen Farmasi, Apotek & Lab',
-      type: 'Staf & Medis',
-      description: 'Pengelolaan obat etiket keras, dispensing resep dokter, validasi dosis interaksi obat, dan stok opname apotek.',
-      departmentHead: 'Apoteker Dimas Pratama, S.Farm',
-      color: '#6BA3BE',
-      allowedRoles: ['admin', 'dokter', 'owner_klinik', 'superadmin'],
-      memberCount: 4,
-      isSystemDefault: true,
-      createdAt: '2026-01-12',
-      modulePermissions: [
-        { moduleId: 'pharmacy', moduleName: 'Dispensing Resep & Lab', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-        { moduleId: 'inventory', moduleName: 'Inventaris & Farmasi', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-        { moduleId: 'purchasing', moduleName: 'Purchasing (PO Obat)', canView: true, canCreate: true, canEdit: true, canDelete: false },
-        { moduleId: 'clinic', moduleName: 'EMR (Hanya Riwayat Resep)', canView: true, canCreate: false, canEdit: false, canDelete: false },
-        { moduleId: 'billing', moduleName: 'Kasir & Billing', canView: true, canCreate: false, canEdit: false, canDelete: false }
-      ]
-    },
-    {
-      id: 'grp-frontoffice',
-      code: 'FO-CASHIER',
-      name: 'Front Office, Registrasi & Kasir POS',
-      type: 'Layanan & Operasional',
-      description: 'Pendaftaran pasien baru, antrean poli, kasir POS billing, invoice, WhatsApp reminder, dan retail pet shop.',
-      departmentHead: 'Siska Amanda (Head Receptionist)',
-      color: '#D9B98A',
-      allowedRoles: ['kasir', 'resepsionis', 'admin', 'owner_petshop', 'owner_petcare', 'superadmin'],
-      memberCount: 5,
-      isSystemDefault: true,
-      createdAt: '2026-01-15',
-      modulePermissions: [
-        { moduleId: 'dashboard', moduleName: 'Dashboard Operasional', canView: true, canCreate: false, canEdit: false, canDelete: false },
-        { moduleId: 'masterData', moduleName: 'Master Pelanggan & Hewan', canView: true, canCreate: true, canEdit: true, canDelete: false },
-        { moduleId: 'booking', moduleName: 'Booking & Antrean Kiosk', canView: true, canCreate: true, canEdit: true, canDelete: true },
-        { moduleId: 'petShop', moduleName: 'Pet Shop Retail POS', canView: true, canCreate: true, canEdit: true, canDelete: false },
-        { moduleId: 'billing', moduleName: 'Billing & Kasir Pembayaran', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-        { moduleId: 'clinic', moduleName: 'Status Kunjungan Poli', canView: true, canCreate: true, canEdit: false, canDelete: false }
-      ]
-    },
-    {
-      id: 'grp-ops-care',
-      code: 'CARE-HOTEL',
-      name: 'Divisi Perawatan Grooming, Hotel & Ambulans',
-      type: 'Layanan & Operasional',
-      description: 'Layanan salon grooming spa anabul, reservasi kandang pet hotel, pemantauan CCTV, dan penjemputan darurat ambulans.',
-      departmentHead: 'Budi Santoso (Koordinator Pet Care)',
-      color: '#D97757',
-      allowedRoles: ['groomer', 'perawat', 'admin', 'owner_petcare', 'superadmin'],
-      memberCount: 7,
-      isSystemDefault: false,
-      createdAt: '2026-02-01',
-      modulePermissions: [
-        { moduleId: 'grooming', moduleName: 'Grooming Salon & Spa', canView: true, canCreate: true, canEdit: true, canDelete: false },
-        { moduleId: 'petHotel', moduleName: 'Pet Hotel Boarding & Kandang', canView: true, canCreate: true, canEdit: true, canDelete: false },
-        { moduleId: 'ambulance', moduleName: 'Ambulance & Emergency Rescue', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-        { moduleId: 'patientGallery', moduleName: 'Galeri Foto Pasien', canView: true, canCreate: true, canEdit: true, canDelete: false },
-        { moduleId: 'masterData', moduleName: 'Data Hewan & Klien', canView: true, canCreate: false, canEdit: false, canDelete: false }
-      ]
-    },
-    {
-      id: 'grp-manajemen',
-      code: 'EXEC-MGMT',
-      name: 'Direksi, Audit & Manajemen Keuangan',
-      type: 'Eksekutif & Keuangan',
-      description: 'Akses tanpa batas ke laporan P&L, buku kas besar, manajemen SDM, multi-cabang, audit trail, dan konfigurasi sistem.',
-      departmentHead: 'Drh. Hendra Wijaya (Direktur Operasional)',
-      color: '#B8905A',
-      allowedRoles: ['owner', 'owner_klinik', 'owner_petshop', 'owner_petcare', 'admin', 'superadmin'],
-      memberCount: 3,
-      isSystemDefault: true,
-      createdAt: '2026-01-01',
-      modulePermissions: [
-        { moduleId: 'dashboard', moduleName: 'Dashboard Utama & Analitik', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-        { moduleId: 'finance', moduleName: 'Buku Kas & Laporan Laba Rugi', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-        { moduleId: 'hrm', moduleName: 'SDM, Payroll & Shift Staf', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-        { moduleId: 'reports', moduleName: 'Laporan Eksekutif & Ekspor', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-        { moduleId: 'crm', moduleName: 'CRM & Loyalty Member Club', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-        { moduleId: 'auditLog', moduleName: 'Audit Log & Keamanan Cloud', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-        { moduleId: 'branches', moduleName: 'Manajemen Multi-Cabang', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true }
-      ]
-    }
-  ]);
-
-  // Customer Loyalty & Tiers Groups
-  const [customerTiers, setCustomerTiers] = useState<CustomerTierGroup[]>([
-    {
-      id: 'tier-platinum',
-      tierName: 'VIP Platinum Pet Club',
-      code: 'PLATINUM',
-      minSpend: 5000000,
-      discountPercent: 15,
-      perks: 'Prioritas booking tanpa antre poli, diskon 15% rawat inap/tindakan, gratis antar-jemput ambulans 3x/tahun, birthday voucher Rp 100.000',
-      color: '#B8905A',
-      memberCount: customers.filter((c) => (c.loyaltyPoints || 0) > 500).length || 18,
-      autoUpgrade: true
-    },
-    {
-      id: 'tier-gold',
-      tierName: 'Gold Member Paws Elite',
-      code: 'GOLD',
-      minSpend: 2000000,
-      discountPercent: 10,
-      perks: 'Diskon konsultasi dokter 10%, diskon grooming salon 10%, poin reward 2x lipat setiap transaksi retail pet shop',
-      color: '#D9B98A',
-      memberCount: customers.filter((c) => (c.loyaltyPoints || 0) > 200 && (c.loyaltyPoints || 0) <= 500).length || 34,
-      autoUpgrade: true
-    },
-    {
-      id: 'tier-silver',
-      tierName: 'Silver Reguler Care',
-      code: 'SILVER',
-      minSpend: 500000,
-      discountPercent: 5,
-      perks: 'Poin reward belanja produk pet shop, pengingat vaksinasi & booster otomatis via WhatsApp/SMS terintegrasi',
-      color: '#6BA3BE',
-      memberCount: customers.length || 72,
-      autoUpgrade: true
-    }
-  ]);
+  // systemGroups & customerTierGroups sekarang berasal dari DataContext (persisten & tersinkron lintas modul)
 
   // New Group Form State
   const [newGroupName, setNewGroupName] = useState('');
@@ -216,6 +80,74 @@ export const SystemGroupsModule: React.FC = () => {
   const [newGroupHead, setNewGroupHead] = useState('');
   const [newGroupDesc, setNewGroupDesc] = useState('');
   const [newGroupColor, setNewGroupColor] = useState('#5BB076');
+
+  // Customer Tier Membership Form State
+  const [showAddTierModal, setShowAddTierModal] = useState(false);
+  const [editingTier, setEditingTier] = useState<CustomerTierGroup | null>(null);
+  const [tierForm, setTierForm] = useState({
+    tierName: '',
+    code: 'STANDARD' as CustomerTierGroup['code'],
+    minSpend: 500000,
+    discountPercent: 5,
+    perks: '',
+    color: '#6BA3BE',
+    autoUpgrade: true
+  });
+
+  const resetTierForm = () => {
+    setTierForm({
+      tierName: '',
+      code: 'STANDARD',
+      minSpend: 500000,
+      discountPercent: 5,
+      perks: '',
+      color: '#6BA3BE',
+      autoUpgrade: true
+    });
+    setEditingTier(null);
+  };
+
+  const openAddTierModal = () => {
+    resetTierForm();
+    setShowAddTierModal(true);
+  };
+
+  const openEditTierModal = (tier: CustomerTierGroup) => {
+    setEditingTier(tier);
+    setTierForm({
+      tierName: tier.tierName,
+      code: tier.code,
+      minSpend: tier.minSpend,
+      discountPercent: tier.discountPercent,
+      perks: tier.perks,
+      color: tier.color,
+      autoUpgrade: tier.autoUpgrade
+    });
+    setShowAddTierModal(true);
+  };
+
+  const handleSaveTier = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tierForm.tierName.trim()) {
+      addToast('Nama tier membership wajib diisi!', 'warning');
+      return;
+    }
+    if (editingTier) {
+      updateCustomerTierGroup(editingTier.id, tierForm);
+      addToast(`Tier membership "${tierForm.tierName}" berhasil diperbarui!`, 'success');
+    } else {
+      addCustomerTierGroup({ ...tierForm, memberCount: 0 });
+      addToast(`Tier membership baru "${tierForm.tierName}" berhasil dibuat!`, 'success');
+    }
+    setShowAddTierModal(false);
+    resetTierForm();
+  };
+
+  const handleDeleteTier = (tier: CustomerTierGroup) => {
+    if (!window.confirm(`Hapus tier membership "${tier.tierName}"?`)) return;
+    deleteCustomerTierGroup(tier.id);
+    addToast(`Tier membership "${tier.tierName}" dihapus.`, 'success');
+  };
 
   // Selected active group
   const selectedGroup = useMemo(() => {
@@ -239,18 +171,10 @@ export const SystemGroupsModule: React.FC = () => {
     moduleId: string,
     permKey: 'canView' | 'canCreate' | 'canEdit' | 'canDelete' | 'canApprove'
   ) => {
-    setSystemGroups((prev) =>
-      prev.map((grp) => {
-        if (grp.id !== selectedGroup.id) return grp;
-        const updatedPerms = grp.modulePermissions.map((mod) => {
-          if (mod.moduleId === moduleId) {
-            return { ...mod, [permKey]: !mod[permKey] };
-          }
-          return mod;
-        });
-        return { ...grp, modulePermissions: updatedPerms };
-      })
+    const updatedPerms = selectedGroup.modulePermissions.map((mod) =>
+      mod.moduleId === moduleId ? { ...mod, [permKey]: !mod[permKey] } : mod
     );
+    updateSystemGroup(selectedGroup.id, { modulePermissions: updatedPerms });
     addToast('Hak otorisasi modul grup berhasil diperbarui!', 'success');
   };
 
@@ -261,8 +185,7 @@ export const SystemGroupsModule: React.FC = () => {
       return;
     }
 
-    const created: SystemGroup = {
-      id: `grp-${Date.now().toString().slice(-6)}`,
+    const created = addSystemGroup({
       code: newGroupCode.toUpperCase().trim(),
       name: newGroupName.trim(),
       type: newGroupType,
@@ -272,15 +195,13 @@ export const SystemGroupsModule: React.FC = () => {
       allowedRoles: ['perawat', 'admin'],
       memberCount: 1,
       isSystemDefault: false,
-      createdAt: new Date().toISOString().split('T')[0],
       modulePermissions: [
         { moduleId: 'dashboard', moduleName: 'Dashboard Utama', canView: true, canCreate: false, canEdit: false, canDelete: false },
         { moduleId: 'booking', moduleName: 'Booking Layanan', canView: true, canCreate: true, canEdit: false, canDelete: false },
         { moduleId: 'clinic', moduleName: 'EMR & Poliklinik', canView: false, canCreate: false, canEdit: false, canDelete: false }
       ]
-    };
+    });
 
-    setSystemGroups([...systemGroups, created]);
     setSelectedGroupId(created.id);
     setShowAddGroupModal(false);
     setNewGroupName('');
@@ -307,13 +228,23 @@ export const SystemGroupsModule: React.FC = () => {
           { label: `${customerTiers.length} Tier Klien`, variant: 'gold' }
         ]}
         actions={
-          <button
-            onClick={() => setShowAddGroupModal(true)}
-            className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:from-[#c79e65] hover:to-[#ae8652] text-[#101A2C] font-extrabold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer hover:shadow"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Tambah Grup Baru</span>
-          </button>
+          activeTab === 'customerTiers' ? (
+            <button
+              onClick={openAddTierModal}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:from-[#c79e65] hover:to-[#ae8652] text-[#101A2C] font-extrabold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer hover:shadow"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tambah Tier Membership</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowAddGroupModal(true)}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:from-[#c79e65] hover:to-[#ae8652] text-[#101A2C] font-extrabold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer hover:shadow"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tambah Grup Baru</span>
+            </button>
+          )
         }
         tabs={[
           { id: 'userGroups', label: 'Hak Akses Staf', icon: Shield, count: systemGroups.length },
@@ -597,6 +528,21 @@ export const SystemGroupsModule: React.FC = () => {
                   <span className="text-[#6B6656]">Total Member Terdaftar:</span>
                   <span className="font-bold text-[#1B2A45] font-mono">{tier.memberCount} Klien</span>
                 </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => openEditTierModal(tier)}
+                    className="flex-1 py-1.5 rounded-lg bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] border border-[#E1D6BE] text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" /> Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTier(tier)}
+                    className="flex-1 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Hapus
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -770,6 +716,133 @@ export const SystemGroupsModule: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add / Edit Tier Membership */}
+      {showAddTierModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 cursor-pointer"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) { setShowAddTierModal(false); resetTierForm(); }
+          }}
+        >
+          <div
+            className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-3">
+              <h3 className="font-bold text-base text-[#1B2A45] font-display flex items-center gap-2">
+                <BadgePercent className="w-5 h-5 text-[#B8905A]" />
+                {editingTier ? 'Edit Tier Membership' : 'Tambah Tier Membership Baru'}
+              </h3>
+              <button
+                onClick={() => { setShowAddTierModal(false); resetTierForm(); }}
+                className="text-xs font-bold text-rose-700 hover:bg-rose-50 px-2 py-1 rounded cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTier} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Nama Tier</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Gold Member Paws Elite"
+                  value={tierForm.tierName}
+                  onChange={(e) => setTierForm({ ...tierForm, tierName: e.target.value })}
+                  className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE] font-semibold text-[#1B2A45] focus:outline-hidden focus:border-[#B8905A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-[#1B2A45] block mb-1">Kode Tier</label>
+                  <select
+                    value={tierForm.code}
+                    onChange={(e) => setTierForm({ ...tierForm, code: e.target.value as any })}
+                    className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE] font-semibold text-[#1B2A45] focus:outline-hidden focus:border-[#B8905A]"
+                  >
+                    <option value="PLATINUM">PLATINUM</option>
+                    <option value="GOLD">GOLD</option>
+                    <option value="SILVER">SILVER</option>
+                    <option value="STANDARD">STANDARD</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-[#1B2A45] block mb-1">Warna Label</label>
+                  <input
+                    type="color"
+                    value={tierForm.color}
+                    onChange={(e) => setTierForm({ ...tierForm, color: e.target.value })}
+                    className="w-full h-[38px] p-1 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-[#1B2A45] block mb-1">Minimum Belanja (Rp)</label>
+                  <input
+                    type="number"
+                    value={tierForm.minSpend}
+                    onChange={(e) => setTierForm({ ...tierForm, minSpend: Number(e.target.value) })}
+                    className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE] font-semibold text-[#1B2A45] focus:outline-hidden focus:border-[#B8905A]"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-[#1B2A45] block mb-1">Diskon (%)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={tierForm.discountPercent}
+                    onChange={(e) => setTierForm({ ...tierForm, discountPercent: Number(e.target.value) })}
+                    className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE] font-semibold text-[#1B2A45] focus:outline-hidden focus:border-[#B8905A]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Fasilitas & Perks</label>
+                <textarea
+                  rows={3}
+                  placeholder="Tuliskan fasilitas/keuntungan tier ini..."
+                  value={tierForm.perks}
+                  onChange={(e) => setTierForm({ ...tierForm, perks: e.target.value })}
+                  className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE] text-[#1B2A45] focus:outline-hidden focus:border-[#B8905A]"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 font-bold text-[#1B2A45]">
+                <input
+                  type="checkbox"
+                  checked={tierForm.autoUpgrade}
+                  onChange={(e) => setTierForm({ ...tierForm, autoUpgrade: e.target.checked })}
+                />
+                Naik tier otomatis saat akumulasi belanja tercapai
+              </label>
+
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-[#B8905A] hover:bg-[#9E7848] text-[#101A2C] font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{editingTier ? 'Simpan Perubahan' : 'Simpan Tier Baru'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddTierModal(false); resetTierForm(); }}
+                  className="px-4 py-3 bg-[#E1D6BE]/60 text-[#1B2A45] font-bold text-xs rounded-xl hover:bg-[#E1D6BE] cursor-pointer"
+                >
+                  Batal
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

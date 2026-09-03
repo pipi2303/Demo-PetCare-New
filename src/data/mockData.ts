@@ -44,7 +44,13 @@ import {
   AppNotification,
   PreConsultForm,
   ReferralLetter,
-  VisitSurvey
+  VisitSurvey,
+  SystemGroup,
+  CustomerTierGroup,
+  HotelRoom,
+  GroomingPackage,
+  ProductCategory,
+  Warehouse
 } from '../types';
 
 export const INITIAL_USERS: User[] = [
@@ -871,4 +877,154 @@ export const INITIAL_SERVICES: ServiceItem[] = [
   { id: 'srv5', code: 'SRV-005', name: 'Pet Hotel VIP Room (per malam)', category: 'Pet Hotel', estimatedDurationMins: 1440, price: 150000, description: 'Ruang AC, CCTV live 24 jam, pakan & playtime', isActive: true },
   { id: 'srv6', code: 'SRV-006', name: 'Radiologi X-Ray Digital (1 posisi)', category: 'Lab & Radiologi', estimatedDurationMins: 30, price: 350000, description: 'Citra Rontgen DICOM + ekspertise dokter', isActive: true },
   { id: 'srv7', code: 'SRV-007', name: 'Pemeriksaan Darah Lengkap (Hematologi)', category: 'Lab & Radiologi', estimatedDurationMins: 20, price: 250000, description: 'Cek Hb, Leukosit, Hematokrit, Trombosit', isActive: true },
+];
+
+export const INITIAL_SYSTEM_GROUPS: SystemGroup[] = [
+  {
+    id: 'grp-medis',
+    code: 'MED-VET',
+    name: 'Tim Medis & Dokter Hewan (EMR / Poliklinik)',
+    type: 'Staf & Medis',
+    description: 'Otorisasi diagnosa klinis, SOAP, EMR, tindakan bedah, radiologi, resep obat keras, dan rencana rawat inap.',
+    departmentHead: 'Drh. Ratna Permata, M.Si (Kepala Tim Medis)',
+    color: '#5BB076',
+    allowedRoles: ['dokter', 'perawat', 'owner_klinik', 'owner_petcare', 'superadmin'],
+    memberCount: 6,
+    isSystemDefault: true,
+    createdAt: '2026-01-10',
+    modulePermissions: [
+      { moduleId: 'clinic', moduleName: 'Pemeriksaan Klinik & EMR', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
+      { moduleId: 'emr', moduleName: 'Rekam Medis & Riwayat Pasien', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
+      { moduleId: 'vaccination', moduleName: 'Buku Vaksinasi & Paspor', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
+      { moduleId: 'pharmacy', moduleName: 'Resep Obat & Lab Cito', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
+      { moduleId: 'carePlan', moduleName: 'Care Plan & Rencana Terapi', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
+      { moduleId: 'eForms', moduleName: 'E-Form Persetujuan Tindakan Bedah', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
+      { moduleId: 'booking', moduleName: 'Antrean & Reservasi Pasien', canView: true, canCreate: true, canEdit: true, canDelete: false },
+      { moduleId: 'inventory', moduleName: 'Stok Obat & Gudang', canView: true, canCreate: false, canEdit: false, canDelete: false },
+      { moduleId: 'billing', moduleName: 'Kasir & Keuangan', canView: false, canCreate: false, canEdit: false, canDelete: false }
+    ]
+  },
+  {
+    id: 'grp-farmasi',
+    code: 'PHARM-LOG',
+    name: 'Departemen Farmasi, Apotek & Lab',
+    type: 'Staf & Medis',
+    description: 'Pengelolaan obat etiket keras, dispensing resep dokter, validasi dosis interaksi obat, dan stok opname apotek.',
+    departmentHead: 'Apoteker Dimas Pratama, S.Farm',
+    color: '#6BA3BE',
+    allowedRoles: ['admin', 'dokter', 'owner_klinik', 'superadmin'],
+    memberCount: 4,
+    isSystemDefault: true,
+    createdAt: '2026-01-12',
+    modulePermissions: [
+      { moduleId: 'pharmacy', moduleName: 'Dispensing Resep & Lab', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
+      { moduleId: 'inventory', moduleName: 'Inventaris & Farmasi', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
+      { moduleId: 'purchasing', moduleName: 'Purchasing (PO Obat)', canView: true, canCreate: true, canEdit: true, canDelete: false },
+      { moduleId: 'clinic', moduleName: 'EMR (Hanya Riwayat Resep)', canView: true, canCreate: false, canEdit: false, canDelete: false },
+      { moduleId: 'billing', moduleName: 'Kasir & Billing', canView: true, canCreate: false, canEdit: false, canDelete: false }
+    ]
+  },
+  {
+    id: 'grp-frontoffice',
+    code: 'FO-CASHIER',
+    name: 'Front Office, Registrasi & Kasir POS',
+    type: 'Layanan & Operasional',
+    description: 'Pendaftaran pasien baru, antrean poli, kasir POS billing, invoice, WhatsApp reminder, dan retail pet shop.',
+    departmentHead: 'Siska Amanda (Head Receptionist)',
+    color: '#D9B98A',
+    allowedRoles: ['kasir', 'resepsionis', 'admin', 'owner_petshop', 'owner_petcare', 'superadmin'],
+    memberCount: 5,
+    isSystemDefault: true,
+    createdAt: '2026-01-15',
+    modulePermissions: [
+      { moduleId: 'dashboard', moduleName: 'Dashboard Operasional', canView: true, canCreate: false, canEdit: false, canDelete: false },
+      { moduleId: 'masterData', moduleName: 'Master Pelanggan & Hewan', canView: true, canCreate: true, canEdit: true, canDelete: false },
+      { moduleId: 'booking', moduleName: 'Booking & Antrean Kiosk', canView: true, canCreate: true, canEdit: true, canDelete: true },
+      { moduleId: 'petShop', moduleName: 'Pet Shop Retail POS', canView: true, canCreate: true, canEdit: true, canDelete: false },
+      { moduleId: 'billing', moduleName: 'Billing & Kasir Pembayaran', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
+      { moduleId: 'clinic', moduleName: 'Status Kunjungan Poli', canView: true, canCreate: true, canEdit: false, canDelete: false }
+    ]
+  },
+  {
+    id: 'grp-ops-care',
+    code: 'CARE-HOTEL',
+    name: 'Divisi Perawatan Grooming, Hotel & Ambulans',
+    type: 'Layanan & Operasional',
+    description: 'Layanan salon grooming spa anabul, reservasi kandang pet hotel, pemantauan CCTV, dan penjemputan darurat ambulans.',
+    departmentHead: 'Budi Santoso (Koordinator Pet Care)',
+    color: '#D97757',
+    allowedRoles: ['groomer', 'perawat', 'admin', 'owner_petcare', 'superadmin'],
+    memberCount: 7,
+    isSystemDefault: false,
+    createdAt: '2026-02-01',
+    modulePermissions: [
+      { moduleId: 'grooming', moduleName: 'Grooming Salon & Spa', canView: true, canCreate: true, canEdit: true, canDelete: false },
+      { moduleId: 'petHotel', moduleName: 'Pet Hotel Boarding & Kandang', canView: true, canCreate: true, canEdit: true, canDelete: false },
+      { moduleId: 'ambulance', moduleName: 'Ambulance & Emergency Rescue', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
+      { moduleId: 'patientGallery', moduleName: 'Galeri Foto Pasien', canView: true, canCreate: true, canEdit: true, canDelete: false },
+      { moduleId: 'masterData', moduleName: 'Data Hewan & Klien', canView: true, canCreate: false, canEdit: false, canDelete: false }
+    ]
+  },
+  {
+    id: 'grp-manajemen',
+    code: 'EXEC-MGMT',
+    name: 'Direksi, Audit & Manajemen Keuangan',
+    type: 'Eksekutif & Keuangan',
+    description: 'Akses tanpa batas ke laporan P&L, buku kas besar, manajemen SDM, multi-cabang, audit trail, dan konfigurasi sistem.',
+    departmentHead: 'Drh. Hendra Wijaya (Direktur Operasional)',
+    color: '#B8905A',
+    allowedRoles: ['owner', 'owner_klinik', 'owner_petshop', 'owner_petcare', 'admin', 'superadmin'],
+    memberCount: 3,
+    isSystemDefault: true,
+    createdAt: '2026-01-01',
+    modulePermissions: [
+      { moduleId: 'dashboard', moduleName: 'Dashboard Utama & Analitik', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
+      { moduleId: 'finance', moduleName: 'Buku Kas & Laporan Laba Rugi', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
+      { moduleId: 'hrm', moduleName: 'SDM, Payroll & Shift Staf', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
+      { moduleId: 'reports', moduleName: 'Laporan Eksekutif & Ekspor', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
+      { moduleId: 'crm', moduleName: 'CRM & Loyalty Member Club', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
+      { moduleId: 'auditLog', moduleName: 'Audit Log & Keamanan Cloud', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
+      { moduleId: 'branches', moduleName: 'Manajemen Multi-Cabang', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true }
+    ]
+  }
+];
+
+export const INITIAL_CUSTOMER_TIER_GROUPS: CustomerTierGroup[] = [
+  { id: 'tier-platinum', tierName: 'VIP Platinum Pet Club', code: 'PLATINUM', minSpend: 5000000, discountPercent: 15, perks: 'Prioritas booking tanpa antre poli, diskon 15% rawat inap/tindakan, gratis antar-jemput ambulans 3x/tahun, birthday voucher Rp 100.000', color: '#B8905A', memberCount: 18, autoUpgrade: true },
+  { id: 'tier-gold', tierName: 'Gold Member Paws Elite', code: 'GOLD', minSpend: 2000000, discountPercent: 10, perks: 'Diskon konsultasi dokter 10%, diskon grooming salon 10%, poin reward 2x lipat setiap transaksi retail pet shop', color: '#D9B98A', memberCount: 34, autoUpgrade: true },
+  { id: 'tier-silver', tierName: 'Silver Reguler Care', code: 'SILVER', minSpend: 500000, discountPercent: 5, perks: 'Poin reward belanja produk pet shop, pengingat vaksinasi & booster otomatis via WhatsApp/SMS terintegrasi', color: '#6BA3BE', memberCount: 72, autoUpgrade: true }
+];
+
+export const INITIAL_HOTEL_ROOMS: HotelRoom[] = [
+  { id: 'room1', roomNo: 'R01', roomType: 'VIP CCTV', capacity: 1, dailyRate: 150000, isActive: true, notes: 'Dilengkapi CCTV live streaming untuk pemilik' },
+  { id: 'room2', roomNo: 'R02', roomType: 'VIP AC', capacity: 1, dailyRate: 140000, isActive: true },
+  { id: 'room3', roomNo: 'R03', roomType: 'Small', capacity: 1, dailyRate: 125000, isActive: true },
+  { id: 'room4', roomNo: 'R04', roomType: 'Medium', capacity: 1, dailyRate: 135000, isActive: true },
+  { id: 'room5', roomNo: 'R05', roomType: 'Large', capacity: 2, dailyRate: 160000, isActive: true },
+  { id: 'room6', roomNo: 'R06', roomType: 'Regular', capacity: 1, dailyRate: 100000, isActive: true }
+];
+
+export const INITIAL_GROOMING_PACKAGES: GroomingPackage[] = [
+  { id: 'pkg1', name: 'Basic Grooming', packageType: 'Basic', priceSmall: 100000, priceMedium: 125000, priceLarge: 150000, estimatedDurationMins: 45, description: 'Mandi, sikat bulu, potong kuku dasar', isActive: true },
+  { id: 'pkg2', name: 'Regular Grooming', packageType: 'Regular', priceSmall: 125000, priceMedium: 150000, priceLarge: 175000, estimatedDurationMins: 60, description: 'Mandi, potong kuku, pangkas rapi, blow dry', isActive: true },
+  { id: 'pkg3', name: 'Premium Grooming & Spa', packageType: 'Premium', priceSmall: 150000, priceMedium: 175000, priceLarge: 200000, estimatedDurationMins: 75, description: 'Perawatan lengkap plus spa aromaterapi & parfum', isActive: true },
+  { id: 'pkg4', name: 'Medicinal / Anti-Jamur', packageType: 'Medicinal', priceSmall: 180000, priceMedium: 200000, priceLarge: 220000, estimatedDurationMins: 60, description: 'Keramas dengan shampoo terapis khusus kulit sensitif', isActive: true }
+];
+
+export const INITIAL_PRODUCT_CATEGORIES: ProductCategory[] = [
+  { id: 'cat1', name: 'Makanan' },
+  { id: 'cat2', name: 'Vitamin' },
+  { id: 'cat3', name: 'Mainan' },
+  { id: 'cat4', name: 'Kandang' },
+  { id: 'cat5', name: 'Aksesoris' },
+  { id: 'cat6', name: 'Pasir Kucing' },
+  { id: 'cat7', name: 'Obat' },
+  { id: 'cat8', name: 'Vaksin' }
+];
+
+export const INITIAL_WAREHOUSES: Warehouse[] = [
+  { id: 'wh1', name: 'Gudang Utama' },
+  { id: 'wh2', name: 'Apotek' },
+  { id: 'wh3', name: 'Grooming Supply' },
+  { id: 'wh4', name: 'Pet Shop' }
 ];

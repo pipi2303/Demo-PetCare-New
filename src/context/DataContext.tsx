@@ -8,6 +8,9 @@ interface DataContextType {
   branches: Types.Branch[];
   activeBranchId: string;
   setActiveBranchId: (id: string) => void;
+  addBranch: (b: Omit<Types.Branch, 'id'>) => Types.Branch;
+  updateBranch: (id: string, b: Partial<Types.Branch>) => void;
+  deleteBranch: (id: string) => void;
   tenants: Types.Tenant[];
   addTenant: (tenant: Omit<Types.Tenant, 'id' | 'createdAt'>) => void;
 
@@ -83,6 +86,7 @@ interface DataContextType {
   drugs: Types.Drug[];
   addDrug: (d: Omit<Types.Drug, 'id' | 'code'>) => void;
   updateDrug: (id: string, d: Partial<Types.Drug>) => void;
+  deleteDrug: (id: string) => void;
   dispenseDrug: (drugId: string, qty: number) => void;
 
   labTests: Types.LabTest[];
@@ -90,9 +94,19 @@ interface DataContextType {
   updateLabResult: (id: string, results: Types.LabTest['results'], notes?: string) => void;
 
   // Grooming & Hotel Ops
+  groomingPackages: Types.GroomingPackage[];
+  addGroomingPackage: (gp: Omit<Types.GroomingPackage, 'id'>) => void;
+  updateGroomingPackage: (id: string, gp: Partial<Types.GroomingPackage>) => void;
+  deleteGroomingPackage: (id: string) => void;
+
   groomingSessions: Types.GroomingSession[];
   addGroomingSession: (gs: Omit<Types.GroomingSession, 'id' | 'sessionNo'>) => void;
   updateGroomingStage: (id: string, stage: Types.GroomingStage) => void;
+
+  hotelRooms: Types.HotelRoom[];
+  addHotelRoom: (hr: Omit<Types.HotelRoom, 'id'>) => void;
+  updateHotelRoom: (id: string, hr: Partial<Types.HotelRoom>) => void;
+  deleteHotelRoom: (id: string) => void;
 
   hotelReservations: Types.HotelReservation[];
   addHotelReservation: (hr: Omit<Types.HotelReservation, 'id' | 'reservationNo'>) => void;
@@ -102,6 +116,14 @@ interface DataContextType {
   addDailyMonitoring: (dm: Omit<Types.DailyMonitoring, 'id'>) => void;
 
   // Inventory & Purchasing
+  productCategories: Types.ProductCategory[];
+  addProductCategory: (name: string) => void;
+  deleteProductCategory: (id: string) => void;
+
+  warehouses: Types.Warehouse[];
+  addWarehouse: (name: string) => void;
+  deleteWarehouse: (id: string) => void;
+
   stockItems: Types.StockItem[];
   addStockItem: (si: Omit<Types.StockItem, 'id' | 'sku'>) => void;
   updateStockItem: (id: string, si: Partial<Types.StockItem>) => void;
@@ -151,13 +173,30 @@ interface DataContextType {
   updateTelehealthStatus: (id: string, status: Types.TelehealthSession['status']) => void;
 
   eFormTemplates: Types.EFormTemplate[];
+  addEFormTemplate: (t: Omit<Types.EFormTemplate, 'id'>) => void;
+  updateEFormTemplate: (id: string, t: Partial<Types.EFormTemplate>) => void;
+  deleteEFormTemplate: (id: string) => void;
   eFormSubmissions: Types.EFormSubmission[];
   addEFormSubmission: (efs: Omit<Types.EFormSubmission, 'id' | 'date'>) => Types.EFormSubmission;
 
   ambulanceUnits: Types.AmbulanceUnit[];
+  addAmbulanceUnit: (u: Omit<Types.AmbulanceUnit, 'id'>) => void;
+  updateAmbulanceUnit: (id: string, u: Partial<Types.AmbulanceUnit>) => void;
+  deleteAmbulanceUnit: (id: string) => void;
   ambulanceRequests: Types.AmbulanceRequest[];
   addAmbulanceRequest: (ar: Omit<Types.AmbulanceRequest, 'id' | 'requestNo' | 'requestedAt' | 'status'>) => Types.AmbulanceRequest;
   updateAmbulanceStatus: (id: string, status: Types.AmbulanceRequest['status'], unitCode?: string) => void;
+
+  // Grup Akses & Tier Membership (Master Data)
+  systemGroups: Types.SystemGroup[];
+  addSystemGroup: (g: Omit<Types.SystemGroup, 'id' | 'createdAt'>) => Types.SystemGroup;
+  updateSystemGroup: (id: string, g: Partial<Types.SystemGroup>) => void;
+  deleteSystemGroup: (id: string) => void;
+
+  customerTierGroups: Types.CustomerTierGroup[];
+  addCustomerTierGroup: (t: Omit<Types.CustomerTierGroup, 'id'>) => void;
+  updateCustomerTierGroup: (id: string, t: Partial<Types.CustomerTierGroup>) => void;
+  deleteCustomerTierGroup: (id: string) => void;
 
   // Photos, Audit Logs, Notifications
   patientPhotos: Types.PatientPhoto[];
@@ -240,10 +279,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [drugs, setDrugs] = useLocalState<Types.Drug[]>('drugs', Seed.INITIAL_DRUGS);
   const [labTests, setLabTests] = useLocalState<Types.LabTest[]>('lab_tests', Seed.INITIAL_LAB_TESTS);
 
+  const [groomingPackages, setGroomingPackages] = useLocalState<Types.GroomingPackage[]>('grooming_packages', Seed.INITIAL_GROOMING_PACKAGES);
   const [groomingSessions, setGroomingSessions] = useLocalState<Types.GroomingSession[]>('grooming_sessions', Seed.INITIAL_GROOMING_SESSIONS);
+  const [hotelRooms, setHotelRooms] = useLocalState<Types.HotelRoom[]>('hotel_rooms', Seed.INITIAL_HOTEL_ROOMS);
   const [hotelReservations, setHotelReservations] = useLocalState<Types.HotelReservation[]>('hotel_reservations', Seed.INITIAL_HOTEL_RESERVATIONS);
   const [dailyMonitorings, setDailyMonitorings] = useLocalState<Types.DailyMonitoring[]>('daily_monitorings', Seed.INITIAL_DAILY_MONITORING);
 
+  const [productCategories, setProductCategories] = useLocalState<Types.ProductCategory[]>('product_categories', Seed.INITIAL_PRODUCT_CATEGORIES);
+  const [warehouses, setWarehouses] = useLocalState<Types.Warehouse[]>('warehouses', Seed.INITIAL_WAREHOUSES);
   const [stockItems, setStockItems] = useLocalState<Types.StockItem[]>('stock_items', Seed.INITIAL_STOCK_ITEMS);
   const [stockMovements, setStockMovements] = useLocalState<Types.StockMovement[]>('stock_movements', Seed.INITIAL_STOCK_MOVEMENTS);
   const [suppliers, setSuppliers] = useLocalState<Types.Supplier[]>('suppliers', Seed.INITIAL_SUPPLIERS);
@@ -261,11 +304,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [carePlans, setCarePlans] = useLocalState<Types.CarePlan[]>('care_plans', Seed.INITIAL_CARE_PLANS);
   const [telehealthSessions, setTelehealthSessions] = useLocalState<Types.TelehealthSession[]>('telehealth_sessions', Seed.INITIAL_TELEHEALTH_SESSIONS);
-  const [eFormTemplates] = useLocalState<Types.EFormTemplate[]>('eform_templates', Seed.INITIAL_EFORM_TEMPLATES);
+  const [eFormTemplates, setEFormTemplates] = useLocalState<Types.EFormTemplate[]>('eform_templates', Seed.INITIAL_EFORM_TEMPLATES);
   const [eFormSubmissions, setEFormSubmissions] = useLocalState<Types.EFormSubmission[]>('eform_submissions', Seed.INITIAL_EFORM_SUBMISSIONS);
 
-  const [ambulanceUnits] = useLocalState<Types.AmbulanceUnit[]>('ambulance_units', Seed.INITIAL_AMBULANCE_UNITS);
+  const [ambulanceUnits, setAmbulanceUnits] = useLocalState<Types.AmbulanceUnit[]>('ambulance_units', Seed.INITIAL_AMBULANCE_UNITS);
   const [ambulanceRequests, setAmbulanceRequests] = useLocalState<Types.AmbulanceRequest[]>('ambulance_requests', Seed.INITIAL_AMBULANCE_REQUESTS);
+
+  const [systemGroups, setSystemGroups] = useLocalState<Types.SystemGroup[]>('system_groups', Seed.INITIAL_SYSTEM_GROUPS);
+  const [customerTierGroups, setCustomerTierGroups] = useLocalState<Types.CustomerTierGroup[]>('customer_tier_groups', Seed.INITIAL_CUSTOMER_TIER_GROUPS);
 
   const [patientPhotos, setPatientPhotos] = useLocalState<Types.PatientPhoto[]>('patient_photos', Seed.INITIAL_PATIENT_PHOTOS);
   const [auditLogs, setAuditLogs] = useLocalState<Types.AuditLog[]>('audit_logs', Seed.INITIAL_AUDIT_LOGS);
@@ -320,6 +366,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // CRUD Implementations with Comprehensive Audit Logging
+  const addBranch = (b: Omit<Types.Branch, 'id'>): Types.Branch => {
+    const newBranch: Types.Branch = {
+      ...b,
+      id: 'br_' + Date.now(),
+    };
+    setBranches((prev) => [...prev, newBranch]);
+    addAuditLog('Tambah', 'Cabang & Multi-Lokasi', newBranch.name, `Cabang baru didaftarkan: ${newBranch.name} (${newBranch.code})`, { severity: 'Kritis' });
+    return newBranch;
+  };
+
+  const updateBranch = (id: string, bData: Partial<Types.Branch>) => {
+    const current = branches.find((b) => b.id === id);
+    setBranches((prev) => prev.map((b) => (b.id === id ? { ...b, ...bData } : b)));
+    addAuditLog('Edit', 'Cabang & Multi-Lokasi', current?.name || id, `Pembaruan data cabang: ${current?.name || id}`, { severity: 'Warning' });
+  };
+
+  const deleteBranch = (id: string) => {
+    const current = branches.find((b) => b.id === id);
+    if (current?.isMainBranch) {
+      return;
+    }
+    setBranches((prev) => prev.filter((b) => b.id !== id));
+    addAuditLog('Hapus', 'Cabang & Multi-Lokasi', current?.name || id, `Penghapusan cabang: ${current?.name || id}`, { severity: 'Kritis' });
+  };
+
   const addTenant = (tenantData: Omit<Types.Tenant, 'id' | 'createdAt'>) => {
     const newTenant: Types.Tenant = {
       ...tenantData,
@@ -829,6 +900,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const deleteDrug = (id: string) => {
+    const current = drugs.find((d) => d.id === id);
+    setDrugs((prev) => prev.filter((d) => d.id !== id));
+    addAuditLog('Hapus', 'Apotek & Farmasi', current?.name || id, `Penghapusan item master obat/vaksin: ${current?.name || id}`, { severity: 'Kritis' });
+  };
+
   const dispenseDrug = (drugId: string, qty: number) => {
     const drug = drugs.find((d) => d.id === drugId);
     setDrugs((prev) =>
@@ -879,6 +956,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Edit', 'Laboratorium & Diagnostik', test?.testNo || id, `Penginputan & validasi hasil tes laboratorium: ${test?.testName || id}`, { severity: 'Warning' });
   };
 
+  const addGroomingPackage = (gp: Omit<Types.GroomingPackage, 'id'>) => {
+    const newPkg: Types.GroomingPackage = { ...gp, id: 'pkg_' + Date.now() };
+    setGroomingPackages((prev) => [...prev, newPkg]);
+    addAuditLog('Tambah', 'Grooming Salon', newPkg.name, `Paket grooming baru ditambahkan: ${newPkg.name} (${newPkg.packageType})`);
+  };
+
+  const updateGroomingPackage = (id: string, gpData: Partial<Types.GroomingPackage>) => {
+    const current = groomingPackages.find((p) => p.id === id);
+    setGroomingPackages((prev) => prev.map((p) => (p.id === id ? { ...p, ...gpData } : p)));
+    addAuditLog('Edit', 'Grooming Salon', current?.name || id, `Pembaruan paket & harga grooming: ${current?.name || id}`, { severity: 'Warning' });
+  };
+
+  const deleteGroomingPackage = (id: string) => {
+    const current = groomingPackages.find((p) => p.id === id);
+    setGroomingPackages((prev) => prev.filter((p) => p.id !== id));
+    addAuditLog('Hapus', 'Grooming Salon', current?.name || id, `Penghapusan paket grooming: ${current?.name || id}`, { severity: 'Kritis' });
+  };
+
   const addGroomingSession = (gs: Omit<Types.GroomingSession, 'id' | 'sessionNo'>) => {
     const newSession: Types.GroomingSession = {
       ...gs,
@@ -893,6 +988,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const session = groomingSessions.find((s) => s.id === id);
     setGroomingSessions((prev) => prev.map((s) => (s.id === id ? { ...s, stage } : s)));
     addAuditLog('Edit', 'Grooming Salon', session?.sessionNo || id, `Tahapan pengerjaan grooming diubah menjadi: ${stage}`);
+  };
+
+  const addHotelRoom = (room: Omit<Types.HotelRoom, 'id'>) => {
+    const newRoom: Types.HotelRoom = { ...room, id: 'room_' + Date.now() };
+    setHotelRooms((prev) => [...prev, newRoom]);
+    addAuditLog('Tambah', 'Pet Hotel & Penitipan', newRoom.roomNo, `Kamar/kandang hotel baru ditambahkan: ${newRoom.roomNo} (${newRoom.roomType})`);
+  };
+
+  const updateHotelRoom = (id: string, roomData: Partial<Types.HotelRoom>) => {
+    const current = hotelRooms.find((r) => r.id === id);
+    setHotelRooms((prev) => prev.map((r) => (r.id === id ? { ...r, ...roomData } : r)));
+    addAuditLog('Edit', 'Pet Hotel & Penitipan', current?.roomNo || id, `Pembaruan data kamar/kandang: ${current?.roomNo || id}`, { severity: 'Warning' });
+  };
+
+  const deleteHotelRoom = (id: string) => {
+    const current = hotelRooms.find((r) => r.id === id);
+    setHotelRooms((prev) => prev.filter((r) => r.id !== id));
+    addAuditLog('Hapus', 'Pet Hotel & Penitipan', current?.roomNo || id, `Penghapusan kamar/kandang: ${current?.roomNo || id}`, { severity: 'Kritis' });
   };
 
   const addHotelReservation = (hr: Omit<Types.HotelReservation, 'id' | 'reservationNo'>) => {
@@ -914,6 +1027,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addDailyMonitoring = (dm: Omit<Types.DailyMonitoring, 'id'>) => {
     setDailyMonitorings((prev) => [{ ...dm, id: 'dm_' + Date.now() }, ...prev]);
     addAuditLog('Tambah', 'Monitoring Pasien', dm.petName, `Pencatatan monitoring harian: Suhu ${dm.temperatureC ?? '-'}°C oleh ${dm.staffName}`);
+  };
+
+  const addProductCategory = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || productCategories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) return;
+    setProductCategories((prev) => [...prev, { id: 'cat_' + Date.now(), name: trimmed }]);
+    addAuditLog('Tambah', 'Master Data', trimmed, `Kategori produk baru ditambahkan: ${trimmed}`);
+  };
+
+  const deleteProductCategory = (id: string) => {
+    const current = productCategories.find((c) => c.id === id);
+    setProductCategories((prev) => prev.filter((c) => c.id !== id));
+    addAuditLog('Hapus', 'Master Data', current?.name || id, `Kategori produk dihapus: ${current?.name || id}`, { severity: 'Warning' });
+  };
+
+  const addWarehouse = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || warehouses.some((w) => w.name.toLowerCase() === trimmed.toLowerCase())) return;
+    setWarehouses((prev) => [...prev, { id: 'wh_' + Date.now(), name: trimmed }]);
+    addAuditLog('Tambah', 'Master Data', trimmed, `Gudang/lokasi baru ditambahkan: ${trimmed}`);
+  };
+
+  const deleteWarehouse = (id: string) => {
+    const current = warehouses.find((w) => w.id === id);
+    setWarehouses((prev) => prev.filter((w) => w.id !== id));
+    addAuditLog('Hapus', 'Master Data', current?.name || id, `Gudang/lokasi dihapus: ${current?.name || id}`, { severity: 'Warning' });
   };
 
   const addStockItem = (si: Omit<Types.StockItem, 'id' | 'sku'>) => {
@@ -1186,6 +1325,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Edit', 'Telehealth & Konsultasi', id, `Status telekonsultasi diubah menjadi: ${status}`);
   };
 
+  const addEFormTemplate = (t: Omit<Types.EFormTemplate, 'id'>) => {
+    const newTpl: Types.EFormTemplate = { ...t, id: 'eft_' + Date.now() };
+    setEFormTemplates((prev) => [...prev, newTpl]);
+    addAuditLog('Tambah', 'E-Form & Persetujuan Medis', newTpl.title, `Template e-form baru dibuat: ${newTpl.title}`);
+  };
+
+  const updateEFormTemplate = (id: string, tData: Partial<Types.EFormTemplate>) => {
+    const current = eFormTemplates.find((t) => t.id === id);
+    setEFormTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, ...tData } : t)));
+    addAuditLog('Edit', 'E-Form & Persetujuan Medis', current?.title || id, `Pembaruan template e-form: ${current?.title || id}`, { severity: 'Warning' });
+  };
+
+  const deleteEFormTemplate = (id: string) => {
+    const current = eFormTemplates.find((t) => t.id === id);
+    setEFormTemplates((prev) => prev.filter((t) => t.id !== id));
+    addAuditLog('Hapus', 'E-Form & Persetujuan Medis', current?.title || id, `Penghapusan template e-form: ${current?.title || id}`, { severity: 'Kritis' });
+  };
+
   const addEFormSubmission = (efs: Omit<Types.EFormSubmission, 'id' | 'date'>): Types.EFormSubmission => {
     const newSub: Types.EFormSubmission = {
       ...efs,
@@ -1195,6 +1352,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setEFormSubmissions((prev) => [newSub, ...prev]);
     addAuditLog('Tambah', 'E-Form & Persetujuan Medis', newSub.templateTitle, `Penyerahan formulir digital ${newSub.templateTitle} untuk pasien ${newSub.petName} (Oleh: ${newSub.customerName})`, { severity: 'Warning' });
     return newSub;
+  };
+
+  const addAmbulanceUnit = (u: Omit<Types.AmbulanceUnit, 'id'>) => {
+    const newUnit: Types.AmbulanceUnit = { ...u, id: 'au_' + Date.now() };
+    setAmbulanceUnits((prev) => [...prev, newUnit]);
+    addAuditLog('Tambah', 'Ambulans Emergency', newUnit.vehicleName, `Armada ambulans baru didaftarkan: ${newUnit.vehicleName} (${newUnit.plateNo})`);
+  };
+
+  const updateAmbulanceUnit = (id: string, uData: Partial<Types.AmbulanceUnit>) => {
+    const current = ambulanceUnits.find((u) => u.id === id);
+    setAmbulanceUnits((prev) => prev.map((u) => (u.id === id ? { ...u, ...uData } : u)));
+    addAuditLog('Edit', 'Ambulans Emergency', current?.vehicleName || id, `Pembaruan data armada ambulans: ${current?.vehicleName || id}`, { severity: 'Warning' });
+  };
+
+  const deleteAmbulanceUnit = (id: string) => {
+    const current = ambulanceUnits.find((u) => u.id === id);
+    setAmbulanceUnits((prev) => prev.filter((u) => u.id !== id));
+    addAuditLog('Hapus', 'Ambulans Emergency', current?.vehicleName || id, `Penghapusan armada ambulans: ${current?.vehicleName || id}`, { severity: 'Kritis' });
   };
 
   const addAmbulanceRequest = (ar: Omit<Types.AmbulanceRequest, 'id' | 'requestNo' | 'requestedAt' | 'status'>): Types.AmbulanceRequest => {
@@ -1217,6 +1392,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Edit', 'Ambulans Emergency', id, `Status armada ambulans diperbarui menjadi: ${status}${unitCode ? ` (Unit: ${unitCode})` : ''}`);
   };
 
+  const addSystemGroup = (g: Omit<Types.SystemGroup, 'id' | 'createdAt'>): Types.SystemGroup => {
+    const newGroup: Types.SystemGroup = {
+      ...g,
+      id: 'grp_' + Date.now(),
+      createdAt: new Date().toISOString().substring(0, 10)
+    };
+    setSystemGroups((prev) => [...prev, newGroup]);
+    addAuditLog('Tambah', 'Grup & Hak Akses', newGroup.name, `Grup departemen baru dibuat: ${newGroup.name} (${newGroup.code})`, { severity: 'Warning' });
+    return newGroup;
+  };
+
+  const updateSystemGroup = (id: string, gData: Partial<Types.SystemGroup>) => {
+    const current = systemGroups.find((g) => g.id === id);
+    setSystemGroups((prev) => prev.map((g) => (g.id === id ? { ...g, ...gData } : g)));
+    addAuditLog('Edit', 'Grup & Hak Akses', current?.name || id, `Pembaruan grup/hak akses: ${current?.name || id}`, { severity: 'Warning' });
+  };
+
+  const deleteSystemGroup = (id: string) => {
+    const current = systemGroups.find((g) => g.id === id);
+    if (current?.isSystemDefault) return;
+    setSystemGroups((prev) => prev.filter((g) => g.id !== id));
+    addAuditLog('Hapus', 'Grup & Hak Akses', current?.name || id, `Penghapusan grup departemen: ${current?.name || id}`, { severity: 'Kritis' });
+  };
+
+  const addCustomerTierGroup = (t: Omit<Types.CustomerTierGroup, 'id'>) => {
+    const newTier: Types.CustomerTierGroup = { ...t, id: 'tier_' + Date.now() };
+    setCustomerTierGroups((prev) => [...prev, newTier]);
+    addAuditLog('Tambah', 'CRM & Loyalty', newTier.tierName, `Tier membership baru dibuat: ${newTier.tierName} (Diskon ${newTier.discountPercent}%)`);
+  };
+
+  const updateCustomerTierGroup = (id: string, tData: Partial<Types.CustomerTierGroup>) => {
+    const current = customerTierGroups.find((t) => t.id === id);
+    setCustomerTierGroups((prev) => prev.map((t) => (t.id === id ? { ...t, ...tData } : t)));
+    addAuditLog('Edit', 'CRM & Loyalty', current?.tierName || id, `Pembaruan tier membership: ${current?.tierName || id}`, { severity: 'Warning' });
+  };
+
+  const deleteCustomerTierGroup = (id: string) => {
+    const current = customerTierGroups.find((t) => t.id === id);
+    setCustomerTierGroups((prev) => prev.filter((t) => t.id !== id));
+    addAuditLog('Hapus', 'CRM & Loyalty', current?.tierName || id, `Penghapusan tier membership: ${current?.tierName || id}`, { severity: 'Kritis' });
+  };
+
   const addPatientPhoto = (ph: Omit<Types.PatientPhoto, 'id'>) => {
     setPatientPhotos((prev) => [{ ...ph, id: 'ph_' + Date.now() }, ...prev]);
   };
@@ -1232,6 +1449,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         branches,
         activeBranchId,
         setActiveBranchId,
+        addBranch,
+        updateBranch,
+        deleteBranch,
         tenants,
         addTenant,
         customers,
@@ -1290,14 +1510,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         labTests,
         addLabTest,
         updateLabResult,
+        groomingPackages,
+        addGroomingPackage,
+        updateGroomingPackage,
+        deleteGroomingPackage,
         groomingSessions,
         addGroomingSession,
         updateGroomingStage,
+        hotelRooms,
+        addHotelRoom,
+        updateHotelRoom,
+        deleteHotelRoom,
         hotelReservations,
         addHotelReservation,
         updateHotelStatus,
         dailyMonitorings,
         addDailyMonitoring,
+        productCategories,
+        addProductCategory,
+        deleteProductCategory,
+        warehouses,
+        addWarehouse,
+        deleteWarehouse,
         stockItems,
         addStockItem,
         updateStockItem,
@@ -1335,12 +1569,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addTelehealthSession,
         updateTelehealthStatus,
         eFormTemplates,
+        addEFormTemplate,
+        updateEFormTemplate,
+        deleteEFormTemplate,
         eFormSubmissions,
         addEFormSubmission,
         ambulanceUnits,
+        addAmbulanceUnit,
+        updateAmbulanceUnit,
+        deleteAmbulanceUnit,
         ambulanceRequests,
         addAmbulanceRequest,
         updateAmbulanceStatus,
+        systemGroups,
+        addSystemGroup,
+        updateSystemGroup,
+        deleteSystemGroup,
+        customerTierGroups,
+        addCustomerTierGroup,
+        updateCustomerTierGroup,
+        deleteCustomerTierGroup,
         patientPhotos,
         addPatientPhoto,
         auditLogs,
