@@ -82,6 +82,10 @@ interface DataContextType {
   vacHistories: Types.VacHistory[];
   addVacHistory: (vh: Omit<Types.VacHistory, 'id'>) => void;
 
+  // Surgeries
+  surgicalProcedures: Types.SurgicalProcedure[];
+  addSurgicalProcedure: (sp: Omit<Types.SurgicalProcedure, 'id' | 'procedureNo'>) => void;
+
   // Pharmacy & Lab
   drugs: Types.Drug[];
   addDrug: (d: Omit<Types.Drug, 'id' | 'code'>) => void;
@@ -275,6 +279,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [vacSchedules, setVacSchedules] = useLocalState<Types.VacSchedule[]>('vac_schedules', Seed.INITIAL_VAC_SCHEDULES);
   const [vacHistories, setVacHistories] = useLocalState<Types.VacHistory[]>('vac_histories', Seed.INITIAL_VAC_HISTORIES);
+  const [surgicalProcedures, setSurgicalProcedures] = useLocalState<Types.SurgicalProcedure[]>('surgical_procedures', Seed.INITIAL_SURGICAL_PROCEDURES);
 
   const [drugs, setDrugs] = useLocalState<Types.Drug[]>('drugs', Seed.INITIAL_DRUGS);
   const [labTests, setLabTests] = useLocalState<Types.LabTest[]>('lab_tests', Seed.INITIAL_LAB_TESTS);
@@ -878,6 +883,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     addAuditLog('Tambah', 'Vaksinasi & Paspor', vh.vaccineName, `Pemberian vaksin ${vh.vaccineName} (Batch: ${vh.batchNumber}) & penerbitan sertifikat ${vh.certificateNo}`, { severity: 'Warning' });
+  };
+
+  const addSurgicalProcedure = (sp: Omit<Types.SurgicalProcedure, 'id' | 'procedureNo'>) => {
+    const procedureNo = 'SURG-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(10 + Math.random() * 90);
+    const newSurg: Types.SurgicalProcedure = {
+      ...sp,
+      id: 'sp_' + Date.now(),
+      procedureNo
+    };
+    setSurgicalProcedures((prev) => [newSurg, ...prev]);
+
+    // Auto add medical record
+    addMedicalRecord({
+      petId: sp.petId,
+      date: sp.date,
+      type: 'Tindakan',
+      title: `Operasi Bedah: ${sp.procedureName}`,
+      description: `Kategori: ${sp.category} | Dokter: ${sp.leadSurgeon} | Anestesi: ${sp.anesthesiaProtocol}`,
+      performedBy: sp.leadSurgeon
+    });
+
+    addAuditLog('Tambah', 'Pemeriksaan Medis (CPPT)', sp.procedureName, `Pencatatan prosedur bedah (${sp.category}) untuk pasien ${sp.petName} oleh ${sp.leadSurgeon}`, { severity: 'Warning' });
   };
 
   const addDrug = (d: Omit<Types.Drug, 'id' | 'code'>) => {
@@ -1503,6 +1530,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addVacSchedule,
         vacHistories,
         addVacHistory,
+        surgicalProcedures,
+        addSurgicalProcedure,
         drugs,
         addDrug,
         updateDrug,

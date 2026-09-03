@@ -4,6 +4,9 @@ import { useToast } from '../../context/ToastContext';
 import { AIForecastingView } from './AIForecastingView';
 import { InventoryAuditAssistant } from './InventoryAuditAssistant';
 import { InventoryVelocityHeatmap } from '../inventory/InventoryVelocityHeatmap';
+import { StockDepletionTrendChart } from '../inventory/StockDepletionTrendChart';
+import { AIPOSuggestionsView } from '../inventory/AIPOSuggestionsView';
+import { ExportInventoryPdfModal } from '../inventory/ExportInventoryPdfModal';
 import { StockItem } from '../../types';
 import { QuickPOModal, QuickPOLineItem } from '../common/QuickPOModal';
 import { StockMutationModal } from '../inventory/StockMutationModal';
@@ -26,6 +29,7 @@ import {
   Sparkles,
   Bot,
   TrendingUp,
+  TrendingDown,
   Activity,
   Flame,
   Tag,
@@ -58,9 +62,10 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
 
   const { addToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'stock' | 'heatmap' | 'auditAssistant' | 'movements' | 'transfer' | 'aiForecast'>(
+  const [activeTab, setActiveTab] = useState<'stock' | 'depletion' | 'heatmap' | 'auditAssistant' | 'movements' | 'transfer' | 'aiForecast' | 'aiPoSuggest'>(
     'stock'
   );
+  const [isPdfExportModalOpen, setIsPdfExportModalOpen] = useState(false);
   const [showVelocityHeatmapWidget, setShowVelocityHeatmapWidget] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -336,6 +341,50 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* AI PO Suggestion Tab */}
+          <button
+            id="inventory-tab-ai-po"
+            onClick={() => setActiveTab('aiPoSuggest')}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
+              activeTab === 'aiPoSuggest'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-md font-extrabold'
+                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#15233B]'
+            }`}
+          >
+            <ShoppingCart className="w-4 h-4 text-emerald-400" />
+            <span>Saran PO AI (30H)</span>
+            {lowStockItems.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-rose-500/30 text-rose-300 text-[9px] font-extrabold uppercase animate-pulse">
+                {lowStockItems.length} Reorder
+              </span>
+            )}
+          </button>
+
+          {/* Export PDF Button */}
+          <button
+            onClick={() => setIsPdfExportModalOpen(true)}
+            className="px-3.5 py-2 bg-gradient-to-r from-[#B8905A] to-[#D9B98A] hover:brightness-110 text-[#1B2A45] font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+            title="Ekspor Laporan Stok & Analisis Tren Depresi ke PDF Resmi Manajemen"
+          >
+            <FileText className="w-4 h-4 text-[#1B2A45]" />
+            <span>Ekspor PDF Laporan</span>
+          </button>
+
+          <button
+            id="inventory-tab-depletion"
+            onClick={() => setActiveTab('depletion')}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
+              activeTab === 'depletion'
+                ? 'bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 text-white shadow-md font-extrabold'
+                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#15233B]'
+            }`}
+          >
+            <TrendingDown className="w-4 h-4 text-amber-400" />
+            <span>Tren Depresi 30H</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-500/30 text-amber-300 text-[9px] font-extrabold uppercase">
+              D3
+            </span>
+          </button>
           <button
             onClick={() => setActiveTab('heatmap')}
             className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
@@ -430,6 +479,28 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
 
       {activeTab === 'aiForecast' && <AIForecastingView />}
 
+      {activeTab === 'aiPoSuggest' && (
+        <AIPOSuggestionsView
+          onOpenQuickPo={(items) => {
+            setQuickPOItems(items);
+            setQuickPOTitle(`Quick PO — Saran Reorder AI (${items.length} Item)`);
+            setQuickPONotes('Pemesanan diajukan berdasarkan kalkulasi AI model konsumsi 30 hari & safety stock.');
+            setIsQuickPOModalOpen(true);
+          }}
+          onOpenPdfExport={() => setIsPdfExportModalOpen(true)}
+        />
+      )}
+
+      {activeTab === 'depletion' && (
+        <StockDepletionTrendChart
+          stockItems={stockItems}
+          stockMovements={stockMovements}
+          onOpenQuickPO={handleOpenQuickPOForSingleItem}
+          onOpenPdfExport={() => setIsPdfExportModalOpen(true)}
+          onOpenAiPo={() => setActiveTab('aiPoSuggest')}
+        />
+      )}
+
       {activeTab === 'heatmap' && (
         <InventoryVelocityHeatmap
           stockItems={stockItems}
@@ -441,6 +512,15 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
 
       {activeTab === 'stock' && (
         <div className="space-y-5">
+          {/* D3 Stock Depletion Trend Chart Widget */}
+          <StockDepletionTrendChart
+            stockItems={stockItems}
+            stockMovements={stockMovements}
+            onOpenQuickPO={handleOpenQuickPOForSingleItem}
+            onOpenPdfExport={() => setIsPdfExportModalOpen(true)}
+            onOpenAiPo={() => setActiveTab('aiPoSuggest')}
+          />
+
           {/* Velocity Heatmap Dashboard Widget */}
           <InventoryVelocityHeatmap
             stockItems={stockItems}
@@ -1175,6 +1255,12 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
       {showStockMutationModal && (
         <StockMutationModal onClose={() => setShowStockMutationModal(false)} />
       )}
+
+      {/* Export Inventory Stock & Depletion Trends PDF Modal */}
+      <ExportInventoryPdfModal
+        isOpen={isPdfExportModalOpen}
+        onClose={() => setIsPdfExportModalOpen(false)}
+      />
     </div>
   );
 };

@@ -283,6 +283,30 @@ export interface VacHistory {
   certificateNo: string;
 }
 
+export interface SurgicalProcedure {
+  id: string;
+  procedureNo: string;
+  petId: string;
+  petName: string;
+  customerName: string;
+  procedureName: string;
+  category: 'Sterilisasi' | 'Jaringan Lunak' | 'Ortopedi' | 'Dental' | 'Onkologi' | 'Gawat Darurat';
+  date: string; // YYYY-MM-DD
+  startTime?: string;
+  endTime?: string;
+  leadSurgeon: string;
+  assistantSurgeon?: string;
+  anesthetist: string;
+  anesthesiaProtocol: string;
+  asaScore?: 'ASA I' | 'ASA II' | 'ASA III' | 'ASA IV' | 'ASA V';
+  status: 'Selesai' | 'Dalam Proses' | 'Terjadwal' | 'Pemulihan';
+  findings?: string;
+  postOpNotes?: string;
+  sutureRemovalDate?: string;
+  complications?: string;
+  photoUrl?: string;
+}
+
 export interface DewormingRecord {
   id: string;
   petId: string;
