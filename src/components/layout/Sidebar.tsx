@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { UserRole } from '../../types';
@@ -35,7 +35,6 @@ import {
   ChevronRight,
   ChevronDown,
   LogOut,
-  Building,
   UserCheck,
   Sparkles,
   ShieldCheck,
@@ -218,9 +217,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsCollapsed,
 }) => {
   const { user, switchRole, logout, activeOwnership } = useAuth();
-  const { branches, activeBranchId, setActiveBranchId } = useData();
+  const { stockItems = [] } = useData();
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [showRoleSelector, setShowRoleSelector] = useState<boolean>(false);
+
+  // Compute number of inventory products falling below or equal to minimum stock threshold
+  const lowStockCount = useMemo(() => {
+    return (stockItems || []).filter((item) => {
+      const stock = item?.stock ?? 0;
+      const minStock = item?.minStock ?? 0;
+      return stock <= minStock;
+    }).length;
+  }, [stockItems]);
 
   // Derive effective role from user role or ownership
   let userRole: UserRole = 'owner_klinik';
@@ -289,27 +297,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Branch Switcher (If Expanded) */}
-      {!isCollapsed && (
-        <div className="px-3 py-2 border-b border-[#B8905A]/30 bg-[#101A2C]/50">
-          <label className="text-[9px] font-bold text-[#D9B98A]/90 tracking-wider uppercase mb-1 flex items-center gap-1">
-            <Building className="w-3 h-3 text-[#D9B98A]" /> Cabang Usaha Aktif
-          </label>
-          <select
-            value={activeBranchId}
-            onChange={(e) => setActiveBranchId(e.target.value)}
-            className="w-full bg-[#1B2A45] text-[#EDE6D6] text-xs font-medium rounded-lg px-2.5 py-1.5 border border-[#B8905A]/40 focus:outline-none focus:border-[#D9B98A] shadow-2xs"
-          >
-            <option value="all">Semua Unit / Cabang</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
       {/* Navigation List */}
       <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4 scrollbar-thin">
         {NAV_GROUPS.map((group) => {
@@ -339,20 +326,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {visibleItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = activeModule === item.id;
+                    const isInventory = item.id === 'inventory';
+                    const hasLowStock = isInventory && lowStockCount > 0;
 
                     return (
                       <button
                         key={item.id}
+                        id={`sidebar-nav-${item.id}`}
                         onClick={() => setActiveModule(item.id)}
-                        title={isCollapsed ? item.label : undefined}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-all ${
+                        title={
+                          isCollapsed
+                            ? hasLowStock
+                              ? `${item.label} (${lowStockCount} produk di bawah batas stok minimum)`
+                              : item.label
+                            : hasLowStock
+                            ? `${lowStockCount} produk di bawah batas stok minimum`
+                            : undefined
+                        }
+                        className={`relative w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-all ${
                           isActive
                             ? 'bg-[#D9B98A] text-[#101A2C] font-bold shadow-2xs'
                             : 'text-[#EDE6D6]/80 hover:text-[#EDE6D6] hover:bg-[#B8905A]/20'
                         } ${isCollapsed ? 'justify-center px-0' : ''}`}
                       >
-                        <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#101A2C]' : 'text-[#D9B98A]/80'}`} />
-                        {!isCollapsed && <span className="truncate">{item.label}</span>}
+                        <div className="relative inline-flex items-center justify-center shrink-0">
+                          <Icon className={`w-4 h-4 ${isActive ? 'text-[#101A2C]' : 'text-[#D9B98A]/80'}`} />
+                          {isCollapsed && hasLowStock && (
+                            <span
+                              id="sidebar-inventory-badge-collapsed"
+                              className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] px-0.5 rounded-full bg-rose-500 text-white font-bold text-[9px] leading-none flex items-center justify-center shadow-xs ring-1 ring-[#101A2C]"
+                            >
+                              {lowStockCount > 99 ? '99+' : lowStockCount}
+                            </span>
+                          )}
+                        </div>
+
+                        {!isCollapsed && (
+                          <>
+                            <span className="truncate flex-1 text-left">{item.label}</span>
+                            {hasLowStock && (
+                              <span
+                                id="sidebar-inventory-badge-expanded"
+                                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold tracking-tight shrink-0 flex items-center gap-1 transition-all ${
+                                  isActive
+                                    ? 'bg-rose-600 text-white shadow-2xs'
+                                    : 'bg-rose-500 text-white shadow-2xs ring-1 ring-rose-400/30'
+                                }`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
+                                <span>{lowStockCount}</span>
+                              </span>
+                            )}
+                          </>
+                        )}
                       </button>
                     );
                   })}

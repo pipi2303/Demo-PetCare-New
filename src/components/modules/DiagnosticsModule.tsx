@@ -4,6 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import { useAutoSaveDraft } from '../../hooks/useAutoSaveDraft';
 import { NavModule } from '../layout/Sidebar';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { MedicalHistoryTimeline } from '../medical/MedicalHistoryTimeline';
 import {
   LineChart,
   Line,
@@ -89,15 +90,19 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
   };
 
   // Tab state synced with activeModule
-  const [activeTab, setActiveTab] = useState<'emr' | 'pharmacy' | 'lab' | 'gallery' | 'weight'>(
+  const [activeTab, setActiveTab] = useState<'timeline' | 'emr' | 'pharmacy' | 'lab' | 'gallery' | 'weight'>(
     activeModule === 'emr'
       ? 'emr'
       : activeModule === 'pharmacy'
       ? 'pharmacy'
       : activeModule === 'patientGallery'
       ? 'gallery'
-      : 'lab'
+      : 'timeline'
   );
+
+  // Sub-view toggles for rich exploration
+  const [emrViewMode, setEmrViewMode] = useState<'timeline' | 'soap'>('timeline');
+  const [galleryViewMode, setGalleryViewMode] = useState<'photos' | 'timeline'>('photos');
 
   useEffect(() => {
     if (activeModule === 'emr') setActiveTab('emr');
@@ -218,7 +223,8 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
           { label: `${labTests.length} Uji Lab`, variant: 'blue' }
         ]}
         tabs={[
-          { id: 'emr', label: 'EMR Timeline 360°', icon: FileText },
+          { id: 'timeline', label: 'Timeline Medis Kronologis', icon: Sparkles },
+          { id: 'emr', label: 'EMR & SOAP Dokter', icon: FileText },
           { id: 'pharmacy', label: 'Apotek & Racikan', icon: Pill, count: prescriptionQueue.filter(p => p.status === 'Menunggu Racik').length },
           { id: 'lab', label: 'Laboratorium & X-Ray', icon: Microscope, count: labTests.length },
           { id: 'gallery', label: 'Galeri Foto Pasien', icon: Camera },
@@ -290,83 +296,130 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
         </div>
       </div>
 
+      {/* 0. Dedicated Visual Medical History Timeline (Vaccines, Surgeries, Lab) */}
+      {activeTab === 'timeline' && (
+        <MedicalHistoryTimeline
+          selectedPetId={selectedPetId}
+          onSelectPet={handleSelectPet}
+        />
+      )}
+
       {/* 1. EMR Timeline 360° */}
       {activeTab === 'emr' && selectedPet && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-2">
-                <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-[#B8905A]" /> Timeline Rekam Medis Pasien: {selectedPet.name}
-                </h3>
-                <button
-                  onClick={() => addToast(`Mencetak Ringkasan EMR Resmi untuk ${selectedPet.name}...`, 'info')}
-                  className="px-3 py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] text-xs font-bold rounded-lg border border-[#B8905A]/30 flex items-center gap-1.5 transition-all"
-                >
-                  <Printer className="w-3.5 h-3.5 text-[#D9B98A]" /> Cetak Ringkasan EMR
-                </button>
-              </div>
+        <div className="space-y-4">
+          {/* Sub-view switcher for EMR */}
+          <div className="flex items-center justify-between flex-wrap gap-3 bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-3 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-[#1B2A45]">Tampilan EMR:</span>
+              <button
+                onClick={() => setEmrViewMode('timeline')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  emrViewMode === 'timeline'
+                    ? 'bg-[#1B2A45] text-[#FFFDF9] shadow-xs'
+                    : 'bg-[#F6F1E6] text-[#22242B] hover:bg-[#EAE2D1] border border-[#E1D6BE]'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#D9B98A]" />
+                <span>Timeline Medis Kronologis (Vaksin, Bedah, Lab)</span>
+              </button>
+              <button
+                onClick={() => setEmrViewMode('soap')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  emrViewMode === 'soap'
+                    ? 'bg-[#1B2A45] text-[#FFFDF9] shadow-xs'
+                    : 'bg-[#F6F1E6] text-[#22242B] hover:bg-[#EAE2D1] border border-[#E1D6BE]'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Catatan SOAP & Kunjungan Dokter</span>
+              </button>
+            </div>
+            <button
+              onClick={() => addToast(`Mencetak Ringkasan EMR Resmi untuk ${selectedPet.name}...`, 'info')}
+              className="px-3 py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] text-xs font-bold rounded-lg border border-[#B8905A]/30 flex items-center gap-1.5 transition-all shadow-2xs"
+            >
+              <Printer className="w-3.5 h-3.5 text-[#D9B98A]" /> Cetak Ringkasan EMR
+            </button>
+          </div>
 
-              {/* SOAP Visits */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-[#1B2A45] flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-[#B8905A]" /> Riwayat Kunjungan & Catatan SOAP Dokter:
-                </h4>
+          {emrViewMode === 'timeline' ? (
+            <MedicalHistoryTimeline
+              selectedPetId={selectedPetId}
+              onSelectPet={handleSelectPet}
+              showPetSelector={false}
+            />
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-4">
+                <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-2xs space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-2">
+                    <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-[#B8905A]" /> Catatan Kunjungan SOAP: {selectedPet.name}
+                    </h3>
+                  </div>
 
-                {petSoaps.length > 0 ? (
-                  petSoaps.map((s) => (
-                    <div key={s.id} className="p-4 rounded-xl bg-[#F6F1E6] border border-[#E1D6BE] text-xs space-y-2">
-                      <div className="flex items-center justify-between font-bold text-[#1B2A45]">
-                        <span className="text-sm">{s.workingDiagnosis}</span>
-                        <span className="text-[10px] bg-[#1B2A45] text-[#D9B98A] px-2 py-0.5 rounded">
-                          {s.date} • {s.doctorName}
+                  {/* SOAP Visits */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-[#1B2A45] flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-[#B8905A]" /> Riwayat Kunjungan & Catatan SOAP Dokter:
+                    </h4>
+
+                    {petSoaps.length > 0 ? (
+                      petSoaps.map((s) => (
+                        <div key={s.id} className="p-4 rounded-xl bg-[#F6F1E6] border border-[#E1D6BE] text-xs space-y-2">
+                          <div className="flex items-center justify-between font-bold text-[#1B2A45]">
+                            <span className="text-sm">{s.workingDiagnosis}</span>
+                            <span className="text-[10px] bg-[#1B2A45] text-[#D9B98A] px-2 py-0.5 rounded">
+                              {s.date} • {s.doctorName}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-[#22242B]">
+                            <p><strong>Keluhan:</strong> {s.chiefComplaint}</p>
+                            <p><strong>Vitals:</strong> {s.temperatureC}°C, {s.weightKg}kg</p>
+                          </div>
+                          <p className="text-[11px] text-[#6B6656]"><strong>Fisik:</strong> {s.physicalExamNotes}</p>
+                          <div className="p-2 rounded bg-[#FFFDF9] border border-[#E1D6BE] text-[11px] font-semibold text-[#1B2A45]">
+                            <strong>Resep Obat:</strong> {s.medicationPlan || 'Tidak ada resep'}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-[#6B6656]">Belum ada riwayat SOAP tercatat untuk pasien ini.</p>
+                    )}
+                  </div>
+
+                  {/* Vaccine History */}
+                  <div className="space-y-2 pt-2 border-t border-[#E1D6BE]">
+                    <h4 className="text-xs font-bold text-[#1B2A45]">Riwayat Vaksinasi Pasien:</h4>
+                    {petVacs.map((v) => (
+                      <div key={v.id} className="p-2.5 rounded-lg bg-[#F6F1E6] border border-[#E1D6BE] text-xs flex justify-between">
+                        <div>
+                          <p className="font-bold text-[#1B2A45]">{v.vaccineName}</p>
+                          <p className="text-[10px] text-[#6B6656]">Diberikan: {v.givenDate} | Batch: {v.batchNumber}</p>
+                        </div>
+                        <span className="text-emerald-700 font-bold text-[10px] bg-emerald-100 px-2 py-1 rounded">
+                          Booster: {v.nextDueDate}
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-[#22242B]">
-                        <p><strong>Keluhan:</strong> {s.chiefComplaint}</p>
-                        <p><strong>Vitals:</strong> {s.temperatureC}°C, {s.weightKg}kg</p>
-                      </div>
-                      <p className="text-[11px] text-[#6B6656]"><strong>Fisik:</strong> {s.physicalExamNotes}</p>
-                      <div className="p-2 rounded bg-[#FFFDF9] border border-[#E1D6BE] text-[11px] font-semibold text-[#1B2A45]">
-                        <strong>Resep Obat:</strong> {s.medicationPlan || 'Tidak ada resep'}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-[#6B6656]">Belum ada riwayat SOAP tercatat untuk pasien ini.</p>
-                )}
-              </div>
-
-              {/* Vaccine History */}
-              <div className="space-y-2 pt-2 border-t border-[#E1D6BE]">
-                <h4 className="text-xs font-bold text-[#1B2A45]">Riwayat Vaksinasi Pasien:</h4>
-                {petVacs.map((v) => (
-                  <div key={v.id} className="p-2.5 rounded-lg bg-[#F6F1E6] border border-[#E1D6BE] text-xs flex justify-between">
-                    <div>
-                      <p className="font-bold text-[#1B2A45]">{v.vaccineName}</p>
-                      <p className="text-[10px] text-[#6B6656]">Diberikan: {v.givenDate} | Batch: {v.batchNumber}</p>
-                    </div>
-                    <span className="text-emerald-700 font-bold text-[10px] bg-emerald-100 px-2 py-1 rounded">
-                      Booster: {v.nextDueDate}
-                    </span>
+                    ))}
                   </div>
-                ))}
+                </div>
+              </div>
+
+              <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs space-y-4">
+                <h3 className="font-bold text-xs text-[#1B2A45] font-display uppercase tracking-wider border-b border-[#E1D6BE] pb-2">
+                  Ringkasan Profil Pasien
+                </h3>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between"><span className="text-[#6B6656]">Nama Pasien:</span><span className="font-bold text-[#1B2A45]">{selectedPet.name}</span></div>
+                  <div className="flex justify-between"><span className="text-[#6B6656]">Spesies / Ras:</span><span className="font-semibold text-[#22242B]">{selectedPet.species} ({selectedPet.breed})</span></div>
+                  <div className="flex justify-between"><span className="text-[#6B6656]">Berat Badan:</span><span className="font-semibold text-[#22242B]">{selectedPet.weightKg} Kg</span></div>
+                  <div className="flex justify-between"><span className="text-[#6B6656]">Pemilik:</span><span className="font-bold text-[#1B2A45]">{selectedPet.customerName}</span></div>
+                  <div className="flex justify-between"><span className="text-[#6B6656]">Microchip:</span><span className="font-mono text-[10px] text-[#B8905A]">{selectedPet.microchipNo || '9810981002341'}</span></div>
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs space-y-4">
-            <h3 className="font-bold text-xs text-[#1B2A45] font-display uppercase tracking-wider border-b border-[#E1D6BE] pb-2">
-              Ringkasan Profil Pasien
-            </h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-[#6B6656]">Nama Pasien:</span><span className="font-bold text-[#1B2A45]">{selectedPet.name}</span></div>
-              <div className="flex justify-between"><span className="text-[#6B6656]">Spesies / Ras:</span><span className="font-semibold text-[#22242B]">{selectedPet.species} ({selectedPet.breed})</span></div>
-              <div className="flex justify-between"><span className="text-[#6B6656]">Berat Badan:</span><span className="font-semibold text-[#22242B]">{selectedPet.weightKg} Kg</span></div>
-              <div className="flex justify-between"><span className="text-[#6B6656]">Pemilik:</span><span className="font-bold text-[#1B2A45]">{selectedPet.customerName}</span></div>
-              <div className="flex justify-between"><span className="text-[#6B6656]">Microchip:</span><span className="font-mono text-[10px] text-[#B8905A]">{selectedPet.microchipNo || '9810981002341'}</span></div>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -645,86 +698,128 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
         </div>
       )}
 
-      {/* 4. Patient Photo Gallery */}
+      {/* 4. Patient Photo Gallery / Medical Timeline */}
       {activeTab === 'gallery' && (
         <div className="space-y-5">
-          <div className="flex items-center justify-between flex-wrap gap-3 bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs">
+          {/* Gallery vs Timeline View Mode Switcher */}
+          <div className="flex items-center justify-between flex-wrap gap-3 bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-3 shadow-2xs">
             <div className="flex items-center gap-2">
-              <Camera className="w-4 h-4 text-[#B8905A]" />
-              <span className="text-xs font-bold text-[#1B2A45]">Kategori Foto:</span>
-              {['Semua', 'Kunjungan', 'Grooming', 'Sebelum', 'Sesudah', 'Lab'].map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setGalleryCategory(cat)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    galleryCategory === cat
-                      ? 'bg-[#1B2A45] text-[#FFFDF9]'
-                      : 'bg-[#F6F1E6] text-[#22242B] border border-[#E1D6BE]'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
+              <span className="text-xs font-bold text-[#1B2A45]">Mode Tampilan Galeri:</span>
+              <button
+                onClick={() => setGalleryViewMode('photos')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  galleryViewMode === 'photos'
+                    ? 'bg-[#1B2A45] text-[#FFFDF9] shadow-xs'
+                    : 'bg-[#F6F1E6] text-[#22242B] hover:bg-[#EAE2D1] border border-[#E1D6BE]'
+                }`}
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Dokumentasi Foto Pasien</span>
+              </button>
+              <button
+                onClick={() => setGalleryViewMode('timeline')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  galleryViewMode === 'timeline'
+                    ? 'bg-[#1B2A45] text-[#FFFDF9] shadow-xs'
+                    : 'bg-[#F6F1E6] text-[#22242B] hover:bg-[#EAE2D1] border border-[#E1D6BE]'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#D9B98A]" />
+                <span>Medical History Timeline (Vaksin, Bedah, Lab)</span>
+              </button>
             </div>
+            <span className="text-xs text-[#6B6656] font-medium">
+              Pasien: <strong className="text-[#1B2A45]">{selectedPet?.name}</strong>
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {filteredPhotos.map((photo) => (
-              <div key={photo.id} className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] overflow-hidden shadow-2xs space-y-2">
-                <div className="aspect-square bg-slate-900 overflow-hidden relative">
-                  <img src={photo.photoUrl} alt={photo.caption} className="w-full h-full object-cover hover:scale-105 transition-transform" />
-                  <span className="absolute top-2 left-2 bg-[#1B2A45] text-[#D9B98A] text-[9px] px-2 py-0.5 rounded font-bold">
-                    {photo.category}
-                  </span>
-                </div>
-                <div className="p-3 text-xs space-y-1">
-                  <p className="font-bold text-[#1B2A45] truncate">{photo.caption}</p>
-                  <p className="text-[10px] text-[#6B6656]">Pasien: {photo.petName} | {photo.takenAt}</p>
+          {galleryViewMode === 'timeline' ? (
+            <MedicalHistoryTimeline
+              selectedPetId={selectedPetId}
+              onSelectPet={handleSelectPet}
+              showPetSelector={false}
+            />
+          ) : (
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-3 bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-[#B8905A]" />
+                  <span className="text-xs font-bold text-[#1B2A45]">Kategori Foto:</span>
+                  {['Semua', 'Kunjungan', 'Grooming', 'Sebelum', 'Sesudah', 'Lab'].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setGalleryCategory(cat)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        galleryCategory === cat
+                          ? 'bg-[#1B2A45] text-[#FFFDF9]'
+                          : 'bg-[#F6F1E6] text-[#22242B] border border-[#E1D6BE]'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
 
-          {/* Upload New Photo Form */}
-          <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs space-y-3">
-            <h3 className="font-bold text-xs text-[#1B2A45] font-display uppercase tracking-wider border-b border-[#E1D6BE] pb-2">
-              Tambah Foto Klinis Pasien Baru
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div>
-                <label className="font-bold text-[#1B2A45] block mb-1">Kategori</label>
-                <select
-                  value={newPhotoCategory}
-                  onChange={(e) => setNewPhotoCategory(e.target.value as any)}
-                  className="w-full p-2 bg-[#F6F1E6] rounded border border-[#E1D6BE]"
-                >
-                  <option value="Kunjungan">Kunjungan</option>
-                  <option value="Grooming">Grooming</option>
-                  <option value="Sebelum">Sebelum (Pre-Op)</option>
-                  <option value="Sesudah">Sesudah (Post-Op)</option>
-                  <option value="Lab">Lab / X-Ray</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {filteredPhotos.map((photo) => (
+                  <div key={photo.id} className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] overflow-hidden shadow-2xs space-y-2">
+                    <div className="aspect-square bg-slate-900 overflow-hidden relative">
+                      <img src={photo.photoUrl} alt={photo.caption} className="w-full h-full object-cover hover:scale-105 transition-transform" />
+                      <span className="absolute top-2 left-2 bg-[#1B2A45] text-[#D9B98A] text-[9px] px-2 py-0.5 rounded font-bold">
+                        {photo.category}
+                      </span>
+                    </div>
+                    <div className="p-3 text-xs space-y-1">
+                      <p className="font-bold text-[#1B2A45] truncate">{photo.caption}</p>
+                      <p className="text-[10px] text-[#6B6656]">Pasien: {photo.petName} | {photo.takenAt}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div>
-                <label className="font-bold text-[#1B2A45] block mb-1">Keterangan / Caption</label>
-                <input
-                  type="text"
-                  value={newPhotoCaption}
-                  onChange={(e) => setNewPhotoCaption(e.target.value)}
-                  placeholder="Contoh: Kondisi luka hari ke-3 pasca operasi"
-                  className="w-full p-2 bg-[#F6F1E6] rounded border border-[#E1D6BE]"
-                />
+
+              {/* Upload New Photo Form */}
+              <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs space-y-3">
+                <h3 className="font-bold text-xs text-[#1B2A45] font-display uppercase tracking-wider border-b border-[#E1D6BE] pb-2">
+                  Tambah Foto Klinis Pasien Baru
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="font-bold text-[#1B2A45] block mb-1">Kategori</label>
+                    <select
+                      value={newPhotoCategory}
+                      onChange={(e) => setNewPhotoCategory(e.target.value as any)}
+                      className="w-full p-2 bg-[#F6F1E6] rounded border border-[#E1D6BE]"
+                    >
+                      <option value="Kunjungan">Kunjungan</option>
+                      <option value="Grooming">Grooming</option>
+                      <option value="Sebelum">Sebelum (Pre-Op)</option>
+                      <option value="Sesudah">Sesudah (Post-Op)</option>
+                      <option value="Lab">Lab / X-Ray</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#1B2A45] block mb-1">Keterangan / Caption</label>
+                    <input
+                      type="text"
+                      value={newPhotoCaption}
+                      onChange={(e) => setNewPhotoCaption(e.target.value)}
+                      placeholder="Contoh: Kondisi luka hari ke-3 pasca operasi"
+                      className="w-full p-2 bg-[#F6F1E6] rounded border border-[#E1D6BE]"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      onClick={handleAddPhoto}
+                      className="w-full py-2 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4 text-[#D9B98A]" /> Tambah ke Galeri
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-end">
-                <button
-                  onClick={handleAddPhoto}
-                  className="w-full py-2 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4 text-[#D9B98A]" /> Tambah ke Galeri
-                </button>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       )}
 
