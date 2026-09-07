@@ -1,6 +1,8 @@
 {
   "name": "PetCare - ERP",
   "description": "Comprehensive Pet Clinic ERP & EMR system with Google Calendar synchronization for clinic bookings and doctor schedules, Grooming, Pet Hotel, Pet Shop POS, Pharmacy, and AI Clinical Assistant.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "camera"
+  ],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
