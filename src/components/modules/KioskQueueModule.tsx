@@ -3,6 +3,7 @@ import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import { SmartPatientCheckInModal } from '../common/SmartPatientCheckInModal';
+import { sendWhatsAppNotification } from '../../utils/sendWhatsApp';
 import {
   QrCode,
   Camera,
@@ -71,12 +72,22 @@ export const KioskQueueModule: React.FC = () => {
     addToast(`Tiket antrean A-${nextQueueNo.toString().padStart(3, '0')} berhasil dicetak!`, 'success');
   };
 
-  const handleSendWANotify = (visit: any) => {
-    const formattedPhone = visit.customerId ? '6281234567890' : '6281234567890';
+  const handleSendWANotify = async (visit: any) => {
+    // Catatan: sebelumnya nomor tujuan hardcoded ke satu angka contoh untuk semua pasien.
+    // Sekarang diambil dari data pelanggan asli (customers) berdasarkan customerId pada visit.
+    const customerPhone = customers.find((c) => c.id === visit.customerId)?.phone;
+    if (!customerPhone) {
+      addToast(`Nomor WhatsApp ${visit.customerName} tidak ditemukan di data pelanggan.`, 'error');
+      return;
+    }
     const text = `Halo Kak ${visit.customerName}! 🐾 Antrean anabul ${visit.petName} (Nomor A-${visit.queueNo.toString().padStart(3, '0')}) tersisa 2 nomor lagi. Mohon bersiap menuju ke ruang periksa drh. Budi Santoso. Terima kasih!`;
-    const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
-    addToast(`Notifikasi estimasi antrean WA dikirim ke ${visit.customerName}...`, 'info');
+    const outcome = await sendWhatsAppNotification(customerPhone, text);
+    addToast(
+      outcome.auto
+        ? `Notifikasi estimasi antrean WA terkirim otomatis ke ${visit.customerName}.`
+        : `Notifikasi estimasi antrean WA dikirim ke ${visit.customerName}...`,
+      outcome.auto ? 'success' : 'info'
+    );
   };
 
   return (

@@ -20,6 +20,7 @@ import {
   createResetToken,
   consumeResetToken
 } from "./server/authService";
+import { sendWhatsAppMessage } from "./server/waService";
 
 async function startServer() {
   const app = express();
@@ -238,6 +239,22 @@ async function startServer() {
       status: token ? "connected" : "disconnected",
       provider: "Fonnte WhatsApp API"
     });
+  });
+
+  // Kirim notifikasi WhatsApp otomatis (antrean, reminder vaksin, invoice, dsb.) via Fonnte.
+  // Jika WA_TOKEN belum dikonfigurasi, mengembalikan simulated:true agar frontend
+  // bisa fallback ke tautan wa.me manual tanpa mematahkan fitur.
+  app.post("/api/wa/send", async (req, res) => {
+    try {
+      const { phone, message } = req.body || {};
+      if (!phone || !message) {
+        return res.status(400).json({ success: false, simulated: false, message: "Nomor telepon dan pesan wajib diisi." });
+      }
+      const result = await sendWhatsAppMessage(phone, message);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, simulated: false, message: err.message });
+    }
   });
 
   // Gemini AI Assistant Chat Endpoint

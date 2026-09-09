@@ -23,6 +23,7 @@ import QRCode from 'qrcode';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Pet, Customer, VacHistory, DewormingRecord } from '../../types';
+import { sendWhatsAppNotification } from '../../utils/sendWhatsApp';
 
 interface PetHealthPassportModalProps {
   onClose: () => void;
@@ -74,12 +75,11 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
       .catch((err) => console.error(err));
   }, [currentPet, currentOwner]);
 
-  const handleShareWhatsApp = () => {
+  const handleShareWhatsApp = async () => {
     if (!currentOwner?.phone) {
       addToast('Nomor telepon pemilik hewan tidak ditemukan!', 'error');
       return;
     }
-    const cleanPhone = currentOwner.phone.replace(/^0/, '62').replace(/\D/g, '');
     const message =
       `📘 *BUKU PASPOR KESEHATAN DIGITAL RESMI*\n` +
       `🐾 *Nama Anabul:* ${currentPet?.name} (${currentPet?.species} - ${currentPet?.breed})\n` +
@@ -93,9 +93,13 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
       `\n\n🛡️ *Klinik Penerbit:* PetCare Hospital & Clinic ERP\n` +
       `_Tunjukkan pesan/QR ini saat bepergian, penitipan hotel anabul, atau check-in klinik!_`;
 
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
-    addToast(`Membuka WhatsApp untuk mengirimkan Paspor Kesehatan ${currentPet?.name}...`, 'info');
+    const outcome = await sendWhatsAppNotification(currentOwner.phone, message);
+    addToast(
+      outcome.auto
+        ? `Paspor Kesehatan ${currentPet?.name} terkirim otomatis ke WhatsApp pemilik.`
+        : `Membuka WhatsApp untuk mengirimkan Paspor Kesehatan ${currentPet?.name}...`,
+      outcome.auto ? 'success' : 'info'
+    );
   };
 
   const handlePrint = () => {

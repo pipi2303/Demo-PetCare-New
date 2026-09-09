@@ -3,6 +3,7 @@ import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { ClinicVisit, Pet, Customer, VisitStatus } from '../../types';
 import { getIndonesianFemaleVoice, playHospitalChime } from '../../utils/audioVoiceUtils';
+import { sendWhatsAppNotification } from '../../utils/sendWhatsApp';
 import QRCode from 'qrcode';
 import {
   QrCode,
@@ -447,12 +448,10 @@ export const SmartPatientCheckInModal: React.FC<SmartPatientCheckInModalProps> =
     return matchesSearch && matchesSpecies;
   });
 
-  // Share or copy WhatsApp notification
-  const handleSendWhatsAppNotification = () => {
+  // Kirim notifikasi WhatsApp (otomatis via Fonnte jika sudah terkonfigurasi, atau fallback tautan manual)
+  const handleSendWhatsAppNotification = async () => {
     if (!checkedInVisit || !selectedCustomer) return;
-    const phoneNum = selectedCustomer.phone.replace(/[^0-9]/g, '');
-    const cleanPhone = phoneNum.startsWith('0') ? '62' + phoneNum.slice(1) : phoneNum;
-    
+
     const text = `Halo Kak ${selectedCustomer.name}! 🐾\n\nCheck-in anabul *${checkedInVisit.petName}* di PetCare Clinic telah BERHASIL.\n\n` +
       `🎫 *Nomor Antrean:* A-${String(checkedInVisit.queueNo).padStart(2, '0')}\n` +
       `📋 *No. Registrasi:* ${checkedInVisit.visitNo}\n` +
@@ -461,9 +460,13 @@ export const SmartPatientCheckInModal: React.FC<SmartPatientCheckInModalProps> =
       `⏳ *Status:* Menunggu Panggilan Dokter\n\n` +
       `Mohon menunggu di ruang tunggu. Anda dapat memantau antrean live pada layar monitor klinik kami. Terima kasih! ✨`;
 
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
-    window.open(waUrl, '_blank');
-    addToast('Membuka WhatsApp Gateway untuk notifikasi klien...', 'info');
+    const outcome = await sendWhatsAppNotification(selectedCustomer.phone, text);
+    addToast(
+      outcome.auto
+        ? `Notifikasi WA terkirim otomatis ke ${selectedCustomer.name}.`
+        : 'Membuka WhatsApp Gateway untuk notifikasi klien...',
+      outcome.auto ? 'success' : 'info'
+    );
   };
 
   // Direct print ticket slip

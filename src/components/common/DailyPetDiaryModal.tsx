@@ -18,6 +18,7 @@ import {
   Printer
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
+import { sendWhatsAppNotification } from '../../utils/sendWhatsApp';
 import { useToast } from '../../context/ToastContext';
 import { DailyPetJournal, Pet, Customer } from '../../types';
 
@@ -65,8 +66,7 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
     { label: 'Grooming Spa Bersih', url: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?w=600&auto=format&fit=crop&q=80' }
   ];
 
-  const handleSendWhatsApp = () => {
-    const cleanPhone = customPhone.replace(/^0/, '62').replace(/\D/g, '');
+  const handleSendWhatsApp = async () => {
     const dateStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
     const message =
@@ -86,8 +86,7 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `💖 _Anabul Anda kami rawat dengan penuh kasih sayang seperti keluarga sendiri!_`;
 
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+    const outcome = await sendWhatsAppNotification(customPhone, message);
 
     if (addAuditLog) {
       addAuditLog({
@@ -100,7 +99,12 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
       });
     }
 
-    addToast(`Membuka WhatsApp untuk mengirimkan Jurnal Harian ${currentPet?.name}...`, 'info');
+    addToast(
+      outcome.auto
+        ? `Jurnal Harian ${currentPet?.name} terkirim otomatis ke WhatsApp pemilik.`
+        : `Membuka WhatsApp untuk mengirimkan Jurnal Harian ${currentPet?.name}...`,
+      outcome.auto ? 'success' : 'info'
+    );
   };
 
   return (

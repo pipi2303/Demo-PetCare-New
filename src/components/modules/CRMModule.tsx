@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { sendWhatsAppNotification } from '../../utils/sendWhatsApp';
 import { Reminder, Customer } from '../../types';
 import {
   MessageSquare,
@@ -69,11 +70,12 @@ export const CRMModule: React.FC = () => {
   });
   const [newCrmNoteInput, setNewCrmNoteInput] = useState('');
 
-  const handleSendWA = (phone: string, text: string) => {
-    const formattedPhone = phone.replace(/^0/, '62').replace(/\D/g, '');
-    const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
-    addToast(`Membuka WhatsApp Web ke ${phone}...`, 'info');
+  const handleSendWA = async (phone: string, text: string) => {
+    const outcome = await sendWhatsAppNotification(phone, text);
+    addToast(
+      outcome.auto ? `Pesan WhatsApp terkirim otomatis ke ${phone}.` : `Membuka WhatsApp Web ke ${phone}...`,
+      outcome.auto ? 'success' : 'info'
+    );
   };
 
   const handleCreateReminder = () => {
