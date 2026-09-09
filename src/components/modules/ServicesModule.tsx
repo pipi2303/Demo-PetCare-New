@@ -188,13 +188,27 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const [showAddGroomingModal, setShowAddGroomingModal] = useState(false);
   const [groomingPetId, setGroomingPetId] = useState(pets[0]?.id || '');
   const [groomingPackage, setGroomingPackage] = useState<'Basic' | 'Regular' | 'Premium' | 'Medicinal'>('Regular');
-  const [groomerName, setGroomerName] = useState('Agus Pratama');
+  const [groomerId, setGroomerId] = useState('');
   const [coatNotes, setCoatNotes] = useState('Bulu agak menggumpal di area telinga, bebas kutu');
+
+  // Groomer penanggung jawab juga diambil dari staf aktif di Master Data (role Groomer),
+  // konsisten dengan pola booking dokter — bukan free-text yang bisa diisi sembarangan.
+  const eligibleGroomers = employees.filter((e) => e.role === 'Groomer' && e.status === 'Aktif');
+  const selectedGroomer = employees.find((e) => e.id === groomerId) || eligibleGroomers[0];
 
   const handleCreateGroomingSession = (e: React.FormEvent) => {
     e.preventDefault();
     const pet = pets.find((p) => p.id === groomingPetId);
-    if (!pet) return;
+    if (!pet) {
+      addToast('Pilih hewan peliharaan terlebih dahulu', 'error');
+      return;
+    }
+
+    const groomer = employees.find((e) => e.id === groomerId) || eligibleGroomers[0];
+    if (!groomer) {
+      addToast('Belum ada groomer aktif di Master Data. Tambahkan dulu di menu SDM / Master Data.', 'error');
+      return;
+    }
 
     const cust = customers.find((c) => c.id === pet.customerId);
 
@@ -204,7 +218,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       customerName: cust?.name || 'Pelanggan',
       packageType: groomingPackage,
       petSize: 'Medium',
-      groomerName,
+      groomerName: groomer.name,
       stage: 'Antri',
       date: new Date().toISOString().split('T')[0],
       timeSlot: '11:00',
@@ -314,19 +328,34 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const [showAddTeleModal, setShowAddTeleModal] = useState(false);
   const [telePetId, setTelePetId] = useState(pets[0]?.id || '');
   const [teleComplaints, setTeleComplaints] = useState('Muntah kuning 2x tadi pagi dan batuk ringan');
+  const [teleDoctorId, setTeleDoctorId] = useState('');
+
+  // Dokter telehealth juga diambil dari staf aktif di Master Data (role Dokter Hewan),
+  // konsisten dengan pola booking dokter di atas — bukan nama hardcoded.
+  const eligibleTeleDoctors = employees.filter((e) => e.role === 'Dokter Hewan' && e.status === 'Aktif');
+  const selectedTeleDoctor = employees.find((e) => e.id === teleDoctorId) || eligibleTeleDoctors[0];
 
   const handleCreateTeleSession = (e: React.FormEvent) => {
     e.preventDefault();
     const pet = pets.find((p) => p.id === telePetId);
-    if (!pet) return;
+    if (!pet) {
+      addToast('Pilih hewan peliharaan terlebih dahulu', 'error');
+      return;
+    }
     const cust = customers.find((c) => c.id === pet.customerId);
+
+    const doctor = employees.find((e) => e.id === teleDoctorId) || eligibleTeleDoctors[0];
+    if (!doctor) {
+      addToast('Belum ada dokter aktif di Master Data untuk sesi Telehealth. Tambahkan dulu di menu SDM / Master Data.', 'error');
+      return;
+    }
 
     addTelehealthSession({
       customerId: cust?.id || '',
       customerName: cust?.name || 'Pelanggan',
       petId: pet.id,
       petName: pet.name,
-      doctorName: 'drh. Budi Santoso, M.Si',
+      doctorName: doctor.name,
       date: new Date().toISOString().split('T')[0],
       timeSlot: '14:00',
       durationMinutes: 30,
@@ -1327,6 +1356,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                 <select
                   value={bookingCustId}
                   onChange={(e) => setBookingCustId(e.target.value)}
+                  required
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE] font-medium"
                 >
                   {customers.map((c) => (
@@ -1342,6 +1372,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                 <select
                   value={bookingPetId}
                   onChange={(e) => setBookingPetId(e.target.value)}
+                  required
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE] font-medium"
                 >
                   {custPets.length > 0 ? (
@@ -1454,6 +1485,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                 <select
                   value={groomingPetId}
                   onChange={(e) => setGroomingPetId(e.target.value)}
+                  required
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                 >
                   {pets.map((p) => (
@@ -1469,6 +1501,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                 <select
                   value={groomingPackage}
                   onChange={(e) => setGroomingPackage(e.target.value as any)}
+                  required
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                 >
                   <option value="Basic">Mandi Sehat Basic (Rp 75.000)</option>
@@ -1480,12 +1513,21 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
 
               <div>
                 <label className="font-bold text-[#1B2A45] block mb-1">Groomer Penanggung Jawab</label>
-                <input
-                  type="text"
-                  value={groomerName}
-                  onChange={(e) => setGroomerName(e.target.value)}
+                <select
+                  value={selectedGroomer?.id || ''}
+                  onChange={(e) => setGroomerId(e.target.value)}
+                  required
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
-                />
+                >
+                  <option value="" disabled>
+                    {eligibleGroomers.length === 0 ? 'Belum ada groomer aktif di Master Data' : 'Pilih groomer...'}
+                  </option>
+                  {eligibleGroomers.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -1534,6 +1576,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                 <select
                   value={hotelPetId}
                   onChange={(e) => setHotelPetId(e.target.value)}
+                  required
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                 >
                   {pets.map((p) => (
@@ -1707,6 +1750,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                 <select
                   value={telePetId}
                   onChange={(e) => setTelePetId(e.target.value)}
+                  required
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                 >
                   {pets.map((p) => (
@@ -1718,11 +1762,31 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
               </div>
 
               <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Dokter Bertugas</label>
+                <select
+                  value={selectedTeleDoctor?.id || ''}
+                  onChange={(e) => setTeleDoctorId(e.target.value)}
+                  required
+                  className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                >
+                  <option value="" disabled>
+                    {eligibleTeleDoctors.length === 0 ? 'Belum ada dokter aktif di Master Data' : 'Pilih dokter...'}
+                  </option>
+                  {eligibleTeleDoctors.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="font-bold text-[#1B2A45] block mb-1">Keluhan Pasien</label>
                 <textarea
                   rows={2}
                   value={teleComplaints}
                   onChange={(e) => setTeleComplaints(e.target.value)}
+                  required
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                 />
               </div>
@@ -1765,6 +1829,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                     type="text"
                     value={callerName}
                     onChange={(e) => setCallerName(e.target.value)}
+                    required
                     className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                   />
                 </div>
@@ -1774,6 +1839,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                     type="text"
                     value={callerPhone}
                     onChange={(e) => setCallerPhone(e.target.value)}
+                    required
                     className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                   />
                 </div>
@@ -1798,6 +1864,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                   type="text"
                   value={pickupAddress}
                   onChange={(e) => setPickupAddress(e.target.value)}
+                  required
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                 />
               </div>
@@ -1808,6 +1875,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                   rows={2}
                   value={emergencyReason}
                   onChange={(e) => setEmergencyReason(e.target.value)}
+                  required
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                 />
               </div>

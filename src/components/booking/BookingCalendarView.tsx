@@ -1049,17 +1049,23 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                                               </button>
                                             )}
 
-                                            <a
-                                              href={`https://wa.me/6281234567890?text=${encodeURIComponent(
-                                                `Halo Kak ${booking.customerName}, mengingatkan jadwal periksa anabul ${booking.petName} pada ${booking.date} jam ${booking.timeSlot} bersama ${booking.doctorName} di Klinik PetCare. Terima kasih!`
-                                              )}`}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                              className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded text-[10px] transition-colors"
-                                              title="Kirim Reminder WhatsApp"
-                                            >
-                                              <Smartphone className="w-3 h-3" />
-                                            </a>
+                                            {(() => {
+                                              const bookingCustomerPhone = customers.find((c) => c.id === booking.customerId)?.phone;
+                                              if (!bookingCustomerPhone) return null;
+                                              return (
+                                                <a
+                                                  href={`https://wa.me/${bookingCustomerPhone.replace(/^0/, '62').replace(/\D/g, '')}?text=${encodeURIComponent(
+                                                    `Halo Kak ${booking.customerName}, mengingatkan jadwal periksa anabul ${booking.petName} pada ${booking.date} jam ${booking.timeSlot} bersama ${booking.doctorName} di Klinik PetCare. Terima kasih!`
+                                                  )}`}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded text-[10px] transition-colors"
+                                                  title="Kirim Reminder WhatsApp"
+                                                >
+                                                  <Smartphone className="w-3 h-3" />
+                                                </a>
+                                              );
+                                            })()}
                                           </div>
                                         </div>
                                       </div>

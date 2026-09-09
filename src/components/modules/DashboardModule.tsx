@@ -42,7 +42,6 @@ import {
   Package,
   Receipt,
   Boxes,
-  HeartPulse,
   QrCode
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -310,7 +309,6 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
     vacSchedules,
     carePlans,
     stockItems,
-    inpatients,
     purchaseOrders
   } = useData();
 
@@ -324,7 +322,6 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
   const activeBoarding = (hotelReservations || []).filter((h) => h?.status === 'Aktif').length;
   const activeGrooming = (groomingSessions || []).filter((g) => g?.stage !== 'Selesai').length;
   const activeTelehealth = (telehealthSessions || []).filter((t) => t?.status === 'Berlangsung' || t?.status === 'Menunggu').length;
-  const activeInpatients = (inpatients || []).filter((i) => i?.status === 'Dirawat').length;
 
   const todayStr = new Date().toISOString().substring(0, 10);
   const revenueToday = (invoices || [])
@@ -337,10 +334,15 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
 
   // Retail / Petshop specific metrics
   const totalStockUnits = (stockItems || []).reduce((sum, s) => sum + (s?.stock || 0), 0);
-  const totalStockAssetValue = (stockItems || []).reduce((sum, s) => sum + ((s?.stock || 0) * (s?.unitPrice || 65000)), 0);
+  const totalStockAssetValue = (stockItems || []).reduce((sum, s) => sum + ((s?.stock || 0) * (s?.purchasePrice || 0)), 0);
   const lowStockRetailItems = (stockItems || []).filter((s) => (s?.stock || 0) <= (s?.minStock || 10));
-  const posSalesTodayCount = Math.max(3, (invoices || []).filter((i) => i?.date === todayStr).length);
-  const avgBasketSize = posSalesTodayCount > 0 ? Math.round((revenueToday || 2450000) / posSalesTodayCount) : 125000;
+  const posSalesTodayCount = (invoices || []).filter((i) => i?.date === todayStr).length;
+  const avgBasketSize = posSalesTodayCount > 0 ? Math.round(revenueToday / posSalesTodayCount) : 0;
+  const recentPosInvoices = (invoices || [])
+    .filter((i) => i?.date === todayStr)
+    .slice()
+    .reverse()
+    .slice(0, 5);
   const pendingOrdersCount = (purchaseOrders || []).filter((p) => p?.status === 'Menunggu Kirim' || p?.status === 'Draft').length;
 
   // Custom Chart Components for Theme Styling
@@ -642,21 +644,6 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
               </p>
             </div>
 
-            {/* 4. Rawat Inap & ICU */}
-            <div
-              onClick={() => setActiveModule('inpatient')}
-              className="bg-white p-4 rounded-xl border border-[#E1D6BE] shadow-xs hover:shadow-md hover:-translate-y-1 cursor-pointer transition-all duration-200"
-            >
-              <div className="flex items-center justify-between text-[#1B2A45]/70 mb-2">
-                <span className="text-xs font-bold text-[#1B2A45]">Rawat Inap & ICU</span>
-                <HeartPulse className="w-4 h-4 text-rose-600" />
-              </div>
-              <p className="text-2xl font-bold text-[#1B2A45]">{activeInpatients || 4}</p>
-              <p className="text-[10px] text-rose-800 font-bold mt-1 bg-rose-50 inline-block px-1.5 py-0.5 rounded border border-rose-200">
-                Kandang ICU & Infus
-              </p>
-            </div>
-
             {/* 5. Resep & Apotek Terlayani */}
             <div
               onClick={() => setActiveModule('pharmacy')}
@@ -674,14 +661,14 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
 
             {/* 6. Vaksinasi Due / Terlambat */}
             <div
-              onClick={() => setActiveModule('vaccine')}
+              onClick={() => setActiveModule('vaccination')}
               className="bg-white p-4 rounded-xl border border-[#E1D6BE] shadow-xs hover:shadow-md hover:-translate-y-1 cursor-pointer transition-all duration-200"
             >
               <div className="flex items-center justify-between text-[#1B2A45]/70 mb-2">
                 <span className="text-xs font-bold text-[#1B2A45]">Vaksin Due / Telat</span>
                 <Syringe className="w-4 h-4 text-amber-600" />
               </div>
-              <p className="text-2xl font-bold text-amber-600">{dueVaccines.length || 3}</p>
+              <p className="text-2xl font-bold text-amber-600">{dueVaccines.length}</p>
               <p className="text-[10px] text-amber-800 font-bold mt-1 bg-amber-50 inline-block px-1.5 py-0.5 rounded border border-amber-200">
                 Perlu Follow-up CRM
               </p>
@@ -1521,7 +1508,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
                     {currentServingVisit ? `A-${String(currentServingVisit.queueNo).padStart(2, '0')} (${currentServingVisit.petName})` : 'Tidak ada pasien aktif'}
                   </p>
                   <span className="text-[11px] text-[#B8905A] font-bold block mt-0.5">
-                    {currentServingVisit ? `${currentServingVisit.vetName || 'drh. Ananda Putri'} • Poli VET-1` : 'Standby'}
+                    {currentServingVisit ? `${currentServingVisit.vetName || 'Dokter belum ditugaskan'} • Poli VET-1` : 'Standby'}
                   </span>
                 </div>
 
@@ -1589,7 +1576,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div className="p-3 bg-white/5 rounded-xl border border-white/10">
                           <span className="text-[10px] text-[#E1D6BE] uppercase block font-semibold">Dokter Pemeriksa</span>
-                          <span className="font-bold text-white">{currentServingVisit.vetName || 'drh. Ananda Putri'}</span>
+                          <span className="font-bold text-white">{currentServingVisit.vetName || 'Belum ditugaskan'}</span>
                         </div>
                         <div className="p-3 bg-white/5 rounded-xl border border-white/10">
                           <span className="text-[10px] text-[#E1D6BE] uppercase block font-semibold">Keluhan Klinis</span>
@@ -1718,45 +1705,53 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-[#E1D6BE] text-[#1B2A45] uppercase text-[10px] font-bold">
-                      <th className="py-2">No. Struk</th>
-                      <th className="py-2">Pelanggan / Member</th>
-                      <th className="py-2">Item Belanja Utama</th>
-                      <th className="py-2">Kasir Bertugas</th>
-                      <th className="py-2 text-right">Total Tagihan</th>
-                      <th className="py-2 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E1D6BE]/40">
-                    {[
-                      { id: 'INV-PS-001', receipt: 'STR-2408-081', customer: 'Budi Santoso (Member Gold)', items: 'Royal Canin Kitten 2kg, Whiskas Pouch (x4)', cashier: 'Dewi Lestari', total: 385000, status: 'Lunas', payment: 'QRIS BCA' },
-                      { id: 'INV-PS-002', receipt: 'STR-2408-082', customer: 'Siti Rahma (Non-Member)', items: 'Pasir Kucing Bentonite 10L, Treats Churu', cashier: 'Dewi Lestari', total: 175000, status: 'Lunas', payment: 'Tunai' },
-                      { id: 'INV-PS-003', receipt: 'STR-2408-083', customer: 'drh. Hendra Wijaya', items: 'Pro Plan Medium Adult 3kg, Shampo Flea', cashier: 'Rian Pratama', total: 540000, status: 'Lunas', payment: 'Debit Mandiri' },
-                      { id: 'INV-PS-004', receipt: 'STR-2408-084', customer: 'Maya Anggraini (Member VIP)', items: 'Bravecto Chewable Dog 10-20kg, Snack Stick', cashier: 'Dewi Lestari', total: 420000, status: 'Lunas', payment: 'QRIS BCA' },
-                      { id: 'INV-PS-005', receipt: 'STR-2408-085', customer: 'Agus Purnomo', items: 'Whiskas Dry Cat Food Tuna 1.2kg (x2)', cashier: 'Rian Pratama', total: 160000, status: 'Lunas', payment: 'Tunai' },
-                    ].map((tx) => (
-                      <tr key={tx.id} className="hover:bg-[#F6F1E6]">
-                        <td className="py-2.5 font-mono font-bold text-[#1B2A45]">{tx.receipt}</td>
-                        <td className="py-2.5">
-                          <p className="font-semibold text-[#1B2A45]">{tx.customer}</p>
-                          <p className="text-[10px] text-[#1B2A45]/60">Metode: {tx.payment}</p>
-                        </td>
-                        <td className="py-2.5 text-[#1B2A45]/90 font-medium max-w-xs truncate">{tx.items}</td>
-                        <td className="py-2.5 text-[#1B2A45] font-semibold">{tx.cashier}</td>
-                        <td className="py-2.5 text-right font-mono font-bold text-[#1B2A45]">
-                          Rp {tx.total.toLocaleString('id-ID')}
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            {tx.status}
-                          </span>
-                        </td>
+                {recentPosInvoices.length === 0 ? (
+                  <p className="text-center text-[#1B2A45]/60 py-6">Belum ada transaksi kasir hari ini.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-[#E1D6BE] text-[#1B2A45] uppercase text-[10px] font-bold">
+                        <th className="py-2">No. Struk</th>
+                        <th className="py-2">Pelanggan</th>
+                        <th className="py-2">Item Belanja Utama</th>
+                        <th className="py-2">Kasir Bertugas</th>
+                        <th className="py-2 text-right">Total Tagihan</th>
+                        <th className="py-2 text-right">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-[#E1D6BE]/40">
+                      {recentPosInvoices.map((tx) => (
+                        <tr key={tx.id} className="hover:bg-[#F6F1E6]">
+                          <td className="py-2.5 font-mono font-bold text-[#1B2A45]">{tx.invoiceNo}</td>
+                          <td className="py-2.5">
+                            <p className="font-semibold text-[#1B2A45]">{tx.customerName}</p>
+                            <p className="text-[10px] text-[#1B2A45]/60">Metode: {tx.paymentMethod}</p>
+                          </td>
+                          <td className="py-2.5 text-[#1B2A45]/90 font-medium max-w-xs truncate">
+                            {tx.items.map((it) => it.name).join(', ') || '-'}
+                          </td>
+                          <td className="py-2.5 text-[#1B2A45] font-semibold">{tx.cashierName}</td>
+                          <td className="py-2.5 text-right font-mono font-bold text-[#1B2A45]">
+                            Rp {tx.totalAmount.toLocaleString('id-ID')}
+                          </td>
+                          <td className="py-2.5 text-right">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                                tx.status === 'Lunas'
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                  : tx.status === 'Batal'
+                                  ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                  : 'bg-amber-100 text-amber-800 border-amber-300'
+                              }`}
+                            >
+                              {tx.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
 
