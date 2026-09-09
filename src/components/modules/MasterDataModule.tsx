@@ -89,7 +89,8 @@ export const MasterDataModule: React.FC = () => {
     addWarehouse,
     deleteWarehouse,
     clinicVisits = [],
-    soapNotes = []
+    soapNotes = [],
+    branches = []
   } = useData();
   const { addToast } = useToast();
 
@@ -177,6 +178,8 @@ export const MasterDataModule: React.FC = () => {
     name: '',
     role: 'Dokter Hewan',
     department: 'Medis',
+    branchId: '',
+    shift: 'Pagi (08:00 - 16:00)',
     phone: '',
     email: '',
     hireDate: new Date().toISOString().substring(0, 10),
@@ -457,12 +460,13 @@ export const MasterDataModule: React.FC = () => {
       addToast('Nama dan Telepon Staff Wajib Diisi!', 'error');
       return;
     }
+    const staffPayload = { ...staffForm, branchId: staffForm.branchId || undefined, shift: staffForm.shift || undefined };
     if (editingStaff) {
-      updateEmployee(editingStaff.id, staffForm);
+      updateEmployee(editingStaff.id, staffPayload);
       addToast(`Data staff ${staffForm.name} berhasil diperbarui!`, 'success');
       setEditingStaff(null);
     } else {
-      addEmployee(staffForm);
+      addEmployee(staffPayload);
       addToast(`Staff baru ${staffForm.name} berhasil ditambahkan!`, 'success');
     }
     setShowAddStaffModal(false);
@@ -474,6 +478,8 @@ export const MasterDataModule: React.FC = () => {
       name: '',
       role: 'Dokter Hewan',
       department: 'Medis',
+      branchId: branches[0]?.id || '',
+      shift: 'Pagi (08:00 - 16:00)',
       phone: '',
       email: '',
       hireDate: new Date().toISOString().substring(0, 10),
@@ -490,6 +496,8 @@ export const MasterDataModule: React.FC = () => {
       name: emp.name,
       role: emp.role,
       department: emp.department,
+      branchId: emp.branchId || '',
+      shift: emp.shift || 'Pagi (08:00 - 16:00)',
       phone: emp.phone,
       email: emp.email || '',
       hireDate: emp.hireDate || new Date().toISOString().substring(0, 10),
@@ -1580,7 +1588,7 @@ export const MasterDataModule: React.FC = () => {
               <tbody className="divide-y divide-[#E1D6BE]/40">
                 {filteredStaff.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-xs text-[#1B2A45]/60 font-medium">
+                    <td colSpan={8} className="py-8 text-center text-xs text-[#1B2A45]/60 font-medium">
                       Tidak ada data staff ditemukan.
                     </td>
                   </tr>
@@ -2558,7 +2566,9 @@ export const MasterDataModule: React.FC = () => {
                     <option value="Dokter Hewan">Dokter Hewan</option>
                     <option value="Paramedik">Paramedik</option>
                     <option value="Groomer">Groomer</option>
+                    <option value="Pet Hotel Staff">Pet Hotel Staff</option>
                     <option value="Kasir">Kasir</option>
+                    <option value="Finance">Finance</option>
                     <option value="Admin">Admin</option>
                   </select>
                 </div>
@@ -2571,6 +2581,34 @@ export const MasterDataModule: React.FC = () => {
                     onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })}
                     className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45]"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold mb-1">Cabang Penempatan</label>
+                  <select
+                    value={staffForm.branchId}
+                    onChange={(e) => setStaffForm({ ...staffForm, branchId: e.target.value })}
+                    className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45]"
+                  >
+                    <option value="">Belum ditentukan</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold mb-1">Shift Kerja</label>
+                  <select
+                    value={staffForm.shift}
+                    onChange={(e) => setStaffForm({ ...staffForm, shift: e.target.value })}
+                    className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45]"
+                  >
+                    <option value="Pagi (08:00 - 16:00)">Pagi (08:00 - 16:00)</option>
+                    <option value="Siang (13:00 - 21:00)">Siang (13:00 - 21:00)</option>
+                    <option value="Malam / Full Care">Malam / Full Care</option>
+                  </select>
                 </div>
               </div>
 

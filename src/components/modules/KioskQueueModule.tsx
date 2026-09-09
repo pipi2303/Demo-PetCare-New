@@ -21,7 +21,8 @@ import {
 } from 'lucide-react';
 
 export const KioskQueueModule: React.FC = () => {
-  const { clinicVisits, addClinicVisit, pets, customers } = useData();
+  const { clinicVisits, addClinicVisit, pets, customers, employees = [] } = useData();
+  const onDutyDoctor = employees.find((e) => e.role === 'Dokter Hewan' && e.status === 'Aktif');
   const { addToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'kiosk' | 'notify'>('kiosk');
@@ -62,8 +63,8 @@ export const KioskQueueModule: React.FC = () => {
       petName: selectedPet.name,
       petSpecies: selectedPet.species,
       petBreed: selectedPet.breed,
-      doctorId: 'd1',
-      doctorName: 'drh. Budi Santoso, M.Si',
+      doctorId: onDutyDoctor?.id || 'unassigned',
+      doctorName: onDutyDoctor?.name || 'Menunggu Penugasan Dokter',
       complaint,
       status: 'Menunggu'
     });
@@ -80,7 +81,7 @@ export const KioskQueueModule: React.FC = () => {
       addToast(`Nomor WhatsApp ${visit.customerName} tidak ditemukan di data pelanggan.`, 'error');
       return;
     }
-    const text = `Halo Kak ${visit.customerName}! 🐾 Antrean anabul ${visit.petName} (Nomor A-${visit.queueNo.toString().padStart(3, '0')}) tersisa 2 nomor lagi. Mohon bersiap menuju ke ruang periksa drh. Budi Santoso. Terima kasih!`;
+    const text = `Halo Kak ${visit.customerName}! 🐾 Antrean anabul ${visit.petName} (Nomor A-${visit.queueNo.toString().padStart(3, '0')}) tersisa 2 nomor lagi. Mohon bersiap menuju ke ruang periksa ${visit.doctorName || 'dokter jaga'}. Terima kasih!`;
     const outcome = await sendWhatsAppNotification(customerPhone, text);
     addToast(
       outcome.auto

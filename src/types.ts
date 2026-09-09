@@ -538,6 +538,8 @@ export interface Employee {
   name: string;
   role: 'Dokter Hewan' | 'Paramedik' | 'Groomer' | 'Pet Hotel Staff' | 'Kasir' | 'Finance' | 'Admin';
   department: string;
+  branchId?: string; // Cabang penempatan - referensi ke Branch di Manajemen Cabang
+  shift?: string; // Shift kerja, dikelola dari modul SDM & Shift Kerja
   phone: string;
   email: string;
   hireDate: string;

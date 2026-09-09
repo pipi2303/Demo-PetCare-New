@@ -40,6 +40,7 @@ import {
 import * as Types from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import { DailyPetDiaryModal } from '../common/DailyPetDiaryModal';
+import { KioskQueueModule } from './KioskQueueModule';
 import { BookingCalendarView } from '../booking/BookingCalendarView';
 import {
   Calendar as CalendarIcon,
@@ -58,6 +59,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const {
     customers = [],
     pets = [],
+    employees = [],
     doctorBookings = [],
     addDoctorBooking,
     checkInDoctorBooking,
@@ -105,7 +107,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   // ---------------------------------------------------------------------------
   // 1. BOOKING STATE & HANDLERS
   // ---------------------------------------------------------------------------
-  const [bookingSubView, setBookingSubView] = useState<'calendar' | 'table'>('calendar');
+  const [bookingSubView, setBookingSubView] = useState<'calendar' | 'table' | 'kiosk'>('calendar');
   const [showAddBookingModal, setShowAddBookingModal] = useState(false);
   const [bookingType, setBookingType] = useState<'Dokter' | 'Grooming' | 'Pet Hotel'>('Dokter');
   const [bookingCustId, setBookingCustId] = useState(customers[0]?.id || '');
@@ -115,9 +117,19 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const [bookingNotes, setBookingNotes] = useState('Pemeriksaan kesehatan rutin');
   const [bookingFilterStatus, setBookingFilterStatus] = useState<string>('Semua');
   const [selectedBookingPatientId, setSelectedBookingPatientId] = useState<string>(doctorBookings[0]?.id || '');
+  const [bookingProviderId, setBookingProviderId] = useState('');
 
   const selectedCust = customers.find((c) => c.id === bookingCustId);
   const custPets = pets.filter((p) => p.customerId === bookingCustId);
+
+  // Dokter/Groomer/Petugas Pet Hotel yang berhak ditugaskan diambil dari Master Data (employees),
+  // bukan nama yang di-hardcode, supaya konsisten dengan roster di SDM & Shift Kerja.
+  const providerRoleForBookingType = (t: 'Dokter' | 'Grooming' | 'Pet Hotel'): Types.Employee['role'] =>
+    t === 'Grooming' ? 'Groomer' : t === 'Pet Hotel' ? 'Pet Hotel Staff' : 'Dokter Hewan';
+  const eligibleProviders = employees.filter(
+    (e) => e.role === providerRoleForBookingType(bookingType) && e.status === 'Aktif'
+  );
+  const selectedProvider = employees.find((e) => e.id === bookingProviderId) || eligibleProviders[0];
 
   const handleCreateBooking = (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,6 +141,12 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       return;
     }
 
+    const provider = employees.find((e) => e.id === bookingProviderId) || eligibleProviders[0];
+    if (!provider) {
+      addToast(`Belum ada staf aktif dengan peran "${providerRoleForBookingType(bookingType)}" di Master Data. Tambahkan dulu di menu SDM / Master Data.`, 'error');
+      return;
+    }
+
     addDoctorBooking({
       date: bookingDate,
       timeSlot: bookingTime,
@@ -137,13 +155,13 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       petId: pet.id,
       petName: pet.name,
       petSpecies: pet.species,
-      doctorId: 'd1',
-      doctorName: bookingType === 'Grooming' ? 'Agus (Groomer Senior)' : 'drh. Budi Santoso',
+      doctorId: provider.id,
+      doctorName: provider.name,
       complaint: bookingNotes,
       status: 'Terkonfirmasi'
     });
 
-    addToast(`Janji temu ${bookingType} untuk ${pet.name} (${cust.name}) berhasil dijadwalkan!`, 'success');
+    addToast(`Janji temu ${bookingType} untuk ${pet.name} (${cust.name}) bersama ${provider.name} berhasil dijadwalkan!`, 'success');
     setShowAddBookingModal(false);
   };
 
@@ -157,8 +175,8 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       petName: booking.petName,
       petSpecies: booking.petSpecies,
       petBreed: pet?.breed || 'Umum',
-      doctorId: booking.doctorId || 'd1',
-      doctorName: booking.doctorName || 'drh. Budi Santoso',
+      doctorId: booking.doctorId || 'unassigned',
+      doctorName: booking.doctorName || 'Belum Ditugaskan',
       complaint: booking.complaint || 'Janji Temu Terjadwal'
     });
     addToast(`Pasien ${booking.petName} telah di-checkin dan masuk ke Antrean Klinik Live!`, 'success');
@@ -449,15 +467,29 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                 <TableIcon className="w-3.5 h-3.5" />
                 <span>Tabel Data List</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setBookingSubView('kiosk')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  bookingSubView === 'kiosk'
+                    ? 'bg-[#1B2A45] text-white shadow-2xs'
+                    : 'text-[#6B6656] hover:text-[#1B2A45]'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Kiosk Check-In & WA</span>
+              </button>
             </div>
           </div>
 
-          {/* If Visual Calendar Sub-view */}
+          {/* Sub-view: Calendar / Table / Self Check-In Kiosk */}
           {bookingSubView === 'calendar' ? (
             <BookingCalendarView
               onCheckInToClinicQueue={handleCheckInBookingToQueue}
               setActiveModule={setActiveModule}
             />
+          ) : bookingSubView === 'kiosk' ? (
+            <KioskQueueModule />
           ) : (
             <div className="space-y-6">
               {/* Quick Stats Bar */}
@@ -602,7 +634,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                               {b.complaint}
                             </span>
                           </td>
-                          <td className="p-3 font-medium">{b.doctorName || 'drh. Budi Santoso'}</td>
+                          <td className="p-3 font-medium">{b.doctorName || 'Belum Ditugaskan'}</td>
                           <td className="p-3">
                             <span
                               className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
@@ -628,16 +660,22 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                                   <CheckCircle2 className="w-3 h-3 text-[#D9B98A]" /> Check-In Antrean
                                 </button>
                               )}
-                              <a
-                                href={`https://wa.me/6281234567890?text=${encodeURIComponent(
-                                  `Halo Kak ${b.customerName}, mengingatkan jadwal periksa ${b.petName} pada ${b.date} pukul ${b.timeSlot || 'segera'} di Klinik PetCare ERP. Terima kasih!`
-                                )}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] rounded-lg transition-all flex items-center gap-1"
-                              >
-                                <Smartphone className="w-3 h-3" /> WA Reminder
-                              </a>
+                              {(() => {
+                                const bookingCustomerPhone = customers.find((c) => c.id === b.customerId)?.phone;
+                                if (!bookingCustomerPhone) return null;
+                                return (
+                                  <a
+                                    href={`https://wa.me/${bookingCustomerPhone.replace(/^0/, '62').replace(/\D/g, '')}?text=${encodeURIComponent(
+                                      `Halo Kak ${b.customerName}, mengingatkan jadwal periksa ${b.petName} pada ${b.date} pukul ${b.timeSlot || 'segera'} di Klinik PetCare ERP. Terima kasih!`
+                                    )}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] rounded-lg transition-all flex items-center gap-1"
+                                  >
+                                    <Smartphone className="w-3 h-3" /> WA Reminder
+                                  </a>
+                                );
+                              })()}
                             </div>
                           </td>
                         </tr>
@@ -1316,6 +1354,29 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                     <option value="">Tidak ada hewan (Pilih hewan lain)</option>
                   )}
                 </select>
+              </div>
+
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">
+                  {bookingType === 'Grooming' ? 'Pilih Groomer' : bookingType === 'Pet Hotel' ? 'Pilih Petugas Pet Hotel' : 'Pilih Dokter Hewan'}
+                </label>
+                {eligibleProviders.length > 0 ? (
+                  <select
+                    value={selectedProvider?.id || ''}
+                    onChange={(e) => setBookingProviderId(e.target.value)}
+                    className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE] font-medium"
+                  >
+                    {eligibleProviders.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.sipNumber ? ` (SIP: ${p.sipNumber})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2">
+                    Belum ada staf aktif untuk peran ini di Master Data / SDM & Shift Kerja.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
