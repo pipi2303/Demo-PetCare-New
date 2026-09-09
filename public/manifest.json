@@ -1,0 +1,17 @@
+{
+  "name": "PetCare ERP - Klinik & Pet Care",
+  "short_name": "PetCare ERP",
+  "description": "Aplikasi manajemen klinik hewan, grooming, pet hotel, pet shop, dan farmasi.",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1B2A45",
+  "theme_color": "#1B2A45",
+  "lang": "id",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
