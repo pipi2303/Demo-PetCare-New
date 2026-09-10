@@ -26,7 +26,7 @@ interface RoomCamera {
   category: 'hotel' | 'icu';
 }
 
-const ROOMS_DATA: RoomCamera[] = [
+export const ROOMS_DATA: RoomCamera[] = [
   {
     roomNo: 'R01',
     petName: 'Milo',

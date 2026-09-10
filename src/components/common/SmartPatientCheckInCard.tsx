@@ -76,7 +76,7 @@ export const SmartPatientCheckInCard: React.FC<SmartPatientCheckInCardProps> = (
 
             <button
               type="button"
-              onClick={() => setActiveModule('kiosk')}
+              onClick={() => setActiveModule('booking')}
               className="px-3 py-2 bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#101A2C]/80 font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Ticket className="w-3.5 h-3.5 text-[#D9B98A]" />
