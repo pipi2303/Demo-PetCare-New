@@ -30,6 +30,12 @@ import {
   destroySession
 } from "./server/sessionService";
 import { sendWhatsAppMessage } from "./server/waService";
+import {
+  createQrisCharge,
+  getPaymentStatus,
+  verifyWebhookSignature,
+  applyWebhookNotification
+} from "./server/paymentService";
 
 async function startServer() {
   const app = express();
@@ -369,6 +375,52 @@ async function startServer() {
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ success: false, simulated: false, message: err.message });
+    }
+  });
+
+  // ==========================================
+  // PAYMENT GATEWAY (MIDTRANS QRIS) ENDPOINTS
+  // ==========================================
+
+  // Buat charge QRIS baru untuk sebuah invoice/order. Kalau MIDTRANS_SERVER_KEY
+  // belum dikonfigurasi, balik simulated:true agar frontend fallback ke QR
+  // dekoratif lama tanpa mematahkan fitur.
+  app.post("/api/payment/qris/charge", requireSession, async (req, res) => {
+    try {
+      const { orderId, grossAmount, customerName } = req.body || {};
+      if (!orderId || !grossAmount) {
+        return res.status(400).json({ success: false, simulated: false, message: "orderId dan grossAmount wajib diisi." });
+      }
+      const result = await createQrisCharge(orderId, Number(grossAmount), customerName || "Pelanggan");
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, simulated: false, message: err.message });
+    }
+  });
+
+  // Client poll status transaksi di sini setelah QR ditampilkan.
+  app.get("/api/payment/status/:orderId", requireSession, async (req, res) => {
+    try {
+      const result = await getPaymentStatus(req.params.orderId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ status: "error", message: err.message });
+    }
+  });
+
+  // Webhook notifikasi Midtrans — dipanggil Midtrans sendiri, bukan browser staf,
+  // jadi TIDAK pakai requireSession. Keamanannya lewat verifikasi signature_key,
+  // bukan session token.
+  app.post("/api/payment/webhook", (req, res) => {
+    try {
+      const body = req.body || {};
+      if (!verifyWebhookSignature(body)) {
+        return res.status(403).json({ success: false, message: "Signature tidak valid." });
+      }
+      applyWebhookNotification(body);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
     }
   });
 

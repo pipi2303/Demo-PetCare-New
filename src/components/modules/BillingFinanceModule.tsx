@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { createQrisPayment, pollPaymentStatus, PaymentStatus } from '../../utils/payment';
 import {
   Receipt,
   QrCode,
@@ -17,7 +18,10 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
-  FileText
+  FileText,
+  Loader2,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 
 interface BillingFinanceModuleProps {
@@ -42,6 +46,15 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
   const [showQrisModal, setShowQrisModal] = useState(false);
   const [selectedInvId, setSelectedInvId] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<any>('QRIS');
+
+  // Real QRIS payment state (Midtrans). qrisPhase 'idle' means: not a QRIS
+  // payment in progress (either a different payment method is selected, or
+  // the modal isn't open) — in that case the old decorative QR + manual
+  // "Konfirmasi Lunas" flow is used unchanged for staff-confirmed methods.
+  const [qrisPhase, setQrisPhase] = useState<'idle' | 'loading' | 'waiting_real' | 'waiting_simulated' | 'failed'>('idle');
+  const [qrisImageUrl, setQrisImageUrl] = useState<string | null>(null);
+  const [qrisMessage, setQrisMessage] = useState<string>('');
+  const pollRef = React.useRef<{ stop: () => void } | null>(null);
 
   // Simple new invoice state
   const [custName, setCustName] = useState('Budi Santoso');
@@ -86,17 +99,89 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
     addToast(`Invoice baru ${inv.invoiceNo} senilai Rp ${itemPrice.toLocaleString('id-ID')} dibuat.`, 'success');
   };
 
+  const stopQrisPolling = () => {
+    pollRef.current?.stop();
+    pollRef.current = null;
+  };
+
   const handleOpenPayment = (invId: string) => {
     setSelectedInvId(invId);
+    setPaymentMethod('QRIS');
     setShowQrisModal(true);
   };
 
-  const handleSimulateQRISPayment = () => {
+  const handleCloseQrisModal = () => {
+    stopQrisPolling();
+    setQrisPhase('idle');
+    setQrisImageUrl(null);
+    setShowQrisModal(false);
+  };
+
+  // Metode selain QRIS tetap staff-confirmed langsung (Tunai/Debit/Kartu
+  // Kredit/Transfer Bank tidak lewat payment gateway — dicatat manual seperti
+  // sebelumnya, itu memang di luar skop integrasi Midtrans).
+  const handleConfirmManualPayment = () => {
     if (!selectedInvId) return;
     processPayment(selectedInvId, paymentMethod);
     setShowQrisModal(false);
     addToast(`Pembayaran Rp ${selectedInvoice?.totalAmount.toLocaleString('id-ID')} via ${paymentMethod} LUNAS!`, 'success');
   };
+
+  // Membuat charge QRIS nyata via Midtrans (server/paymentService.ts). Kalau
+  // gateway belum dikonfigurasi (MIDTRANS_SERVER_KEY kosong), backend balas
+  // simulated:true dan modal fallback ke QR dekoratif + konfirmasi manual
+  // seperti perilaku sebelum integrasi ini ada — tidak pernah mematahkan fitur.
+  const handleStartQrisPayment = async () => {
+    if (!selectedInvoice) return;
+    stopQrisPolling();
+    setQrisPhase('loading');
+    setQrisImageUrl(null);
+    setQrisMessage('');
+
+    const result = await createQrisPayment(selectedInvoice.invoiceNo, selectedInvoice.totalAmount, selectedInvoice.customerName);
+
+    if (result.simulated) {
+      setQrisPhase('waiting_simulated');
+      return;
+    }
+    if (!result.success || !result.qrImageUrl) {
+      setQrisPhase('failed');
+      setQrisMessage(result.message || 'Gagal membuat kode QRIS. Coba lagi.');
+      return;
+    }
+
+    setQrisImageUrl(result.qrImageUrl);
+    setQrisPhase('waiting_real');
+
+    pollRef.current = pollPaymentStatus(selectedInvoice.invoiceNo, {
+      onSettled: (status: PaymentStatus) => {
+        if (status === 'settlement') {
+          processPayment(selectedInvoice.id, 'QRIS');
+          addToast(`Pembayaran QRIS Rp ${selectedInvoice.totalAmount.toLocaleString('id-ID')} untuk ${selectedInvoice.invoiceNo} berhasil dikonfirmasi!`, 'success');
+          handleCloseQrisModal();
+        } else {
+          setQrisPhase('failed');
+          setQrisMessage(
+            status === 'expire' ? 'Kode QRIS kedaluwarsa sebelum dibayar.' : 'Pembayaran dibatalkan atau ditolak.'
+          );
+        }
+      }
+    });
+  };
+
+  React.useEffect(() => {
+    if (showQrisModal && paymentMethod === 'QRIS' && qrisPhase === 'idle') {
+      handleStartQrisPayment();
+    }
+    if (showQrisModal && paymentMethod !== 'QRIS' && qrisPhase !== 'idle') {
+      stopQrisPolling();
+      setQrisPhase('idle');
+      setQrisImageUrl(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showQrisModal, paymentMethod]);
+
+  React.useEffect(() => () => stopQrisPolling(), []);
 
   const handleAddCashRecord = (e: React.FormEvent) => {
     e.preventDefault();
@@ -516,21 +601,61 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
 
             {/* QR Code Container */}
             <div className="bg-[#101A2C] p-4 rounded-xl text-center space-y-3 border border-[#B8905A]/30">
-              <div className="w-48 h-48 mx-auto bg-white p-3 rounded-lg flex items-center justify-center border-2 border-[#B8905A]">
-                {/* Dynamic QR SVG */}
-                <svg className="w-full h-full text-slate-900" viewBox="0 0 100 100">
-                  <path d="M 10 10 H 30 V 30 H 10 Z M 70 10 H 90 V 30 H 70 Z M 10 70 H 30 V 90 H 10 Z" fill="currentColor" />
-                  <path d="M 15 15 H 25 V 25 H 15 Z M 75 15 H 85 V 25 H 75 Z M 15 75 H 25 V 85 H 15 Z" fill="#1B2A45" />
-                  <rect x="40" y="40" width="20" height="20" fill="#B8905A" />
-                  <rect x="10" y="45" width="20" height="10" fill="currentColor" />
-                  <rect x="45" y="10" width="10" height="20" fill="currentColor" />
-                  <rect x="70" y="45" width="20" height="20" fill="currentColor" />
-                  <rect x="45" y="70" width="20" height="20" fill="currentColor" />
-                </svg>
-              </div>
-              <p className="text-[11px] text-[#EDE6D6]/80 font-mono">
-                Scan QRIS via GoPay, OVO, Dana, BCA, atau Mobile Banking
-              </p>
+              {paymentMethod === 'QRIS' && qrisPhase === 'loading' && (
+                <div className="w-48 h-48 mx-auto flex flex-col items-center justify-center gap-2 text-[#EDE6D6]">
+                  <Loader2 className="w-8 h-8 animate-spin text-[#D9B98A]" />
+                  <span className="text-[11px]">Membuat kode QRIS...</span>
+                </div>
+              )}
+
+              {paymentMethod === 'QRIS' && qrisPhase === 'waiting_real' && qrisImageUrl && (
+                <>
+                  <div className="w-48 h-48 mx-auto bg-white p-3 rounded-lg flex items-center justify-center border-2 border-[#B8905A]">
+                    <img src={qrisImageUrl} alt="Kode QRIS pembayaran" className="w-full h-full object-contain" />
+                  </div>
+                  <p className="text-[11px] text-emerald-300 font-bold flex items-center justify-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Menunggu pembayaran...
+                  </p>
+                  <p className="text-[11px] text-[#EDE6D6]/80 font-mono">
+                    Scan QRIS via GoPay, OVO, Dana, BCA, atau Mobile Banking apapun
+                  </p>
+                </>
+              )}
+
+              {paymentMethod === 'QRIS' && qrisPhase === 'failed' && (
+                <div className="w-48 h-48 mx-auto flex flex-col items-center justify-center gap-2 text-rose-300">
+                  <AlertTriangle className="w-8 h-8" />
+                  <span className="text-[11px] px-2">{qrisMessage}</span>
+                  <button
+                    onClick={handleStartQrisPayment}
+                    className="mt-1 px-3 py-1.5 bg-[#B8905A] text-[#101A2C] font-bold text-[11px] rounded-lg flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Buat Ulang QRIS
+                  </button>
+                </div>
+              )}
+
+              {(paymentMethod !== 'QRIS' || qrisPhase === 'waiting_simulated' || qrisPhase === 'idle') && (
+                <>
+                  <div className="w-48 h-48 mx-auto bg-white p-3 rounded-lg flex items-center justify-center border-2 border-[#B8905A]">
+                    {/* QR dekoratif (mode simulasi — gateway pembayaran belum dikonfigurasi, atau metode non-QRIS) */}
+                    <svg className="w-full h-full text-slate-900" viewBox="0 0 100 100">
+                      <path d="M 10 10 H 30 V 30 H 10 Z M 70 10 H 90 V 30 H 70 Z M 10 70 H 30 V 90 H 10 Z" fill="currentColor" />
+                      <path d="M 15 15 H 25 V 25 H 15 Z M 75 15 H 85 V 25 H 75 Z M 15 75 H 25 V 85 H 15 Z" fill="#1B2A45" />
+                      <rect x="40" y="40" width="20" height="20" fill="#B8905A" />
+                      <rect x="10" y="45" width="20" height="10" fill="currentColor" />
+                      <rect x="45" y="10" width="10" height="20" fill="currentColor" />
+                      <rect x="70" y="45" width="20" height="20" fill="currentColor" />
+                      <rect x="45" y="70" width="20" height="20" fill="currentColor" />
+                    </svg>
+                  </div>
+                  <p className="text-[11px] text-[#EDE6D6]/80 font-mono">
+                    {paymentMethod === 'QRIS'
+                      ? 'Mode simulasi — payment gateway belum dikonfigurasi (MIDTRANS_SERVER_KEY)'
+                      : 'Scan QRIS via GoPay, OVO, Dana, BCA, atau Mobile Banking'}
+                  </p>
+                </>
+              )}
             </div>
 
             <div>
@@ -550,17 +675,27 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
 
             <div className="flex gap-2 pt-2">
               <button
-                onClick={() => setShowQrisModal(false)}
+                onClick={handleCloseQrisModal}
                 className="w-1/2 py-2.5 bg-[#F6F1E6] hover:bg-[#E1D6BE]/50 text-[#1B2A45] font-bold text-xs rounded-lg transition-all border border-[#E1D6BE]"
               >
                 Batal
               </button>
-              <button
-                onClick={handleSimulateQRISPayment}
-                className="w-1/2 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-md transition-all flex items-center justify-center gap-1.5"
-              >
-                <CheckCircle2 className="w-4 h-4 text-[#D9B98A]" /> Konfirmasi Lunas
-              </button>
+              {paymentMethod === 'QRIS' && qrisPhase === 'waiting_real' ? (
+                <button
+                  disabled
+                  className="w-1/2 py-2.5 bg-[#1B2A45]/50 text-[#FFFDF9]/70 font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 cursor-not-allowed"
+                >
+                  <Loader2 className="w-4 h-4 animate-spin" /> Menunggu Pelanggan Bayar
+                </button>
+              ) : (
+                <button
+                  onClick={handleConfirmManualPayment}
+                  disabled={paymentMethod === 'QRIS' && qrisPhase === 'loading'}
+                  className="w-1/2 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-[#D9B98A]" /> Konfirmasi Lunas
+                </button>
+              )}
             </div>
           </div>
         </div>
