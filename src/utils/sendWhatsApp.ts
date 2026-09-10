@@ -4,6 +4,11 @@
 // terkirim otomatis tanpa staf perlu klik apa pun. Selama token belum dikonfigurasi,
 // fungsi ini otomatis fallback membuka tautan wa.me manual — perilaku lama sebelum
 // otomatisasi ini ditambahkan — sehingga fitur tidak pernah rusak di lingkungan demo/lokal.
+// /api/wa/send requires a logged-in session; an unauthenticated caller falls
+// through to the same manual wa.me link fallback below, it just never gets
+// the automatic Fonnte send.
+
+import { authHeaders } from './authToken';
 
 export interface WhatsAppSendOutcome {
   auto: boolean; // true = terkirim otomatis via Fonnte, false = fallback tautan manual dibuka
@@ -20,7 +25,7 @@ export async function sendWhatsAppNotification(rawPhone: string, message: string
   try {
     const res = await fetch('/api/wa/send', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ phone: rawPhone, message }),
     });
     const data = await res.json();

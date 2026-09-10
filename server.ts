@@ -18,8 +18,17 @@ import {
   setPassword,
   userExists,
   createResetToken,
-  consumeResetToken
+  consumeResetToken,
+  verifyPin,
+  findAccountByPin,
+  getAccountInfo
 } from "./server/authService";
+import {
+  initSessionService,
+  createSession,
+  getSession,
+  destroySession
+} from "./server/sessionService";
 import { sendWhatsAppMessage } from "./server/waService";
 
 async function startServer() {
@@ -33,6 +42,43 @@ async function startServer() {
 
   // Initialize Password Store & Reset Token Cleanup Daemon
   initAuthService();
+
+  // Initialize in-memory session store cleanup daemon
+  initSessionService();
+
+  // Reads the "Authorization: Bearer <token>" header and attaches the
+  // resolved session (email/role) to the request, or responds 401 if the
+  // token is missing/expired. Role can never come from the client body.
+  function requireSession(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
+    const session = getSession(token);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "Sesi tidak valid atau sudah kedaluwarsa. Silakan login ulang." });
+    }
+    (req as any).session = session;
+    next();
+  }
+
+  // Like requireSession, but additionally requires the session's role to be
+  // one of `allowedRoles`.
+  function requireRole(...allowedRoles: string[]) {
+    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const header = req.headers.authorization || "";
+      const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
+      const session = getSession(token);
+      if (!session) {
+        return res.status(401).json({ success: false, message: "Sesi tidak valid atau sudah kedaluwarsa. Silakan login ulang." });
+      }
+      if (!allowedRoles.includes(session.role)) {
+        return res.status(403).json({ success: false, message: "Akun Anda tidak memiliki hak akses untuk aksi ini." });
+      }
+      (req as any).session = session;
+      next();
+    };
+  }
+
+  const PRIVILEGED_ROLES = ["owner_klinik", "owner_petshop", "owner_petcare", "admin", "superadmin"];
 
   // API Health Endpoint
   app.get("/api/health", (_req, res) => {
@@ -64,7 +110,7 @@ async function startServer() {
   });
 
   // Trigger manual on-demand backup snapshot
-  app.post("/api/backup/trigger", async (req, res) => {
+  app.post("/api/backup/trigger", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try {
       const payload = req.body?.payload;
       const snapshot = await executeBackup("MANUAL_ON_DEMAND", payload);
@@ -75,7 +121,7 @@ async function startServer() {
   });
 
   // Update backup schedule, target cloud bucket, & config
-  app.post("/api/backup/config", (req, res) => {
+  app.post("/api/backup/config", requireRole(...PRIVILEGED_ROLES), (req, res) => {
     try {
       const updated = updateBackupConfig(req.body);
       res.json({ success: true, config: updated });
@@ -95,7 +141,7 @@ async function startServer() {
   });
 
   // Simulate restore from cloud snapshot
-  app.post("/api/backup/restore/:id", (req, res) => {
+  app.post("/api/backup/restore/:id", requireRole(...PRIVILEGED_ROLES), (req, res) => {
     try {
       const snapshotId = req.params.id;
       const snapshot = getAllBackups().find((b) => b.id === snapshotId);
@@ -114,7 +160,7 @@ async function startServer() {
   });
 
   // Download snapshot mock file
-  app.get("/api/backup/download/:id", (req, res) => {
+  app.get("/api/backup/download/:id", requireRole(...PRIVILEGED_ROLES), (req, res) => {
     try {
       const snapshotId = req.params.id;
       const snapshot = getAllBackups().find((b) => b.id === snapshotId);
@@ -156,7 +202,9 @@ async function startServer() {
     });
   }
 
-  // Validate email + password credentials against the server-side password store
+  // Validate email + password credentials against the server-side password
+  // store, then issue a session. Role/ownership are read from the server's
+  // own account directory — the client's claimed role is never trusted.
   app.post("/api/auth/login", (req, res) => {
     try {
       const { email, password } = req.body || {};
@@ -167,10 +215,77 @@ async function startServer() {
       if (!valid) {
         return res.status(401).json({ success: false, message: "Email atau kata sandi tidak sesuai." });
       }
-      res.json({ success: true });
+      const account = getAccountInfo(email);
+      if (!account) {
+        return res.status(401).json({ success: false, message: "Akun tidak ditemukan." });
+      }
+      const token = createSession(account.email, account.role, account.ownershipType);
+      res.json({ success: true, token, account });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
     }
+  });
+
+  // Fast shift login via 4-digit PIN — the PIN is matched against the
+  // server-side hashed PIN store, never against a value shipped to the
+  // client bundle.
+  app.post("/api/auth/login-pin", (req, res) => {
+    try {
+      const { pin } = req.body || {};
+      if (!pin || typeof pin !== "string" || pin.trim().length !== 4) {
+        return res.status(400).json({ success: false, message: "PIN shift harus berupa 4 digit angka." });
+      }
+      const email = findAccountByPin(pin.trim());
+      if (!email) {
+        return res.status(401).json({ success: false, message: "PIN yang dimasukkan tidak terdaftar." });
+      }
+      const account = getAccountInfo(email);
+      if (!account) {
+        return res.status(401).json({ success: false, message: "Akun tidak ditemukan." });
+      }
+      const token = createSession(account.email, account.role, account.ownershipType);
+      res.json({ success: true, token, account });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Switch the active session to a different demo persona/account. The
+  // security property here comes entirely from verifying the TARGET
+  // account's own PIN — it does NOT require the caller to already hold a
+  // valid session (the app's zero-friction "browse without logging in"
+  // demo mode has no session at all, and should still be able to PIN-switch
+  // into a real one). This replaces the old client-only "switchRole" which
+  // let anyone become anyone with a single click and no credential at all.
+  app.post("/api/auth/switch-account", (req, res) => {
+    try {
+      const { targetEmail, pin } = req.body || {};
+      if (!targetEmail || !pin) {
+        return res.status(400).json({ success: false, message: "Email tujuan dan PIN wajib diisi." });
+      }
+      if (!verifyPin(targetEmail, pin)) {
+        return res.status(401).json({ success: false, message: "PIN tidak sesuai untuk akun tujuan." });
+      }
+      const account = getAccountInfo(targetEmail);
+      if (!account) {
+        return res.status(404).json({ success: false, message: "Akun tujuan tidak ditemukan." });
+      }
+      // Best-effort cleanup of the old session, if any — not required for
+      // the switch to succeed, stale sessions simply expire after their TTL.
+      const oldToken = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      if (oldToken) destroySession(oldToken);
+      const token = createSession(account.email, account.role, account.ownershipType);
+      res.json({ success: true, token, account });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // End the current session (logout).
+  app.post("/api/auth/logout", requireSession, (req, res) => {
+    const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    destroySession(token);
+    res.json({ success: true });
   });
 
   // Request a password reset link to be emailed to the account owner
@@ -244,7 +359,7 @@ async function startServer() {
   // Kirim notifikasi WhatsApp otomatis (antrean, reminder vaksin, invoice, dsb.) via Fonnte.
   // Jika WA_TOKEN belum dikonfigurasi, mengembalikan simulated:true agar frontend
   // bisa fallback ke tautan wa.me manual tanpa mematahkan fitur.
-  app.post("/api/wa/send", async (req, res) => {
+  app.post("/api/wa/send", requireSession, async (req, res) => {
     try {
       const { phone, message } = req.body || {};
       if (!phone || !message) {
@@ -258,7 +373,7 @@ async function startServer() {
   });
 
   // Gemini AI Assistant Chat Endpoint
-  app.post("/api/ai/chat", async (req, res) => {
+  app.post("/api/ai/chat", requireSession, async (req, res) => {
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
@@ -314,7 +429,7 @@ ${JSON.stringify(context || {}, null, 2)}
   });
 
   // Gemini AI Medical History to Clinical SOAP Analysis Endpoint
-  app.post("/api/ai/analyze-history-soap", async (req, res) => {
+  app.post("/api/ai/analyze-history-soap", requireSession, async (req, res) => {
     try {
       const { petInfo, unstructuredHistoryText, currentComplaint } = req.body;
 
@@ -587,7 +702,7 @@ Riwayat Alergi: ${allergies}
   }
 
   // Gemini AI-Driven Patient EMR Triage Urgency Analysis Endpoint
-  app.post("/api/ai/triage-analysis", async (req, res) => {
+  app.post("/api/ai/triage-analysis", requireSession, async (req, res) => {
     try {
       const { petInfo, currentVisit, latestSoap, historySummary } = req.body;
       const apiKey = process.env.GEMINI_API_KEY;
@@ -755,7 +870,7 @@ Lakukan analisis keparahan gejala dan tentukan Triage Urgency Level secara akura
   }
 
   // Gemini AI-Driven Critical Medical Inventory Forecasting Endpoint
-  app.post("/api/ai/forecast-inventory", async (req, res) => {
+  app.post("/api/ai/forecast-inventory", requireSession, async (req, res) => {
     try {
       const {
         seasonScenario = "pancaroba_hujan",
@@ -961,7 +1076,7 @@ Please perform the AI-driven clinical forecasting analysis and provide strategic
   }
 
   // Gemini AI-Driven Purchase Order Quantity Suggestion Endpoint (Based on 30-day stock depletion trends & safety stock levels)
-  app.post("/api/ai/suggest-po-quantities", async (req, res) => {
+  app.post("/api/ai/suggest-po-quantities", requireSession, async (req, res) => {
     try {
       const {
         items = [],
@@ -1105,7 +1220,7 @@ Analyze the 30-day depletion rates, safety stock deficits, and recommend optimiz
   }
 
   // Gemini AI-Driven Dashboard Layout Optimization Assistant Endpoint
-  app.post("/api/ai/optimize-layout", async (req, res) => {
+  app.post("/api/ai/optimize-layout", requireSession, async (req, res) => {
     try {
       const {
         userRole = "dokter",
@@ -1359,7 +1474,7 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   }
 
   // Reset Queue / Daily Cron endpoint simulation
-  app.post("/api/cron/reset-queue", (_req, res) => {
+  app.post("/api/cron/reset-queue", requireRole("admin", "superadmin"), (_req, res) => {
     res.json({ success: true, message: "Queue reset successfully" });
   });
 

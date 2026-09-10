@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { authHeaders } from '../../utils/authToken';
 import {
   Cloud,
   HardDrive,
@@ -166,7 +167,7 @@ export const CloudBackupModule: React.FC = () => {
 
       const res = await fetch('/api/backup/trigger', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ payload })
       });
       const data = await res.json();
@@ -214,7 +215,7 @@ export const CloudBackupModule: React.FC = () => {
     try {
       const res = await fetch('/api/backup/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           endOfBusinessDayHour: Number(endHour),
           autoBackupEnabled: autoEnabled,
@@ -236,12 +237,33 @@ export const CloudBackupModule: React.FC = () => {
     }
   };
 
+  const handleDownloadSnapshot = async (snapshot: BackupSnapshot) => {
+    try {
+      const res = await fetch(`/api/backup/download/${snapshot.id}`, { headers: authHeaders() });
+      if (!res.ok) {
+        addToast('Anda tidak memiliki hak akses untuk mengunduh berkas backup ini.', 'error');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = snapshot.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      addToast(`Gagal mengunduh berkas backup: ${err.message}`, 'error');
+    }
+  };
+
   const handleRestoreSnapshot = async () => {
     if (!selectedSnapshotForRestore) return;
     setIsRestoring(true);
     try {
       await new Promise((r) => setTimeout(r, 900));
-      const res = await fetch(`/api/backup/restore/${selectedSnapshotForRestore.id}`, { method: 'POST' });
+      const res = await fetch(`/api/backup/restore/${selectedSnapshotForRestore.id}`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (data.success) {
         addToast(
@@ -495,14 +517,13 @@ export const CloudBackupModule: React.FC = () => {
                     >
                       <ShieldCheck className="w-3 h-3 text-[#B8905A]" /> Verifikasi
                     </button>
-                    <a
-                      href={`/api/backup/download/${b.id}`}
-                      download
+                    <button
+                      onClick={() => handleDownloadSnapshot(b)}
                       className="px-2.5 py-1 bg-[#F6F1E6] hover:bg-[#E1D6BE]/60 text-[#1B2A45] font-bold text-[11px] rounded border border-[#E1D6BE] transition-all inline-flex items-center gap-1"
                       title="Unduh Berkas Arsip (.enc.json)"
                     >
                       <Download className="w-3 h-3 text-[#1B2A45]" /> Unduh
-                    </a>
+                    </button>
                     <button
                       onClick={() => setSelectedSnapshotForRestore(b)}
                       className="px-2.5 py-1 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-[11px] rounded transition-all inline-flex items-center gap-1"

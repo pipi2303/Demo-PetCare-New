@@ -5,6 +5,7 @@ import { useToast } from '../../context/ToastContext';
 import { NavModule } from './Sidebar';
 import { getRoleInfo } from '../../utils/roleUtils';
 import { UserRole } from '../../types';
+import { PinConfirmModal } from '../auth/PinConfirmModal';
 import {
   Menu,
   Search,
@@ -77,11 +78,12 @@ export const Header: React.FC<HeaderProps> = ({
   openPublicBooking,
   onOpenAI,
 }) => {
-  const { user, switchRole, logout, openLoginScreen, activeOwnership } = useAuth();
+  const { user, findAccountEmailByRole, logout, openLoginScreen, activeOwnership } = useAuth();
   const { notifications = [], markNotificationRead } = useData();
   const { addToast } = useToast();
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [pinTarget, setPinTarget] = useState<{ role: UserRole; email: string; label: string } | null>(null);
 
   // Derive effective role from user role or active ownership
   let userRole: UserRole = 'owner_klinik';
@@ -104,19 +106,27 @@ export const Header: React.FC<HeaderProps> = ({
     year: 'numeric'
   });
 
+  const ROLE_LABELS: Record<string, string> = {
+    owner_petshop: 'Owner Petshop (Toko Retail & POS)',
+    owner_klinik: 'Owner Klinik (Medis & RS Hewan)',
+    owner_petcare: 'Owner PetCare (All-in-One Ecosystem)',
+    dokter: 'Dokter Hewan',
+    kasir: 'Kasir & POS',
+    groomer: 'Groomer',
+    admin: 'Admin Sistem'
+  };
+
+  // Switching persona now requires that persona's own PIN, verified
+  // server-side — clicking a role button only opens the PIN prompt, it no
+  // longer switches instantly.
   const handleRoleSelect = (role: UserRole) => {
-    switchRole(role);
+    const email = findAccountEmailByRole(role);
     setShowUserDropdown(false);
-    
-    if (role === 'owner_petshop') {
-      addToast('Profil aktif beralih ke: Owner Petshop (Toko Retail & POS)', 'success');
-    } else if (role === 'owner_klinik') {
-      addToast('Profil aktif beralih ke: Owner Klinik (Medis & RS Hewan)', 'success');
-    } else if (role === 'owner_petcare') {
-      addToast('Profil aktif beralih ke: Owner PetCare (All-in-One Ecosystem)', 'success');
-    } else {
-      addToast(`Beralih ke peran: ${role.replace('_', ' ')}`, 'info');
+    if (!email) {
+      addToast(`Tidak ada akun demo terdaftar untuk peran: ${role.replace('_', ' ')}`, 'error');
+      return;
     }
+    setPinTarget({ role, email, label: ROLE_LABELS[role] || role.replace('_', ' ') });
   };
 
   useEffect(() => {
@@ -517,6 +527,18 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+
+      {pinTarget && (
+        <PinConfirmModal
+          targetLabel={pinTarget.label}
+          targetEmail={pinTarget.email}
+          onSuccess={() => {
+            addToast(`Profil aktif beralih ke: ${pinTarget.label}`, 'success');
+            setPinTarget(null);
+          }}
+          onCancel={() => setPinTarget(null)}
+        />
+      )}
     </header>
   );
 };

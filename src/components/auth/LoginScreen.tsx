@@ -48,7 +48,6 @@ interface LoginScreenProps {
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccessfulLogin }) => {
   const {
     login,
-    loginAsUser,
     loginWithPin,
     users,
     activeBranchId,
@@ -178,10 +177,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccessfulLogin }) =
     setErrorMessage('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      const result = login(emailOrPhone, password, {
-        branchId: selectedBranch,
-        ownershipType: selectedOwnership
+    setTimeout(async () => {
+      const result = await login(emailOrPhone, password, {
+        branchId: selectedBranch
       });
 
       setIsLoading(false);
@@ -204,8 +202,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccessfulLogin }) =
     setErrorMessage('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      const result = loginWithPin(pinToTest, selectedBranch);
+    setTimeout(async () => {
+      const result = await loginWithPin(pinToTest, selectedBranch);
       setIsLoading(false);
       if (result.success) {
         addToast('Login shift cepat via PIN berhasil diverifikasi.', 'success');
@@ -238,7 +236,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccessfulLogin }) =
     setErrorMessage('');
   };
 
-  // Simulate QR Shift Scan or Biometric verification
+  // Simulate QR Shift Scan or Biometric verification. A "successful scan"
+  // still requires the staff member's own PIN afterward — QR/biometric here
+  // is a convenience shortcut to the PIN pad, not a bypass of it.
   const handleSimulateQrScan = (roleToLogin: string = 'kasir') => {
     setIsScanningQr(true);
     setQrScanSuccess(false);
@@ -254,41 +254,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccessfulLogin }) =
     }, 1200);
   };
 
-  // Handle 1-click quick demo login
+  // "Quick demo" persona shortcuts no longer log in with a single click —
+  // that let anyone become any account (including superadmin) with zero
+  // credentials. They now just jump to the PIN tab; the actual session
+  // switch still goes through loginWithPin -> /api/auth/login-pin, which
+  // verifies the PIN server-side.
   const handleQuickDemo = (roleOrUser: UserRole | User) => {
+    const targetUser = typeof roleOrUser === 'string'
+      ? users.find((u) => u.role === roleOrUser) || users.find((u) => u.ownershipType === roleOrUser)
+      : roleOrUser;
+
     setErrorMessage('');
-    setIsLoading(true);
-
-    setTimeout(() => {
-      let targetUser: User;
-      let targetOwnership = selectedOwnership;
-
-      if (typeof roleOrUser === 'string') {
-        const role = roleOrUser;
-        if (role === 'owner_klinik' || role === 'owner_petshop' || role === 'owner_petcare') {
-          targetOwnership = role;
-          setActiveOwnership(role);
-        }
-        targetUser =
-          users.find((u) => u.role === role) ||
-          users.find((u) => u.ownershipType === role) ||
-          users[0];
-      } else {
-        targetUser = roleOrUser;
-        if (targetUser.ownershipType) {
-          targetOwnership = targetUser.ownershipType;
-          setActiveOwnership(targetUser.ownershipType);
-        }
-      }
-
-      loginAsUser(targetUser, {
-        branchId: targetUser.branchId === 'all' ? selectedBranch : targetUser.branchId || selectedBranch,
-        ownershipType: targetOwnership
-      });
-      setIsLoading(false);
-      addToast(`Sesi aktif: ${targetUser.name} (${targetUser.role.toUpperCase()})`, 'success');
-      if (onSuccessfulLogin) onSuccessfulLogin();
-    }, 250);
+    setAuthMode('pin');
+    setPin('');
+    addToast(
+      targetUser
+        ? `Masukkan PIN milik ${targetUser.name} untuk masuk sebagai ${targetUser.role.replace('_', ' ')}.`
+        : 'Masukkan PIN 4-digit untuk masuk.',
+      'info'
+    );
   };
 
   // Quick preset helper to fill default account
@@ -1047,7 +1031,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccessfulLogin }) =
                               {badge.label}
                             </span>
                             <span className="text-[10px] font-mono text-slate-500 group-hover:text-[#D9B98A] transition-colors">
-                              PIN: {u.pin || '1234'}
+                              Perlu PIN
                             </span>
                           </div>
 

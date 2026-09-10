@@ -67,7 +67,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-manajemen',
     groupName: 'Direksi & Manajemen Keuangan',
     ownershipType: 'owner_klinik',
-    pin: '1234'
   },
   {
     id: 'u1_petshop',
@@ -81,7 +80,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-manajemen',
     groupName: 'Direksi & Manajemen Retail',
     ownershipType: 'owner_petshop',
-    pin: '5678'
   },
   {
     id: 'u1_petcare',
@@ -95,7 +93,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-manajemen',
     groupName: 'Eksekutif Holding PetCare',
     ownershipType: 'owner_petcare',
-    pin: '9999'
   },
   {
     id: 'u1',
@@ -109,7 +106,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-manajemen',
     groupName: 'Direksi Medis & Keuangan',
     ownershipType: 'owner_klinik',
-    pin: '1234'
   },
   {
     id: 'u2',
@@ -123,7 +119,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-medis',
     groupName: 'Tim Medis & Dokter Hewan',
     ownershipType: 'owner_klinik',
-    pin: '2222'
   },
   {
     id: 'u3',
@@ -137,7 +132,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-frontoffice',
     groupName: 'Front Office & Kasir POS',
     ownershipType: 'owner_petshop',
-    pin: '3333'
   },
   {
     id: 'u4',
@@ -151,7 +145,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-ops-care',
     groupName: 'Divisi Salon Grooming & Hotel',
     ownershipType: 'owner_petcare',
-    pin: '4444'
   },
   {
     id: 'u5',
@@ -165,7 +158,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-manajemen',
     groupName: 'Tata Usaha & Admin Sistem',
     ownershipType: 'owner_petcare',
-    pin: '5555'
   },
   {
     id: 'u6',
@@ -179,7 +171,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-manajemen',
     groupName: 'Super Admin SaaS Master',
     ownershipType: 'superadmin',
-    pin: '0000'
   },
   {
     id: 'u7',
@@ -194,7 +185,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-client',
     groupName: 'Portal Pelanggan & Anabul',
     ownershipType: 'pemilik',
-    pin: '7777'
   },
   {
     id: 'u8',
@@ -209,7 +199,6 @@ export const INITIAL_USERS: User[] = [
     groupId: 'grp-client',
     groupName: 'Portal Pelanggan & Anabul',
     ownershipType: 'pemilik',
-    pin: '8888'
   },
 ];
 

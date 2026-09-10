@@ -1,4 +1,5 @@
 import { Pet, ClinicVisit, SOAPNote, MedicalRecord, Inpatient, TriageUrgencyResult, TriageUrgencyLevel } from '../types';
+import { authHeaders } from './authToken';
 
 /**
  * Intelligent Clinical Triage Engine for Veterinary Medicine
@@ -304,7 +305,7 @@ export async function analyzePetTriageWithGemini(
 
     const res = await fetch('/api/ai/triage-analysis', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload)
     });
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { usePermissions } from '../../hooks/usePermissions';
 import {
   Users,
   Calendar,
@@ -36,6 +37,8 @@ const EMPLOYEE_ROLES: Types.Employee['role'][] = [
 
 export const HRMModule: React.FC = () => {
   const { addToast } = useToast();
+  const { can } = usePermissions();
+  const canProcessPayroll = can('hrm', 'approve');
   const {
     employees,
     addEmployee,
@@ -201,6 +204,10 @@ export const HRMModule: React.FC = () => {
   };
 
   const handleSimulatePayout = (sc: any) => {
+    if (!canProcessPayroll) {
+      addToast('Akun Anda tidak memiliki hak akses untuk mencairkan gaji/komisi staf.', 'error');
+      return;
+    }
     // Payout beneran dicatat sebagai pengeluaran kas di modul Finance
     addCashTransaction({
       type: 'Keluar',
@@ -477,7 +484,9 @@ export const HRMModule: React.FC = () => {
                   </button>
                   <button
                     onClick={() => handleSimulatePayout(sc)}
-                    className="py-2 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5"
+                    disabled={!canProcessPayroll}
+                    title={canProcessPayroll ? undefined : 'Hanya owner/admin yang dapat mencairkan gaji'}
+                    className="py-2 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#1B2A45]"
                   >
                     <DollarSign className="w-4 h-4 text-[#D9B98A]" /> Cairkan Gaji
                   </button>

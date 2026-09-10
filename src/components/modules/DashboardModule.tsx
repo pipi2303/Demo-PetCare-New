@@ -46,6 +46,8 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend } from 'recharts';
 import { DoseCalculator } from '../common/DoseCalculator';
+import { PinConfirmModal } from '../auth/PinConfirmModal';
+import { usePermissions } from '../../hooks/usePermissions';
 import { CctvMonitor } from '../common/CctvMonitor';
 import { QueueDisplay } from '../common/QueueDisplay';
 import { PredictiveInventoryWidget } from '../common/PredictiveInventoryWidget';
@@ -90,35 +92,28 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
   const [doctorCategoryFilter, setDoctorCategoryFilter] = React.useState<'all' | 'dokter' | 'paramedik'>('all');
   const [hideOffDuty, setHideOffDuty] = React.useState<boolean>(false);
 
-  const { user, switchRole, activeOwnership, setActiveOwnership } = useAuth();
-  
-  // Dynamic role resolution from activeOwnership or user role
-  let effectiveRole: UserRole = 'owner_petcare';
-  if (activeOwnership === 'owner_petshop' || user?.ownershipType === 'owner_petshop' || user?.role === 'owner_petshop' || user?.role === 'kasir') {
-    effectiveRole = 'owner_petshop';
-  } else if (activeOwnership === 'owner_klinik' || user?.ownershipType === 'owner_klinik' || user?.role === 'owner_klinik' || user?.role === 'dokter' || user?.role === 'perawat') {
-    effectiveRole = 'owner_klinik';
-  } else if (activeOwnership === 'owner_petcare' || user?.ownershipType === 'owner_petcare' || user?.role === 'owner_petcare' || user?.role === 'superadmin' || user?.role === 'admin' || user?.role === 'owner') {
-    effectiveRole = 'owner_petcare';
-  } else if (user?.role) {
-    effectiveRole = user.role;
-  }
+  const { setActiveOwnership, findAccountEmailByRole } = useAuth();
+  const [pinTarget, setPinTarget] = React.useState<{ role: UserRole; email: string } | null>(null);
 
-  const isPetshop = effectiveRole === 'owner_petshop' || effectiveRole === 'kasir';
-  const isClinic = effectiveRole === 'owner_klinik' || effectiveRole === 'dokter' || effectiveRole === 'perawat';
-  const isPetcare = !isPetshop && !isClinic;
+  // Single source of truth for role/permission resolution (see usePermissions.ts) —
+  // replaces the divergent effectiveRole logic that used to live separately here.
+  const { role: effectiveRole, isPetshop, isClinic, isPetcare } = usePermissions();
 
+  const OWNERSHIP_LABELS: Record<string, string> = {
+    owner_petcare: 'Owner PetCare (Konsolidasi Multi-Unit)',
+    owner_petshop: 'Owner PetShop (Retail & POS)',
+    owner_klinik: 'Owner Klinik (Praktik Medis Vet)'
+  };
+
+  // Opens a PIN prompt instead of switching instantly — the target
+  // account's PIN is verified server-side via AuthContext.switchAccount.
   const handleSwitchOwnership = (targetRole: UserRole) => {
-    switchRole(targetRole);
-    if (setActiveOwnership) {
-      setActiveOwnership(targetRole);
+    const email = findAccountEmailByRole(targetRole);
+    if (!email) {
+      addToast(`Tidak ada akun demo terdaftar untuk peran: ${targetRole.replace('_', ' ')}`, 'error');
+      return;
     }
-    const roleLabels: Record<string, string> = {
-      owner_petcare: 'Owner PetCare (Konsolidasi Multi-Unit)',
-      owner_petshop: 'Owner PetShop (Retail & POS)',
-      owner_klinik: 'Owner Klinik (Praktik Medis Vet)'
-    };
-    addToast(`Perspektif Manajemen aktif: ${roleLabels[targetRole] || targetRole}`, 'success');
+    setPinTarget({ role: targetRole, email });
   };
 
   // Redesigned Clinical / Retail Utilities & Surveillance State
@@ -1915,6 +1910,19 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
         onClose={() => setShowSmartCheckInModal(false)}
         setActiveModule={setActiveModule}
       />
+
+      {pinTarget && (
+        <PinConfirmModal
+          targetLabel={OWNERSHIP_LABELS[pinTarget.role] || pinTarget.role}
+          targetEmail={pinTarget.email}
+          onSuccess={() => {
+            setActiveOwnership(pinTarget.role);
+            addToast(`Perspektif Manajemen aktif: ${OWNERSHIP_LABELS[pinTarget.role] || pinTarget.role}`, 'success');
+            setPinTarget(null);
+          }}
+          onCancel={() => setPinTarget(null)}
+        />
+      )}
     </div>
   );
 };

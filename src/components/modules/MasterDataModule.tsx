@@ -3,6 +3,7 @@ import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Customer, Pet, Employee, Supplier, ServiceItem, MembershipTier, Drug, HotelRoom, GroomingPackage, AmbulanceUnit, EFormTemplate } from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { usePermissions } from '../../hooks/usePermissions';
 import { TriageUrgencyBadge } from '../clinic/TriageUrgencyBadge';
 import { TriageUrgencyModal } from '../clinic/TriageUrgencyModal';
 import { computeClientTriageUrgency } from '../../utils/aiTriageUrgency';
@@ -41,6 +42,11 @@ import {
 } from 'lucide-react';
 
 export const MasterDataModule: React.FC = () => {
+  const { can } = usePermissions();
+  // Only owner/admin-level roles may set or change a staff member's salary
+  // & commission rate — everyone else can still manage the rest of the
+  // staff record, but these two fields are locked.
+  const canEditStaffCompensation = can('hrm', 'edit');
   const {
     customers = [],
     addCustomer,
@@ -461,6 +467,13 @@ export const MasterDataModule: React.FC = () => {
       return;
     }
     const staffPayload = { ...staffForm, branchId: staffForm.branchId || undefined, shift: staffForm.shift || undefined };
+    if (!canEditStaffCompensation) {
+      // Defense in depth: even if the disabled inputs were bypassed
+      // client-side, the save itself refuses to change compensation for
+      // roles that aren't allowed to set it.
+      staffPayload.baseSalary = editingStaff?.baseSalary ?? staffPayload.baseSalary;
+      staffPayload.commissionRatePercent = editingStaff?.commissionRatePercent ?? staffPayload.commissionRatePercent;
+    }
     if (editingStaff) {
       updateEmployee(editingStaff.id, staffPayload);
       addToast(`Data staff ${staffForm.name} berhasil diperbarui!`, 'success');
@@ -2638,22 +2651,28 @@ export const MasterDataModule: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-bold mb-1">Gaji Pokok (Rp)</label>
+                  <label className="block font-bold mb-1">
+                    Gaji Pokok (Rp) {!canEditStaffCompensation && <span className="font-normal text-[10px] text-[#6B6656]">(Owner/Admin saja)</span>}
+                  </label>
                   <input
                     type="number"
                     value={staffForm.baseSalary}
                     onChange={(e) => setStaffForm({ ...staffForm, baseSalary: Number(e.target.value) })}
-                    className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45]"
+                    disabled={!canEditStaffCompensation}
+                    className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45] disabled:bg-[#F6F1E6] disabled:text-[#6B6656] disabled:cursor-not-allowed"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold mb-1">Komisi %</label>
+                  <label className="block font-bold mb-1">
+                    Komisi % {!canEditStaffCompensation && <span className="font-normal text-[10px] text-[#6B6656]">(Owner/Admin saja)</span>}
+                  </label>
                   <input
                     type="number"
                     value={staffForm.commissionRatePercent}
                     onChange={(e) => setStaffForm({ ...staffForm, commissionRatePercent: Number(e.target.value) })}
-                    className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45]"
+                    disabled={!canEditStaffCompensation}
+                    className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45] disabled:bg-[#F6F1E6] disabled:text-[#6B6656] disabled:cursor-not-allowed"
                   />
                 </div>
               </div>

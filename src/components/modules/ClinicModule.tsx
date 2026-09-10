@@ -9,6 +9,7 @@ import { PetHealthPassportModal } from '../clinic/PetHealthPassportModal';
 import { TriageUrgencyBadge } from '../clinic/TriageUrgencyBadge';
 import { TriageUrgencyModal } from '../clinic/TriageUrgencyModal';
 import { useAutoSaveDraft } from '../../hooks/useAutoSaveDraft';
+import { authHeaders } from '../../utils/authToken';
 import { NavModule } from '../layout/Sidebar';
 import {
   Stethoscope,
@@ -267,7 +268,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     try {
       const res = await fetch('/api/ai/analyze-history-soap', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           petInfo: {
             name: pet?.name || selectedVisit?.petName || 'Pasien',

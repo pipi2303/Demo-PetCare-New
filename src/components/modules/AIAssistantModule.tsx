@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { authHeaders } from '../../utils/authToken';
 import {
   Bot,
   Send,
@@ -210,7 +211,7 @@ export const AIAssistantModule: React.FC<AIAssistantModuleProps> = ({ setActiveM
     try {
       const res = await fetch('/api/ai/analyze-history-soap', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           petInfo: {
             name: pet?.name || 'Milo',
@@ -633,7 +634,7 @@ Auskultasi jantung paru bersih, tidak ada murmur atau wheezing. Turgor kulit ela
 
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           message: textToSend,
           context: clinicContext,
@@ -682,7 +683,7 @@ Catatan Mentah: ${soapRawNotes}`;
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ message: prompt })
       });
       const data = await res.json();
@@ -729,7 +730,7 @@ Tentukan:
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ message: prompt })
       });
       const data = await res.json();
@@ -766,7 +767,7 @@ Sertakan: Hal yang boleh dilakukan, pantangan, tanda bahaya yang harus segera ke
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ message: prompt })
       });
       const data = await res.json();

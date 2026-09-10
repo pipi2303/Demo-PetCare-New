@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { authHeaders } from '../../utils/authToken';
 import {
   calculateSupplyForecast,
   generateAllCriticalSuppliesForecast,
@@ -195,7 +196,7 @@ export const AIForecastingView: React.FC = () => {
 
       const response = await fetch('/api/ai/forecast-inventory', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           seasonScenario,
           criticalItems: forecastSummary.items.map((i) => ({

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { authHeaders } from '../../utils/authToken';
 import {
   Sparkles,
   TrendingDown,
@@ -187,7 +188,7 @@ export const AIPOSuggestionsView: React.FC<AIPOSuggestionsViewProps> = ({
 
       const res = await fetch('/api/ai/suggest-po-quantities', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           items: payloadItems,
           targetCoverageDays,

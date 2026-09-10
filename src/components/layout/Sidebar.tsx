@@ -3,6 +3,15 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { UserRole } from '../../types';
 import { getRoleInfo } from '../../utils/roleUtils';
+import { PinConfirmModal } from '../auth/PinConfirmModal';
+import { usePermissions } from '../../hooks/usePermissions';
+// NavModule & MODULE_PERMISSIONS now live in a standalone constants file so
+// usePermissions.ts can import them without a circular dependency on this
+// file. Re-exported here so every existing `from './Sidebar'` /
+// `from '../layout/Sidebar'` import site keeps working unchanged.
+import { NavModule, MODULE_PERMISSIONS } from '../../constants/modulePermissions';
+export type { NavModule };
+export { MODULE_PERMISSIONS };
 import {
   LayoutDashboard,
   Database,
@@ -42,37 +51,6 @@ import {
   FolderTree
 } from 'lucide-react';
 
-export type NavModule =
-  | 'dashboard'
-  | 'masterData'
-  | 'booking'
-  | 'clinic'
-  | 'emr'
-  | 'vaccination'
-  | 'pharmacy'
-  | 'grooming'
-  | 'petHotel'
-  | 'patientGallery'
-  | 'petShop'
-  | 'inventory'
-  | 'purchasing'
-  | 'billing'
-  | 'finance'
-  | 'hrm'
-  | 'crm'
-  | 'reports'
-  | 'aiAssistant'
-  | 'telehealth'
-  | 'eForms'
-  | 'ambulance'
-  | 'carePlan'
-  | 'auditLog'
-  | 'notifications'
-  | 'branches'
-  | 'settings'
-  | 'systemGroups'
-  | 'tenantAdmin';
-
 interface SidebarProps {
   activeModule: NavModule;
   setActiveModule: (m: NavModule) => void;
@@ -91,56 +69,6 @@ interface NavGroup {
   title: string;
   items: NavItem[];
 }
-
-// Group definitions for role-based permissions
-const ALL_OWNERS = ['owner_klinik', 'owner_petshop', 'owner_petcare'];
-const CLINIC_OWNERS = ['owner_klinik', 'owner_petcare'];
-const PETSHOP_OWNERS = ['owner_petshop', 'owner_petcare'];
-
-export const MODULE_PERMISSIONS: Record<NavModule, string[]> = {
-  // Beranda & Master Data
-  dashboard: ['*'],
-  masterData: ['*'],
-
-  // Layanan Klinis & Umum (Khusus Klinik & PetCare All-in-One - HIDDEN for PetShop)
-  booking: [...CLINIC_OWNERS, 'admin', 'dokter', 'perawat', 'resepsionis', 'superadmin'],
-  grooming: ['owner_petcare', 'admin', 'groomer', 'superadmin'],
-  petHotel: ['owner_petcare', 'admin', 'groomer', 'kasir', 'superadmin'],
-  telehealth: [...CLINIC_OWNERS, 'admin', 'dokter', 'superadmin'],
-  ambulance: [...CLINIC_OWNERS, 'admin', 'dokter', 'perawat', 'superadmin'],
-
-  // Medis & Farmasi (Khusus Klinik & PetCare All-in-One - HIDDEN for PetShop)
-  clinic: [...CLINIC_OWNERS, 'admin', 'dokter', 'perawat', 'superadmin'],
-  emr: [...CLINIC_OWNERS, 'admin', 'dokter', 'perawat', 'superadmin'],
-  vaccination: [...CLINIC_OWNERS, 'admin', 'dokter', 'perawat', 'superadmin'],
-  pharmacy: [...CLINIC_OWNERS, 'admin', 'dokter', 'superadmin'],
-  carePlan: [...CLINIC_OWNERS, 'admin', 'dokter', 'perawat', 'superadmin'],
-  eForms: [...CLINIC_OWNERS, 'admin', 'dokter', 'superadmin'],
-  patientGallery: [...CLINIC_OWNERS, 'admin', 'dokter', 'perawat', 'groomer', 'superadmin'],
-
-  // Penjualan & Logistik (PetShop POS is HIDDEN for Owner Klinik)
-  petShop: [...PETSHOP_OWNERS, 'admin', 'kasir', 'superadmin'],
-  inventory: [...ALL_OWNERS, 'admin', 'kasir', 'dokter', 'superadmin'],
-  purchasing: [...ALL_OWNERS, 'admin', 'superadmin'],
-  billing: [...ALL_OWNERS, 'admin', 'kasir', 'superadmin'],
-
-  // Manajemen Bisnis
-  finance: [...ALL_OWNERS, 'admin', 'superadmin'],
-  hrm: [...ALL_OWNERS, 'admin', 'superadmin'],
-  crm: [...ALL_OWNERS, 'admin', 'superadmin'],
-
-  // Laporan & AI
-  reports: [...ALL_OWNERS, 'admin', 'superadmin'],
-  aiAssistant: [...CLINIC_OWNERS, 'admin', 'dokter', 'superadmin'],
-
-  // Sistem & Konfigurasi
-  notifications: ['*'],
-  branches: [...ALL_OWNERS, 'admin', 'superadmin'],
-  systemGroups: [...ALL_OWNERS, 'admin', 'superadmin'],
-  auditLog: [...ALL_OWNERS, 'admin', 'superadmin'],
-  settings: [...ALL_OWNERS, 'admin', 'superadmin'],
-  tenantAdmin: ['superadmin'],
-};
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -216,10 +144,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed,
   setIsCollapsed,
 }) => {
-  const { user, switchRole, logout, activeOwnership } = useAuth();
+  const { user, findAccountEmailByRole, logout } = useAuth();
   const { stockItems = [] } = useData();
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [showRoleSelector, setShowRoleSelector] = useState<boolean>(false);
+  const [pinTarget, setPinTarget] = useState<{ role: UserRole; email: string } | null>(null);
 
   // Compute number of inventory products falling below or equal to minimum stock threshold
   const lowStockCount = useMemo(() => {
@@ -230,17 +159,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }).length;
   }, [stockItems]);
 
-  // Derive effective role from user role or ownership
-  let userRole: UserRole = 'owner_klinik';
-  if (user?.role && user.role !== 'owner') {
-    userRole = user.role;
-  }
-  if (user?.ownershipType && (user.ownershipType === 'owner_klinik' || user.ownershipType === 'owner_petshop' || user.ownershipType === 'owner_petcare')) {
-    userRole = user.ownershipType as UserRole;
-  } else if (activeOwnership && (activeOwnership === 'owner_klinik' || activeOwnership === 'owner_petshop' || activeOwnership === 'owner_petcare') && (user?.role?.startsWith('owner') || user?.role === 'owner' || !user)) {
-    userRole = activeOwnership as UserRole;
-  }
-
+  // Single source of truth for role/permission resolution (see usePermissions.ts) —
+  // replaces the divergent effectiveRole logic that used to live separately here.
+  const { role: userRole } = usePermissions();
   const roleInfo = getRoleInfo(userRole);
 
   const canAccess = (allowedRoles: string[]) => {
@@ -252,10 +173,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setCollapsedGroups((prev) => ({ ...prev, [title]: !prev[title] }));
   };
 
+  // Selecting a role only opens the PIN prompt now — the switch itself
+  // (AuthContext.switchAccount) requires that persona's own PIN, verified
+  // server-side, so nobody can silently become another role with one click.
   const handleSelectRole = (newRole: UserRole) => {
-    switchRole(newRole);
+    const email = findAccountEmailByRole(newRole);
     setShowRoleSelector(false);
+    if (!email) return;
+    setPinTarget({ role: newRole, email });
+  };
 
+  const handleRoleSwitchConfirmed = (newRole: UserRole) => {
     // If current module is not allowed in new role, redirect safely
     const isAllowedInNewRole =
       MODULE_PERMISSIONS[activeModule]?.includes('*') ||
@@ -606,6 +534,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
       </div>
+
+      {pinTarget && (
+        <PinConfirmModal
+          targetLabel={getRoleInfo(pinTarget.role).label || pinTarget.role.replace('_', ' ')}
+          targetEmail={pinTarget.email}
+          onSuccess={() => {
+            handleRoleSwitchConfirmed(pinTarget.role);
+            setPinTarget(null);
+          }}
+          onCancel={() => setPinTarget(null)}
+        />
+      )}
     </aside>
   );
 };

@@ -31,7 +31,9 @@ export interface User {
   groupId?: string;
   groupName?: string;
   ownershipType?: 'owner_klinik' | 'owner_petshop' | 'owner_petcare' | 'superadmin' | 'pemilik' | string;
-  pin?: string;
+  // Note: shift PINs are intentionally NOT modeled here — they live only in
+  // the server-side hashed PIN store (server/authService.ts) and must never
+  // be shipped to the client bundle.
 }
 
 export interface Tenant {
