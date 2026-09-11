@@ -20,6 +20,8 @@ return new class extends Migration
             $table->string('name');
             $table->enum('status', ['ACTIVE', 'INACTIVE'])->default('ACTIVE');
             $table->timestamps();
+
+            $table->index('parent_id');
         });
     }
 

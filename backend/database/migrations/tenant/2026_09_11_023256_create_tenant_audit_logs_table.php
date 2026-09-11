@@ -26,6 +26,8 @@ return new class extends Migration
             $table->timestamp('created_at')->useCurrent();
 
             $table->index('event');
+            $table->index('actor_user_id');
+            $table->index('target_user_id');
         });
     }
 

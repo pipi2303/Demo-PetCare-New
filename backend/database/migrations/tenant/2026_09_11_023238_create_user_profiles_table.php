@@ -25,6 +25,9 @@ return new class extends Migration
             $table->foreignId('department_id')->nullable()->constrained('departments')->nullOnDelete();
             $table->foreignId('branch_id')->nullable()->constrained('branches')->nullOnDelete();
             $table->timestamps();
+
+            $table->index('department_id');
+            $table->index('branch_id');
         });
     }
 
