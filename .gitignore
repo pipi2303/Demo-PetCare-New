@@ -7,3 +7,4 @@ coverage/
 .env*
 !.env.example
 server/data/
+Master_Prompt_Multi_Tenant_Phase_1-10.md
