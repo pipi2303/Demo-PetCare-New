@@ -89,19 +89,11 @@ export const ExportInventoryPdfModal: React.FC<ExportInventoryPdfModalProps> = (
       const filename = `Laporan_Stok_Tren_Depresi_${warehouseFilter.replace(/\s+/g, '_')}_${periodMonth}_${periodYear}.pdf`;
       doc.save(filename);
 
-      addToast({
-        title: 'Ekspor PDF Berhasil',
-        description: `Laporan resmi manajemen "${filename}" berhasil diunduh.`,
-        type: 'success'
-      });
+      addToast(`Ekspor PDF Berhasil — laporan resmi manajemen "${filename}" berhasil diunduh.`, 'success');
       onClose();
     } catch (err: any) {
       console.error('Export PDF error:', err);
-      addToast({
-        title: 'Gagal Ekspor PDF',
-        description: err.message || 'Terjadi kendala saat menyusun dokumen PDF.',
-        type: 'error'
-      });
+      addToast(`Gagal Ekspor PDF — ${err.message || 'Terjadi kendala saat menyusun dokumen PDF.'}`, 'error');
     } finally {
       setIsGenerating(false);
     }

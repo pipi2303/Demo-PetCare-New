@@ -125,11 +125,14 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
   // Metode selain QRIS tetap staff-confirmed langsung (Tunai/Debit/Kartu
   // Kredit/Transfer Bank tidak lewat payment gateway — dicatat manual seperti
   // sebelumnya, itu memang di luar skop integrasi Midtrans).
+  const isConfirmingPaymentRef = React.useRef(false);
   const handleConfirmManualPayment = () => {
-    if (!selectedInvId) return;
+    if (!selectedInvId || isConfirmingPaymentRef.current) return;
+    isConfirmingPaymentRef.current = true;
     processPayment(selectedInvId, paymentMethod);
     setShowQrisModal(false);
     addToast(`Pembayaran Rp ${selectedInvoice?.totalAmount.toLocaleString('id-ID')} via ${paymentMethod} LUNAS!`, 'success');
+    isConfirmingPaymentRef.current = false;
   };
 
   // Membuat charge QRIS nyata via Midtrans (server/paymentService.ts). Kalau

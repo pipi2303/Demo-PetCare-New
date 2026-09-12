@@ -200,11 +200,7 @@ export const AIPOSuggestionsView: React.FC<AIPOSuggestionsViewProps> = ({
       const json = await res.json();
       if (json.success && json.data) {
         setAiAnalysisResult(json.data);
-        addToast({
-          title: 'Analisis Gemini AI Selesai',
-          description: 'Rekomendasi kuantitas PO dan strategi negosiasi distributor berhasil dimutakhirkan.',
-          type: 'success'
-        });
+        addToast('Analisis Gemini AI Selesai — rekomendasi kuantitas PO dan strategi negosiasi distributor berhasil dimutakhirkan.', 'success');
       } else {
         throw new Error('Respons tidak valid');
       }
@@ -219,11 +215,7 @@ export const AIPOSuggestionsView: React.FC<AIPOSuggestionsViewProps> = ({
           'Estimasi modal kerja pengadaan ini proporsional terhadap laju putaran stok rata-rata tanpa menciptakan penumpukan inventaris.',
         confidenceScore: 94
       });
-      addToast({
-        title: 'Analisis Peramalan Diperbarui',
-        description: 'Model estimasi kuantitas PO telah disesuaikan dengan pola tren 30 hari.',
-        type: 'info'
-      });
+      addToast('Analisis Peramalan Diperbarui — model estimasi kuantitas PO telah disesuaikan dengan pola tren 30 hari.', 'info');
     } finally {
       setIsAiLoading(false);
     }
@@ -232,11 +224,7 @@ export const AIPOSuggestionsView: React.FC<AIPOSuggestionsViewProps> = ({
   // Launch Quick PO Modal
   const handleCreatePo = () => {
     if (selectedItemsData.length === 0) {
-      addToast({
-        title: 'Pilih Item Terlebih Dahulu',
-        description: 'Tandai minimal satu item dengan kuantitas lebih dari 0 untuk membuat Purchase Order.',
-        type: 'warning'
-      });
+      addToast('Pilih Item Terlebih Dahulu — tandai minimal satu item dengan kuantitas lebih dari 0 untuk membuat Purchase Order.', 'warning');
       return;
     }
 

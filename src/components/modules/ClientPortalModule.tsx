@@ -41,6 +41,11 @@ export const ClientPortalModule: React.FC<ClientPortalModuleProps> = ({ activeMo
   const [vacBatch, setVacBatch] = useState('BATCH-2026-X9');
   const [vacDoctor, setVacDoctor] = useState('Drh. Anisa');
   const [vacNextDue, setVacNextDue] = useState('2027-08-11');
+  // Tanggal kedaluwarsa vial (dari label vaksin) — sebelumnya hardcode
+  // '2028-05-30' untuk SETIAP sertifikat vaksin apa pun batch/tanggalnya.
+  const [vacExpiryDate, setVacExpiryDate] = useState(
+    new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10)
+  );
 
   // Riwayat obat cacing & anti-parasit pasien yang sedang dipilih —
   // sebelumnya array contoh lokal, sama untuk semua pasien, tanpa tombol
@@ -85,7 +90,7 @@ export const ClientPortalModule: React.FC<ClientPortalModuleProps> = ({ activeMo
       nextDueDate: vacNextDue,
       doctorName: vacDoctor,
       batchNumber: vacBatch,
-      expiryDate: '2028-05-30',
+      expiryDate: vacExpiryDate,
       certificateNo: certNo
     });
     setShowAddVacModal(false);
@@ -351,6 +356,16 @@ export const ClientPortalModule: React.FC<ClientPortalModuleProps> = ({ activeMo
                   type="date"
                   value={vacNextDue}
                   onChange={(e) => setVacNextDue(e.target.value)}
+                  className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Kedaluwarsa Vial (dari label vaksin)</label>
+                <input
+                  type="date"
+                  value={vacExpiryDate}
+                  onChange={(e) => setVacExpiryDate(e.target.value)}
                   className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                 />
               </div>

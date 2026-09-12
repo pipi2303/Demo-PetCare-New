@@ -58,6 +58,11 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
   const [selectedPhoto, setSelectedPhoto] = useState<string>(
     'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600&auto=format&fit=crop&q=80'
   );
+  // Guard klik-ganda — handler async (menunggu sendWhatsAppNotification)
+  // tapi addMedicalRecord/addAuditLog jalan sinkron sebelum await, jadi
+  // klik ganda tanpa ini bisa menduplikasi rekam medis & audit log untuk
+  // jurnal harian yang sama, termasuk flag "PERLU PERHATIAN DOKTER".
+  const [isSendingDiary, setIsSendingDiary] = useState(false);
 
   const photoOptions = [
     { label: 'Kucing Bermain Ceria', url: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600&auto=format&fit=crop&q=80' },
@@ -67,6 +72,8 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
   ];
 
   const handleSendWhatsApp = async () => {
+    if (isSendingDiary) return;
+    setIsSendingDiary(true);
     const dateStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
     const message =
@@ -128,6 +135,7 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
         : `Membuka WhatsApp untuk mengirimkan Jurnal Harian ${currentPet?.name}...`,
       outcome.auto ? 'success' : 'info'
     );
+    setIsSendingDiary(false);
   };
 
   return (
@@ -380,10 +388,11 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
             <button
               type="button"
               onClick={handleSendWhatsApp}
-              className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+              disabled={isSendingDiary}
+              className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black rounded-xl text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
             >
               <Share2 className="w-4 h-4" />
-              <span>Kirim Jurnal Foto ke WhatsApp</span>
+              <span>{isSendingDiary ? 'Mengirim...' : 'Kirim Jurnal Foto ke WhatsApp'}</span>
             </button>
           </div>
         </div>

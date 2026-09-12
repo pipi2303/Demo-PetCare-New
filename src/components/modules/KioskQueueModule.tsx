@@ -35,6 +35,17 @@ export const KioskQueueModule: React.FC = () => {
   const [selectedPet, setSelectedPet] = useState<any>(null);
   const [complaint, setComplaint] = useState('Pemeriksaan Rutin & Konsultasi Sehat');
   const [printedTicket, setPrintedTicket] = useState<any>(null);
+  // Guard klik-ganda cetak tiket — tanpa ini, klik ganda sebelum kartu
+  // pasien hilang dari layar bisa memicu addClinicVisit dua kali untuk
+  // satu walk-in yang sama.
+  const isPrintingTicketRef = React.useRef(false);
+
+  // Jumlah antrean sungguhan yang masih di depan pasien ini (status
+  // 'Menunggu' dengan nomor lebih kecil) — sebelumnya pesan WA & label
+  // tombol selalu bilang "tersisa 2 nomor lagi" untuk SEMUA pasien apa pun
+  // posisi antrean aslinya.
+  const countVisitsAhead = (visit: any) =>
+    clinicVisits.filter((o) => o.status === 'Menunggu' && o.queueNo < visit.queueNo).length;
 
   const handleSearchCustomer = () => {
     const cust = customers.find((c) => c.phone.includes(phoneSearch) || c.name.toLowerCase().includes(phoneSearch.toLowerCase()));
@@ -53,6 +64,8 @@ export const KioskQueueModule: React.FC = () => {
       addToast('Pilih pasien terlebih dahulu.', 'error');
       return;
     }
+    if (isPrintingTicketRef.current) return;
+    isPrintingTicketRef.current = true;
 
     const newVisit = addClinicVisit({
       customerId: selectedCustomer.id,
@@ -68,6 +81,7 @@ export const KioskQueueModule: React.FC = () => {
 
     setPrintedTicket(newVisit);
     addToast(`Tiket antrean A-${newVisit.queueNo.toString().padStart(3, '0')} berhasil dicetak!`, 'success');
+    isPrintingTicketRef.current = false;
   };
 
   const handleSendWANotify = async (visit: any) => {
@@ -78,7 +92,12 @@ export const KioskQueueModule: React.FC = () => {
       addToast(`Nomor WhatsApp ${visit.customerName} tidak ditemukan di data pelanggan.`, 'error');
       return;
     }
-    const text = `Halo Kak ${visit.customerName}! 🐾 Antrean anabul ${visit.petName} (Nomor A-${visit.queueNo.toString().padStart(3, '0')}) tersisa 2 nomor lagi. Mohon bersiap menuju ke ruang periksa ${visit.doctorName || 'dokter jaga'}. Terima kasih!`;
+    const visitsAhead = countVisitsAhead(visit);
+    const queuePhrase =
+      visitsAhead <= 0
+        ? 'adalah giliran berikutnya (segera dipanggil)'
+        : `tersisa ${visitsAhead} nomor lagi`;
+    const text = `Halo Kak ${visit.customerName}! 🐾 Antrean anabul ${visit.petName} (Nomor A-${visit.queueNo.toString().padStart(3, '0')}) ${queuePhrase}. Mohon bersiap menuju ke ruang periksa ${visit.doctorName || 'dokter jaga'}. Terima kasih!`;
     const outcome = await sendWhatsAppNotification(customerPhone, text);
     addToast(
       outcome.auto
@@ -282,7 +301,7 @@ export const KioskQueueModule: React.FC = () => {
                   onClick={() => handleSendWANotify(v)}
                   className="px-3.5 py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs flex items-center gap-1.5 transition-all shrink-0"
                 >
-                  <Smartphone className="w-3.5 h-3.5 text-[#D9B98A]" /> Kirim Pesan WA (Sisa 2 Antrean)
+                  <Smartphone className="w-3.5 h-3.5 text-[#D9B98A]" /> Kirim Pesan WA (Sisa {countVisitsAhead(v)} Antrean)
                 </button>
               </div>
             ))}

@@ -458,10 +458,10 @@ export const InventoryVelocityHeatmap: React.FC<InventoryVelocityHeatmapProps> =
         </span>
         <div className="flex items-center gap-3 flex-wrap">
           <span className="flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-300">
-            <span className="w-3 h-3 rounded-md bg-emerald-600 inline-block shadow-2xs" /> Ultra-Fast (&gt;80)
+            <span className="w-3 h-3 rounded-md bg-emerald-600 inline-block shadow-2xs" /> Ultra-Fast (&ge;75)
           </span>
           <span className="flex items-center gap-1 font-semibold text-teal-700 dark:text-teal-300">
-            <span className="w-3 h-3 rounded-md bg-teal-600 inline-block shadow-2xs" /> Fast (55-79)
+            <span className="w-3 h-3 rounded-md bg-teal-600 inline-block shadow-2xs" /> Fast (55-74)
           </span>
           <span className="flex items-center gap-1 font-semibold text-sky-700 dark:text-sky-300">
             <span className="w-3 h-3 rounded-md bg-sky-600 inline-block shadow-2xs" /> Steady (35-54)

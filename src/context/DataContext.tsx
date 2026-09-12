@@ -1243,6 +1243,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const processPayment = (invId: string, method: Types.Invoice['paymentMethod'], pointsRedeemed: number = 0) => {
     const inv = invoices.find((i) => i.id === invId);
     if (!inv) return;
+    // Idempotency guard: tanpa ini, klik ganda pada "Konfirmasi Pembayaran"
+    // (atau race lain yang memanggil processPayment untuk invoice yang sama)
+    // menghitung ulang kas masuk & poin loyalti dobel untuk satu invoice.
+    if (inv.status === 'Lunas') return;
 
     const pointsEarned = Math.floor(inv.totalAmount / 10000);
 

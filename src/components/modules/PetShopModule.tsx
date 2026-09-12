@@ -144,6 +144,11 @@ export const PetShopModule: React.FC = () => {
   const [qrisMessage, setQrisMessage] = useState<string>('');
   const [pendingQrisInvoice, setPendingQrisInvoice] = useState<any>(null);
   const qrisPollRef = React.useRef<{ stop: () => void } | null>(null);
+  // Ref (bukan useState) supaya guard-nya sinkron: dua klik cepat pada
+  // tombol checkout Tunai/Debit/Transfer sebelum re-render bisa lolos dari
+  // state React yang masih versi lama, dan memicu addInvoice/addCashTransaction/
+  // deductStockForCart dobel untuk satu transaksi yang sama.
+  const isCompletingSaleRef = React.useRef(false);
 
   const stopQrisPolling = () => {
     qrisPollRef.current?.stop();
@@ -424,6 +429,8 @@ export const PetShopModule: React.FC = () => {
     }));
 
   const handleCompleteSale = () => {
+    if (isCompletingSaleRef.current) return;
+
     if (draft.cart.length === 0) {
       addToast('Keranjang belanja masih kosong.', 'error');
       return;
@@ -438,6 +445,8 @@ export const PetShopModule: React.FC = () => {
       handleStartQrisSale();
       return;
     }
+
+    isCompletingSaleRef.current = true;
 
     // Metode selain QRIS tetap staff-confirmed langsung & lunas seketika
     // (Tunai/Kartu/Transfer tidak lewat payment gateway). Catatan penting:
@@ -493,6 +502,7 @@ export const PetShopModule: React.FC = () => {
     }
 
     finishSaleUi(newInvoice, paymentMethod);
+    isCompletingSaleRef.current = false;
   };
 
   // Membuat charge QRIS nyata via Midtrans untuk transaksi POS. Invoice dibuat

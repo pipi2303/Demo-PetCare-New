@@ -448,7 +448,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
       return;
     }
     setIsSavingSOAP(true);
-
+    try {
     // Save SOAP Note
     saveSOAPNote({
       visitId: selectedVisit.id,
@@ -524,7 +524,9 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     clearDraft();
 
     addToast(`SOAP Note untuk ${selectedVisit.petName} tersimpan & draft lokal telah dibersihkan.`, 'success');
-    setIsSavingSOAP(false);
+    } finally {
+      setIsSavingSOAP(false);
+    }
   };
 
   // Canvas Handlers
