@@ -47,6 +47,11 @@ export const MasterDataModule: React.FC = () => {
   // & commission rate — everyone else can still manage the rest of the
   // staff record, but these two fields are locked.
   const canEditStaffCompensation = can('hrm', 'edit');
+  // Modul terbesar aplikasi ini tidak punya satu pun pengecekan izin pada
+  // aksi hapus (hanya window.confirm) — grup tanpa hak "Delete" tetap bisa
+  // menghapus pelanggan, pasien, layanan, staf, dst. confirmAndDelete di
+  // bawah dipakai di semua 12 titik hapus di modul ini.
+  const canDeleteMasterData = can('masterData', 'delete');
   const {
     customers = [],
     addCustomer,
@@ -99,6 +104,18 @@ export const MasterDataModule: React.FC = () => {
     branches = []
   } = useData();
   const { addToast } = useToast();
+
+  // Satu titik gerbang untuk semua aksi hapus di Master Data: cek izin grup
+  // dulu (bukan cuma window.confirm) sebelum benar-benar menjalankan hapus.
+  const confirmAndDelete = (message: string, action: () => void) => {
+    if (!canDeleteMasterData) {
+      addToast('Akun/grup Anda tidak memiliki hak "Hapus" untuk Master Data. Hubungi Owner/Admin.', 'error');
+      return;
+    }
+    if (window.confirm(message)) {
+      action();
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'customers' | 'pets' | 'services' | 'staff' | 'suppliers' | 'drugs' | 'hotelRooms' | 'groomingPackages' | 'ambulanceUnits' | 'eFormTemplates' | 'categoriesWarehouses'>('customers');
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -328,10 +345,10 @@ export const MasterDataModule: React.FC = () => {
   };
 
   const handleDeleteCustomer = (c: Customer) => {
-    if (window.confirm(`Apakah Anda yakin ingin menghapus pelanggan ${c.name}? Data hewan peliharaan terkait juga akan terpengaruh.`)) {
+    confirmAndDelete(`Apakah Anda yakin ingin menghapus pelanggan ${c.name}? Data hewan peliharaan terkait juga akan terpengaruh.`, () => {
       deleteCustomer(c.id);
       addToast(`Pelanggan ${c.name} telah dihapus!`, 'success');
-    }
+    });
   };
 
   // Pet submit
@@ -410,10 +427,10 @@ export const MasterDataModule: React.FC = () => {
   };
 
   const handleDeletePet = (p: Pet) => {
-    if (window.confirm(`Hapus pasien hewan ${p.name}?`)) {
+    confirmAndDelete(`Hapus pasien hewan ${p.name}?`, () => {
       deletePet(p.id);
       addToast(`Pasien hewan ${p.name} dihapus!`, 'success');
-    }
+    });
   };
 
   // Service submit
@@ -1562,10 +1579,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus layanan ${s.name}?`)) {
+                              confirmAndDelete(`Hapus layanan ${s.name}?`, () => {
                                 deleteService(s.id);
                                 addToast(`Layanan ${s.name} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -1640,10 +1657,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus staff ${emp.name}?`)) {
+                              confirmAndDelete(`Hapus staff ${emp.name}?`, () => {
                                 deleteEmployee(emp.id);
                                 addToast(`Staff ${emp.name} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -1714,10 +1731,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus supplier ${sup.name}?`)) {
+                              confirmAndDelete(`Hapus supplier ${sup.name}?`, () => {
                                 deleteSupplier(sup.id);
                                 addToast(`Supplier ${sup.name} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -1791,10 +1808,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus data obat ${d.name} dari master?`)) {
+                              confirmAndDelete(`Hapus data obat ${d.name} dari master?`, () => {
                                 deleteDrug(d.id);
                                 addToast(`Obat ${d.name} dihapus dari master!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -1868,10 +1885,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus kamar/kandang ${r.roomNo}?`)) {
+                              confirmAndDelete(`Hapus kamar/kandang ${r.roomNo}?`, () => {
                                 deleteHotelRoom(r.id);
                                 addToast(`Kamar/kandang ${r.roomNo} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -1947,10 +1964,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus paket grooming ${p.name}?`)) {
+                              confirmAndDelete(`Hapus paket grooming ${p.name}?`, () => {
                                 deleteGroomingPackage(p.id);
                                 addToast(`Paket grooming ${p.name} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -2025,10 +2042,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus armada ${u.vehicleName}?`)) {
+                              confirmAndDelete(`Hapus armada ${u.vehicleName}?`, () => {
                                 deleteAmbulanceUnit(u.id);
                                 addToast(`Armada ${u.vehicleName} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -2087,10 +2104,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus template e-form ${t.title}?`)) {
+                              confirmAndDelete(`Hapus template e-form ${t.title}?`, () => {
                                 deleteEFormTemplate(t.id);
                                 addToast(`Template ${t.title} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -2152,7 +2169,7 @@ export const MasterDataModule: React.FC = () => {
                     <span className="font-semibold text-[#1B2A45]">{c.name}</span>
                     <button
                       onClick={() => {
-                        if (window.confirm(`Hapus kategori "${c.name}"?`)) deleteProductCategory(c.id);
+                        confirmAndDelete(`Hapus kategori "${c.name}"?`, () => deleteProductCategory(c.id));
                       }}
                       className="p-1 hover:bg-rose-50 text-rose-600 rounded"
                     >
@@ -2206,7 +2223,7 @@ export const MasterDataModule: React.FC = () => {
                     <span className="font-semibold text-[#1B2A45]">{w.name}</span>
                     <button
                       onClick={() => {
-                        if (window.confirm(`Hapus gudang/lokasi "${w.name}"?`)) deleteWarehouse(w.id);
+                        confirmAndDelete(`Hapus gudang/lokasi "${w.name}"?`, () => deleteWarehouse(w.id));
                       }}
                       className="p-1 hover:bg-rose-50 text-rose-600 rounded"
                     >

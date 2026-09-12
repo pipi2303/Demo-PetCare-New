@@ -143,7 +143,7 @@ async function startServer() {
   // ==========================================
 
   // Get current status & schedule of background auto-backup daemon
-  app.get("/api/backup/status", (_req, res) => {
+  app.get("/api/backup/status", requireSession, (_req, res) => {
     try {
       const status = getBackupStatus();
       res.json(status);
@@ -153,7 +153,7 @@ async function startServer() {
   });
 
   // Get all snapshot logs and verification history
-  app.get("/api/backup/list", (_req, res) => {
+  app.get("/api/backup/list", requireSession, (_req, res) => {
     try {
       const list = getAllBackups();
       res.json({ backups: list });
@@ -184,7 +184,7 @@ async function startServer() {
   });
 
   // Verify SHA-256 Checksum & payload integrity of a specific snapshot
-  app.post("/api/backup/verify/:id", (req, res) => {
+  app.post("/api/backup/verify/:id", requireRole(...PRIVILEGED_ROLES), (req, res) => {
     try {
       const result = verifySnapshotIntegrity(req.params.id);
       res.json({ success: true, result });

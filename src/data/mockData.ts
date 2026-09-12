@@ -1283,7 +1283,8 @@ export const INITIAL_SYSTEM_GROUPS: SystemGroup[] = [
       { moduleId: 'reports', moduleName: 'Laporan Eksekutif & Ekspor', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
       { moduleId: 'crm', moduleName: 'CRM & Loyalty Member Club', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
       { moduleId: 'auditLog', moduleName: 'Audit Log & Keamanan Cloud', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-      { moduleId: 'branches', moduleName: 'Manajemen Multi-Cabang', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true }
+      { moduleId: 'branches', moduleName: 'Manajemen Multi-Cabang', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
+      { moduleId: 'masterData', moduleName: 'Master Data (Pelanggan, Layanan, Staf, dst)', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true }
     ]
   }
 ];

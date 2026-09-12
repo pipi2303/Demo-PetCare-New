@@ -52,7 +52,13 @@ export function usePermissions() {
   const can = (moduleId: string, action: PermissionAction = 'view'): boolean => {
     if (!canAccessModule(moduleId)) return false;
     const entry = group?.modulePermissions.find((p) => p.moduleId === moduleId);
-    if (!entry) return true;
+    // Fail-closed: kalau grup pengguna tidak punya entri eksplisit untuk
+    // modul ini, TOLAK aksi granular (create/edit/delete/approve) — bukan
+    // izinkan. Sebelumnya di sini `return true`, artinya grup akses baru
+    // yang cuma di-seed 2-3 modul otomatis dapat akses PENUH ke SEMUA modul
+    // lain yang tidak terdaftar (termasuk hrm & masterData) — kebalikan dari
+    // maksud "grup terbatas".
+    if (!entry) return false;
     switch (action) {
       case 'view':
         return entry.canView;

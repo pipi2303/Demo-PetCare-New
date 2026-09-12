@@ -112,8 +112,8 @@ export const CloudBackupModule: React.FC = () => {
     setIsLoading(true);
     try {
       const [resStatus, resList] = await Promise.all([
-        fetch('/api/backup/status').then((r) => r.json()),
-        fetch('/api/backup/list').then((r) => r.json())
+        fetch('/api/backup/status', { headers: authHeaders() }).then((r) => r.json()),
+        fetch('/api/backup/list', { headers: authHeaders() }).then((r) => r.json())
       ]);
 
       if (resStatus && !resStatus.error) {
@@ -194,7 +194,7 @@ export const CloudBackupModule: React.FC = () => {
 
   const handleVerifyChecksum = async (snapshot: BackupSnapshot) => {
     try {
-      const res = await fetch(`/api/backup/verify/${snapshot.id}`, { method: 'POST' });
+      const res = await fetch(`/api/backup/verify/${snapshot.id}`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (data.success && data.result.isValid) {
         addToast(
