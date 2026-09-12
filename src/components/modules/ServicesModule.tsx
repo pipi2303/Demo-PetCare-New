@@ -281,10 +281,19 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   };
 
   const stageOrder: Types.GroomingStage[] = ['Antri', 'Check-In', 'Proses Grooming', 'Quality Control', 'Selesai'];
+  // Guard klik-ganda — tombol "Lanjut ke Selesai" cuma disembunyikan setelah
+  // re-render, jadi dua klik cepat sebelum itu terjadi bisa memicu addInvoice
+  // dobel untuk satu sesi grooming yang sama (persis pola yang sudah
+  // diperbaiki di Check-Out Pet Hotel pada file ini).
+  const [advancingGroomingIds, setAdvancingGroomingIds] = useState<Set<string>>(new Set());
 
   const handleAdvanceGroomingStage = (session: Types.GroomingSession) => {
+    if (advancingGroomingIds.has(session.id)) return;
     const currentIndex = stageOrder.indexOf(session.stage);
     if (currentIndex < stageOrder.length - 1) {
+      if (stageOrder[currentIndex + 1] === 'Selesai') {
+        setAdvancingGroomingIds((prev) => new Set(prev).add(session.id));
+      }
       const nextStage = stageOrder[currentIndex + 1];
       updateGroomingStage(session.id, nextStage);
       addToast(`Tahapan Grooming ${session.petName} diperbarui ke: ${nextStage}`, 'info');
@@ -448,14 +457,21 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
     setTelePrescribedDrugs((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  // Guard klik-ganda — handler async (menunggu transitionOperationTelehealthSession)
+  // dan activeCallSession baru di-clear di paling akhir, jadi klik ganda
+  // sebelum itu bisa memicu addInvoice dobel untuk satu sesi konsultasi.
+  const isEndingCallRef = React.useRef(false);
   const handleEndTelehealthCall = async () => {
+    if (isEndingCallRef.current) return;
     if (activeCallSession) {
+      isEndingCallRef.current = true;
       try {
         if (activeCallSession.operationId) {
           await transitionOperationTelehealthSession(activeCallSession.operationId, 'completed', 'Konsultasi diselesaikan oleh dokter.');
         }
       } catch (error: any) {
         addToast(error.message || 'Sesi belum dapat ditutup di server.', 'error');
+        isEndingCallRef.current = false;
         return;
       }
       updateTelehealthSession(activeCallSession.id, {
@@ -491,6 +507,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
 
       addToast(`Sesi Telehealth dengan ${activeCallSession.petName} telah selesai. Catatan medis tersimpan & tagihan diterbitkan.`, 'success');
       setActiveCallSession(null);
+      isEndingCallRef.current = false;
     }
   };
 
@@ -1065,7 +1082,8 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                           {stage !== 'Selesai' && (
                             <button
                               onClick={() => handleAdvanceGroomingStage(s)}
-                              className="w-full py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-[11px] rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1 mt-1"
+                              disabled={advancingGroomingIds.has(s.id)}
+                              className="w-full py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] disabled:opacity-50 disabled:cursor-not-allowed text-[#FFFDF9] font-bold text-[11px] rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1 mt-1"
                             >
                               Lanjut ke {stageOrder[idx + 1]} <ChevronRight className="w-3 h-3 text-[#D9B98A]" />
                             </button>

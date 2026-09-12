@@ -81,6 +81,11 @@ export const InventoryAuditAssistant: React.FC = () => {
 
   // Reconciled IDs tracker
   const [reconciledIds, setReconciledIds] = useState<string[]>([]);
+  // Guard klik-ganda — kedua handler rekonsiliasi (single & bulk) memanggil
+  // updateStockItem/addStockMovement secara sinkron; dua klik cepat sebelum
+  // re-render bisa menjalankan handler dua kali dengan data auditAnalysis
+  // yang masih basi, menggandakan entri StockMovement 'Opname'.
+  const [isReconciling, setIsReconciling] = useState(false);
 
   // Compute calculated sales from invoices for each item
   const salesMap = useMemo(() => {
@@ -204,10 +209,11 @@ export const InventoryAuditAssistant: React.FC = () => {
 
   // Reconcile Single Item
   const handleExecuteReconciliation = () => {
-    if (!selectedAuditItem) return;
+    if (!selectedAuditItem || isReconciling) return;
 
     const targetStock = stockItems.find((s) => s.id === selectedAuditItem.stockItemId);
     if (!targetStock) return;
+    setIsReconciling(true);
 
     const newStockQty = customPhysicalInput;
     const diff = newStockQty - targetStock.stock;
@@ -237,15 +243,18 @@ export const InventoryAuditAssistant: React.FC = () => {
       `✅ Berhasil Rekonsiliasi: Stok "${targetStock.name}" disesuaikan ke ${newStockQty} ${targetStock.unit} (${diff >= 0 ? '+' : ''}${diff}).`,
       'success'
     );
+    setIsReconciling(false);
   };
 
   // Bulk Reconcile All Discrepancies
   const handleBulkReconcileAll = () => {
+    if (isReconciling) return;
     const unadjusted = auditAnalysis.filter((a) => a.discrepancyQty !== 0 && a.status === 'Perlu Rekonsiliasi');
     if (unadjusted.length === 0) {
       addToast('Semua item telah sesuai dan tidak ada selisih stok.', 'info');
       return;
     }
+    setIsReconciling(true);
 
     unadjusted.forEach((item) => {
       const diff = item.physicalCount - item.systemStock;
@@ -264,6 +273,7 @@ export const InventoryAuditAssistant: React.FC = () => {
 
     setReconciledIds((prev) => [...prev, ...unadjusted.map((u) => u.stockItemId)]);
     addToast(`⚡ Berhasil rekonsiliasi massal ${unadjusted.length} item barang ke hitungan fisik rak!`, 'success');
+    setIsReconciling(false);
   };
 
   // Quick Update Physical Count for an item
@@ -311,7 +321,7 @@ export const InventoryAuditAssistant: React.FC = () => {
 
             <button
               onClick={handleBulkReconcileAll}
-              disabled={totalDiscrepancies === 0}
+              disabled={totalDiscrepancies === 0 || isReconciling}
               className="px-4 py-2.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:from-[#c79e65] hover:to-[#ae8652] text-[#101A2C] font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Zap className="w-4 h-4 fill-current" />
@@ -675,7 +685,8 @@ export const InventoryAuditAssistant: React.FC = () => {
               <div className="pt-2 flex items-center gap-2">
                 <button
                   onClick={handleExecuteReconciliation}
-                  className="flex-1 py-3 bg-[#B8905A] hover:bg-[#9E7848] text-[#101A2C] font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={isReconciling}
+                  className="flex-1 py-3 bg-[#B8905A] hover:bg-[#9E7848] text-[#101A2C] font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Setujui & Rekonsiliasi Sekarang</span>

@@ -32,6 +32,10 @@ export const StockMutationModal: React.FC<StockMutationModalProps> = ({ onClose 
   const [driverName, setDriverName] = useState<string>('Agus Supriyadi (Kurir Internal)');
   const [vehiclePlate, setVehiclePlate] = useState<string>('B 9482 KVM (Blind Van)');
   const [transferNotes, setTransferNotes] = useState<string>('Transfer stok pemenuhan reorder point pakan dan antibiotik klinik cabang.');
+  // Guard klik-ganda — tanpa ini, dua klik cepat pada "Terbitkan Surat
+  // Jalan" bisa mengurangi stok & mencatat StockMovement dua kali untuk
+  // satu mutasi yang sama sebelum modal sempat ditutup (onClose).
+  const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
 
   const [transferItems, setTransferItems] = useState<
     Array<{
@@ -102,6 +106,7 @@ export const StockMutationModal: React.FC<StockMutationModalProps> = ({ onClose 
   };
 
   const handleSubmitTransfer = () => {
+    if (isSubmittingTransfer) return;
     if (sourceBranchId === destBranchId) {
       addToast('Cabang asal dan cabang tujuan tidak boleh sama!', 'error');
       return;
@@ -123,6 +128,8 @@ export const StockMutationModal: React.FC<StockMutationModalProps> = ({ onClose 
         return;
       }
     }
+
+    setIsSubmittingTransfer(true);
 
     const transferNo = `MUT-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
     const suratJalanNo = `SJ-${transferNo}`;
@@ -148,14 +155,17 @@ export const StockMutationModal: React.FC<StockMutationModalProps> = ({ onClose 
     });
 
     if (addAuditLog) {
-      addAuditLog({
-        userName: 'Logistik Pusat',
-        userRole: 'admin',
-        action: 'Tambah',
-        module: 'Inventaris / Mutasi',
-        target: `Surat Jalan Mutasi ${suratJalanNo}`,
-        details: `Mutasi stok antar cabang ${sourceBranch?.name} ➔ ${destBranch?.name} dengan ${transferItems.length} item berhasil diterbitkan.`
-      });
+      // addAuditLog menerima argumen positional (action, module, target,
+      // details, options), bukan satu objek — panggilan sebelumnya salah
+      // signature (module/target/details jatuh ke undefined di runtime,
+      // action menerima objek bukan literal union yang valid).
+      addAuditLog(
+        'Tambah',
+        'Inventaris / Mutasi',
+        `Surat Jalan Mutasi ${suratJalanNo}`,
+        `Mutasi stok antar cabang ${sourceBranch?.name} ➔ ${destBranch?.name} dengan ${transferItems.length} item berhasil diterbitkan.`,
+        { severity: 'Warning', userName: 'Logistik Pusat', userRole: 'admin' }
+      );
     }
 
     addToast(`Surat Jalan Mutasi ${suratJalanNo} berhasil dibuat dan dikirim ke Cabang ${destBranch?.name}!`, 'success');
@@ -366,7 +376,8 @@ export const StockMutationModal: React.FC<StockMutationModalProps> = ({ onClose 
           <button
             type="button"
             onClick={handleSubmitTransfer}
-            className="px-6 py-2.5 bg-gradient-to-r from-[#101A2C] via-[#16233B] to-[#B8905A] text-white font-black rounded-xl text-xs shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            disabled={isSubmittingTransfer}
+            className="px-6 py-2.5 bg-gradient-to-r from-[#101A2C] via-[#16233B] to-[#B8905A] text-white font-black rounded-xl text-xs shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="w-4 h-4 text-emerald-400" />
             Terbitkan Surat Jalan & Kirim Barang

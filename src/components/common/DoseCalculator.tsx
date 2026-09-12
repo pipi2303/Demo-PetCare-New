@@ -140,6 +140,12 @@ export const DoseCalculator: React.FC<DoseCalculatorProps> = ({
   const [showActivePrescriptionsDrawer, setShowActivePrescriptionsDrawer] = useState<boolean>(false);
   const [showEMRHistoryDrawer, setShowEMRHistoryDrawer] = useState<boolean>(false);
   const [isSavedToEMR, setIsSavedToEMR] = useState<boolean>(false);
+  // Guard klik-ganda — isSavedToEMR di atas murni kosmetik (label tombol,
+  // auto-reset 4 detik), tidak pernah dicek sebagai guard. executeSaveToEMR
+  // dipanggil dari 2 titik (tombol langsung & modal konfirmasi kontraindikasi)
+  // dan sepenuhnya sinkron memanggil addMedicalRecord — tanpa ref ini, klik
+  // ganda menggandakan entri rekam medis untuk satu pencatatan dosis yang sama.
+  const isSavingToEMRRef = React.useRef(false);
   const [lastSavedEMRInfo, setLastSavedEMRInfo] = useState<{
     timestamp: string;
     petName: string;
@@ -703,7 +709,8 @@ Catatan Klinis: ${currentSpeciesProfile.clinicalAdvice || currentSpeciesProfile.
   };
 
   const executeSaveToEMR = () => {
-    if (!activeEMRPet) return;
+    if (!activeEMRPet || isSavingToEMRRef.current) return;
+    isSavingToEMRRef.current = true;
 
     if (allergyWarning) {
       addToast(
@@ -815,6 +822,7 @@ Catatan Klinis: ${currentSpeciesProfile.clinicalAdvice || currentSpeciesProfile.
 
     setTimeout(() => {
       setIsSavedToEMR(false);
+      isSavingToEMRRef.current = false;
     }, 4000);
 
     addToast(
@@ -2235,12 +2243,12 @@ Catatan Klinis: ${currentSpeciesProfile.clinicalAdvice || currentSpeciesProfile.
                 <button
                   type="button"
                   onClick={handleSaveToEMR}
-                  disabled={currentSpeciesProfile.contraindicated}
+                  disabled={currentSpeciesProfile.contraindicated || isSavedToEMR}
                   className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all ${
                     currentSpeciesProfile.contraindicated
                       ? 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-60'
                       : isSavedToEMR
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-emerald-500/20'
+                      ? 'bg-emerald-600 text-white cursor-not-allowed shadow-emerald-500/20'
                       : 'bg-emerald-600/90 hover:bg-emerald-600 text-white cursor-pointer hover:shadow-xs'
                   }`}
                   title="Simpan dosis terhitung & posologi ke Rekam Medis (EMR) pasien"
