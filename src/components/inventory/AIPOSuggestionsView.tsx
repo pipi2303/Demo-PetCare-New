@@ -535,12 +535,24 @@ export const AIPOSuggestionsView: React.FC<AIPOSuggestionsViewProps> = ({
                         <div className="font-semibold text-slate-900">{item.name}</div>
                         <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
                           <span>{item.sku}</span>
-                          {item.aiRationale && (
+                          {/* Sebelumnya badge ini tampil terus (kondisinya
+                              selalu true karena aiRationale selalu terisi) —
+                              sekarang benar-benar menandai apakah konsumsi
+                              30 hari berasal dari mutasi kasir riil atau
+                              masih tebakan kategori. */}
+                          {item.usedEstimate ? (
                             <span
                               className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.2"
                               title={item.aiRationale}
                             >
-                              AI Insight
+                              Estimasi
+                            </span>
+                          ) : (
+                            <span
+                              className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.2"
+                              title={item.aiRationale}
+                            >
+                              Data Riil 30H
                             </span>
                           )}
                         </div>

@@ -42,7 +42,6 @@ export interface AuditDiscrepancyItem {
   discrepancyValue: number; // discrepancyQty * purchasePrice
   unitPrice: number;
   sellingPrice: number;
-  confidenceScore: number; // AI confidence percentage
   probableCause: string;
   aiRecommendation: string;
   urgency: 'Kritis' | 'Tinggi' | 'Moderat' | 'Cocok';
@@ -71,20 +70,14 @@ export const InventoryAuditAssistant: React.FC = () => {
   const [customPhysicalInput, setCustomPhysicalInput] = useState<number>(0);
   const [operatorName, setOperatorName] = useState('Kepala Logistik & Audit');
 
-  // Interactive physical audit log map state: stockId -> recorded physical count
-  const [physicalCounts, setPhysicalCounts] = useState<Record<string, number>>(() => {
-    // Initial mock physical count variance for realistic audit detection
-    return {
-      'stock-1': 18, // Royal Canin: Sys 24 -> Phys 18 (Selisih -6)
-      'stock-2': 12, // Me-O: Sys 15 -> Phys 12 (Selisih -3)
-      'stock-3': 45, // Whiskas: Sys 50 -> Phys 45 (Selisih -5)
-      'stock-4': 8,  // Bravecto: Sys 8 -> Phys 8 (Cocok)
-      'stock-5': 3,  // Nexgard: Sys 4 -> Phys 3 (Selisih -1)
-      'stock-6': 10, // Cat Litter: Sys 10 -> Phys 10 (Cocok)
-      'stock-7': 28, // Amoxicillin: Sys 35 -> Phys 28 (Selisih -7)
-      'stock-8': 14, // Shampoo: Sys 14 -> Phys 14 (Cocok)
-    };
-  });
+  // Interactive physical audit log map state: stockId -> recorded physical count.
+  // Sebelumnya di-seed dengan ID palsu ('stock-1'..'stock-8') yang TIDAK
+  // PERNAH cocok dengan stockItems.id asli (format si_<timestamp>) — jadi
+  // setiap item nyata otomatis dianggap "Cocok" (selisih 0) sampai staf
+  // mengetik ulang hitungan fisik secara manual, padahal "AI Audit Engine"
+  // ini diklaim otomatis mendeteksi penyusutan stok. Kosong di awal = jujur:
+  // belum ada opname fisik yang dicatat, bukan "semua pasti cocok".
+  const [physicalCounts, setPhysicalCounts] = useState<Record<string, number>>({});
 
   // Reconciled IDs tracker
   const [reconciledIds, setReconciledIds] = useState<string[]>([]);
@@ -124,24 +117,20 @@ export const InventoryAuditAssistant: React.FC = () => {
       let urgency: AuditDiscrepancyItem['urgency'] = 'Cocok';
       let probableCause = 'Jumlah fisik di rak gudang tepat dan sinkron dengan sistem.';
       let recommendation = 'Tidak diperlukan tindakan penyesuaian. Teruskan pemantauan stok berkala.';
-      let confidence = 98;
 
       if (diff < 0) {
         const absDiff = Math.abs(diff);
         if (absDiff >= 5 || diffVal > 300000) {
           urgency = 'Kritis';
-          confidence = 94;
           probableCause = `Terdeteksi ${absDiff} ${item.unit} fisik hilang / belum tercatat pada POS kasir atau terdapat kerusakan barang di rak (${item.warehouse}).`;
           recommendation = `Segera lakukan rekonsiliasi stok sistem ke ${recordedPhysical} ${item.unit} dan audit mutasi transaksi kasir shift terakhir.`;
         } else {
           urgency = 'Tinggi';
-          confidence = 89;
           probableCause = `Selisih minor ${absDiff} ${item.unit}. Kemungkinan sampel tester, kemasan robek, atau jeda input kasir offline.`;
           recommendation = `Lakukan 'Reconcile Now' untuk menyelaraskan nilai buku inventaris dengan hitungan fisik riil.`;
         }
       } else if (diff > 0) {
         urgency = 'Moderat';
-        confidence = 91;
         probableCause = `Stok fisik berlebih +${diff} ${item.unit}. Kemungkinan barang retur pelanggan belum diinput atau bonus supplier belum terdaftar.`;
         recommendation = `Verifikasi bukti tanda terima PO dan update saldo buku agar sesuai dengan stok rak fisik.`;
       }
@@ -162,7 +151,6 @@ export const InventoryAuditAssistant: React.FC = () => {
         discrepancyValue: diffVal,
         unitPrice: item.purchasePrice,
         sellingPrice: item.sellingPrice,
-        confidenceScore: confidence,
         probableCause,
         aiRecommendation: recommendation,
         urgency,
@@ -553,9 +541,6 @@ export const InventoryAuditAssistant: React.FC = () => {
                               Nilai Selisih: Rp {item.discrepancyValue.toLocaleString('id-ID')}
                             </p>
                           )}
-                          <div className="flex items-center gap-2 text-[10px] text-[#6B6656]">
-                            <span className="text-[#B8905A] font-semibold">AI Confidence: {item.confidenceScore}%</span>
-                          </div>
                         </div>
                       </td>
 

@@ -135,14 +135,21 @@ export const StockDepletionTrendChart: React.FC<StockDepletionTrendChartProps> =
   const allSeries: ItemDepletionSeries[] = useMemo(() => {
     if (!stockItems || stockItems.length === 0) return [];
 
+    // Jendela 30 hari asli, bukan seluruh riwayat all-time dikali 2.5 secara
+    // sembarangan — sekarang totalOutQty benar-benar mewakili penjualan 30
+    // hari terakhir begitu ada mutasi 'Keluar' nyata dari kasir.
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
     // Calculate velocity for each item to identify top-moving items
     const scoredItems = stockItems.map((item) => {
       const itemMovements = stockMovements.filter((m) => m.itemId === item.id);
-      const outgoingMoves = itemMovements.filter((m) => m.type === 'Keluar');
+      const outgoingMoves = itemMovements.filter((m) => m.type === 'Keluar' && new Date(m.date) >= thirtyDaysAgo);
       const totalOutQty = outgoingMoves.reduce((acc, m) => acc + m.quantity, 0);
 
-      // Estimate monthly demand based on category and movements
-      let monthlyDemand = totalOutQty > 0 ? totalOutQty * 2.5 : 0;
+      // Volume penjualan bulanan riil dari mutasi stok sungguhan.
+      let monthlyDemand = totalOutQty;
+      const usedEstimate = monthlyDemand === 0;
       if (monthlyDemand === 0) {
         const nameLower = item.name.toLowerCase();
         const catLower = item.category.toLowerCase();
@@ -160,7 +167,7 @@ export const StockDepletionTrendChart: React.FC<StockDepletionTrendChartProps> =
       }
 
       const velocityScore = Math.min(100, Math.round(monthlyDemand * 2.2 + (item.stock <= item.minStock ? 25 : 0)));
-      return { item, monthlyDemand, velocityScore, itemMovements };
+      return { item, monthlyDemand, velocityScore, itemMovements, usedEstimate };
     });
 
     // Sort descending by velocity score & stockout risk

@@ -34,6 +34,7 @@ export interface StockDepletionAnalysisItem {
   targetCoverageDays: number;
   aiRationale: string;
   clinicalPriority: 'Gawat Darurat' | 'Tinggi' | 'Rutin Operasional' | 'Stok Aman';
+  usedEstimate: boolean; // true kalau belum ada mutasi 'Keluar' tercatat untuk item ini, jadi konsumsi 30 hari masih tebakan berbasis kategori
 }
 
 export interface InventoryDepletionSummary {
@@ -112,6 +113,7 @@ export function calculateInventoryDepletionAndPoSuggestions(
     let monthlyDemand = recordedOutgoingQty;
     const nameLower = item.name.toLowerCase();
     const catLower = item.category.toLowerCase();
+    const usedEstimate = monthlyDemand === 0;
 
     if (monthlyDemand === 0) {
       if (catLower.includes('makanan') || nameLower.includes('royal') || nameLower.includes('food') || nameLower.includes('pro plan')) {
@@ -267,7 +269,8 @@ export function calculateInventoryDepletionAndPoSuggestions(
       suggestedPoCost,
       targetCoverageDays,
       aiRationale,
-      clinicalPriority
+      clinicalPriority,
+      usedEstimate
     };
   });
 

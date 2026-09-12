@@ -72,7 +72,8 @@ export const PetShopModule: React.FC = () => {
     addCashTransaction,
     updateStockItem,
     adjustCustomerPoints,
-    addCustomer
+    addCustomer,
+    addStockMovement
   } = useData();
   const { addToast } = useToast();
 
@@ -365,12 +366,26 @@ export const PetShopModule: React.FC = () => {
   // Execute Checkout
   // Auto-deduct stok untuk item di keranjang — dipakai setelah invoice benar
   // lunas (langsung untuk metode non-QRIS, atau setelah settlement QRIS).
-  const deductStockForCart = () => {
+  // Sebelumnya HANYA updateStockItem yang dipanggil — tidak pernah mencatat
+  // addStockMovement type:'Keluar'. Akibatnya setiap fitur "AI" inventori
+  // yang menganalisis stockMovements (Velocity Heatmap, Audit Assistant, PO
+  // Suggestions) tidak pernah punya riwayat penjualan nyata untuk dianalisis
+  // — akar masalah kenapa semua fitur itu jatuh ke rumus tebakan.
+  const deductStockForCart = (referenceNo: string) => {
     draft.cart.forEach((cartItem) => {
       const stockObj = stockItems.find((s) => s.id === cartItem.id);
       if (stockObj) {
         updateStockItem(stockObj.id, {
           stock: Math.max(0, stockObj.stock - cartItem.quantity)
+        });
+        addStockMovement({
+          itemId: stockObj.id,
+          itemName: stockObj.name,
+          type: 'Keluar',
+          quantity: cartItem.quantity,
+          fromWarehouse: stockObj.warehouse,
+          referenceNo,
+          operator: 'Kasir Pet Shop'
         });
       }
     });
@@ -464,7 +479,7 @@ export const PetShopModule: React.FC = () => {
       operator: 'Kasir Pet Shop'
     });
 
-    deductStockForCart();
+    deductStockForCart(newInvoice.invoiceNo);
 
     if (!isGuest && selectedCustomer) {
       let pointsChange = earnedPoints;
@@ -551,7 +566,7 @@ export const PetShopModule: React.FC = () => {
       !isGuest && draft.useLoyaltyPoints && pointDiscountRupiah > 0 ? Math.ceil(pointDiscountRupiah / 1000) : 0;
 
     processPayment(pendingInvoice.id, 'QRIS', pointsRedeemed);
-    deductStockForCart();
+    deductStockForCart(pendingInvoice.invoiceNo);
 
     addToast(`Pembayaran QRIS Rp ${grandTotal.toLocaleString('id-ID')} untuk ${pendingInvoice.invoiceNo} berhasil dikonfirmasi!`, 'success');
 
