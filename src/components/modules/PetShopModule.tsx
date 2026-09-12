@@ -64,7 +64,16 @@ interface PetShopDraft {
 }
 
 export const PetShopModule: React.FC = () => {
-  const { stockItems = [], customers = [], addInvoice, processPayment, updateStockItem, adjustCustomerPoints, addCustomer } = useData();
+  const {
+    stockItems = [],
+    customers = [],
+    addInvoice,
+    processPayment,
+    addCashTransaction,
+    updateStockItem,
+    adjustCustomerPoints,
+    addCustomer
+  } = useData();
   const { addToast } = useToast();
 
   // View state: 'pos' or 'analytics'
@@ -113,7 +122,18 @@ export const PetShopModule: React.FC = () => {
 
   // Payment Modal
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Tunai' | 'Kartu Debit' | 'Kartu Kredit' | 'Transfer'>('QRIS');
+  // Nilai di sini HARUS persis sama dengan union Invoice['paymentMethod'] di
+  // types.ts ('Debit', 'Transfer Bank') — sebelumnya dipakai 'Kartu Debit'/
+  // 'Transfer' yang tidak pernah cocok dengan filter di modul lain (mis.
+  // CashDrawerSettlementModal) yang membaca nilai kanonik itu.
+  const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Tunai' | 'Debit' | 'Kartu Kredit' | 'Transfer Bank'>('QRIS');
+  const paymentMethodLabels: Record<'QRIS' | 'Tunai' | 'Debit' | 'Kartu Kredit' | 'Transfer Bank', string> = {
+    QRIS: 'QRIS',
+    Tunai: 'Tunai',
+    Debit: 'Kartu Debit',
+    'Kartu Kredit': 'Kartu Kredit',
+    'Transfer Bank': 'Transfer Bank'
+  };
   const [cashPaid, setCashPaid] = useState<number>(0);
 
   // Real QRIS payment state (Midtrans). 'idle' means no QRIS charge in
@@ -404,8 +424,19 @@ export const PetShopModule: React.FC = () => {
       return;
     }
 
-    // Metode selain QRIS tetap staff-confirmed langsung & sinkron (Tunai/Kartu/
-    // Transfer tidak lewat payment gateway) — perilaku tidak berubah.
+    // Metode selain QRIS tetap staff-confirmed langsung & lunas seketika
+    // (Tunai/Kartu/Transfer tidak lewat payment gateway). Catatan penting:
+    // TIDAK bisa memanggil processPayment(newInvoice.id, ...) di sini —
+    // processPayment mencari invoice lewat `invoices.find()` dari state
+    // DataContext, dan karena addInvoice() baru saja menjadwalkan
+    // setInvoices() di tick React yang sama, closure `invoices` di sini masih
+    // versi lama (belum berisi invoice yang baru dibuat) sampai re-render
+    // berikutnya — processPayment akan diam-diam tidak menemukan invoice-nya
+    // dan tidak melakukan apa-apa. Makanya invoice dibuat langsung 'Lunas' di
+    // sini, dan addCashTransaction dipanggil langsung (fungsi ini tidak perlu
+    // mencari apa pun dari state, jadi aman dari masalah closure basi yang
+    // sama) — supaya buku kas benar-benar tercatat untuk SEMUA metode bayar,
+    // bukan cuma QRIS seperti sebelumnya.
     const isGuest = isGuestCustomer;
     const finalCustomerId = isGuest ? 'guest' : (selectedCustomer?.id || 'guest');
     const finalCustomerName = isGuest ? (guestName.trim() || 'Pelanggan Umum (Walk-in)') : (selectedCustomer?.name || 'Pelanggan Umum');
@@ -422,6 +453,15 @@ export const PetShopModule: React.FC = () => {
       status: 'Lunas',
       loyaltyPointsEarned: isGuest ? 0 : earnedPoints,
       cashierName: 'Kasir Pet Shop'
+    });
+
+    addCashTransaction({
+      type: 'Masuk',
+      category: 'Pelunasan Invoice',
+      amount: grandTotal,
+      description: `Pelunasan ${newInvoice.invoiceNo} (${finalCustomerName}) via ${paymentMethod}`,
+      referenceNo: newInvoice.invoiceNo,
+      operator: 'Kasir Pet Shop'
     });
 
     deductStockForCart();
@@ -1119,7 +1159,7 @@ export const PetShopModule: React.FC = () => {
               <div>
                 <label className="font-bold text-[#1B2A45] block mb-1">Metode Pembayaran</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {(['QRIS', 'Tunai', 'Kartu Debit', 'Kartu Kredit', 'Transfer'] as const).map((m) => (
+                  {(['QRIS', 'Tunai', 'Debit', 'Kartu Kredit', 'Transfer Bank'] as const).map((m) => (
                     <button
                       key={m}
                       onClick={() => setPaymentMethod(m)}
@@ -1131,9 +1171,9 @@ export const PetShopModule: React.FC = () => {
                     >
                       {m === 'QRIS' && <QrCode className="w-4 h-4 text-[#D9B98A]" />}
                       {m === 'Tunai' && <Banknote className="w-4 h-4 text-[#D9B98A]" />}
-                      {(m === 'Kartu Debit' || m === 'Kartu Kredit') && <CreditCard className="w-4 h-4 text-[#D9B98A]" />}
-                      {m === 'Transfer' && <Receipt className="w-4 h-4 text-[#D9B98A]" />}
-                      <span>{m}</span>
+                      {(m === 'Debit' || m === 'Kartu Kredit') && <CreditCard className="w-4 h-4 text-[#D9B98A]" />}
+                      {m === 'Transfer Bank' && <Receipt className="w-4 h-4 text-[#D9B98A]" />}
+                      <span>{paymentMethodLabels[m]}</span>
                     </button>
                   ))}
                 </div>

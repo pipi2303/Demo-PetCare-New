@@ -29,7 +29,7 @@ interface BillingFinanceModuleProps {
 }
 
 export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ activeModule = 'billing' }) => {
-  const { invoices = [], cashTransactions = [], addInvoice, processPayment, addCashTransaction } = useData();
+  const { invoices = [], cashTransactions = [], productCategories = [], addInvoice, processPayment, addCashTransaction } = useData();
   const { addToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'pos' | 'cashbook' | 'pl'>(
@@ -64,7 +64,12 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
   const [itemPrice, setItemPrice] = useState(150000);
 
   // Cashbook entry form
-  const [cashType, setCashType] = useState<'In' | 'Out'>('Out');
+  // Nilai HARUS persis 'Masuk'/'Keluar' — sama dengan union CashTransaction['type']
+  // di types.ts. Sebelumnya di sini 'In'/'Out', jadi SETIAP pencatatan kas manual
+  // (sewa, listrik, maintenance, dst — sumber utama beban operasional) tersimpan
+  // dengan type yang tidak pernah cocok dengan filter type==='Keluar' di manapun
+  // (tab Laba/Rugi, Laporan Keuangan PDF) — beban itu senyap dari kedua laporan.
+  const [cashType, setCashType] = useState<'Masuk' | 'Keluar'>('Keluar');
   const [cashCategory, setCashCategory] = useState('Operasional');
   const [cashDescription, setCashDescription] = useState('Pembelian Alat Tulis & Pembersih Klinik');
   const [cashAmount, setCashAmount] = useState(250000);
@@ -191,36 +196,48 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
     }
 
     addCashTransaction({
-      date: new Date().toISOString().substring(0, 10),
       type: cashType,
       category: cashCategory,
       description: cashDescription,
       amount: cashAmount,
-      recordedBy: 'Manager Keuangan'
+      operator: 'Manager Keuangan'
     });
 
-    addToast(`Pencatatan Kas ${cashType === 'In' ? 'Masuk' : 'Keluar'} senilai Rp ${cashAmount.toLocaleString('id-ID')} berhasil disimpan.`, 'success');
+    addToast(`Pencatatan Kas ${cashType} senilai Rp ${cashAmount.toLocaleString('id-ID')} berhasil disimpan.`, 'success');
     setCashDescription('');
     setCashAmount(100000);
   };
 
-  // Profit & Loss calculation by Business Unit
-  const unitRevenue = {
-    Klinik: 8500000,
-    Grooming: 3200000,
-    'Pet Hotel': 4100000,
-    'Pet Shop': 6800000
+  // Profit & Loss — dihitung dari invoice & buku kas sungguhan, bukan angka
+  // contoh. Pendapatan per unit bisnis dipetakan dari kategori tiap item
+  // invoice: 'Klinik'/'Grooming'/'Pet Hotel'/'Pet Shop' dipakai langsung oleh
+  // form billing manual di tab ini, 'Telehealth' (dari modul Layanan)
+  // dianggap bagian Klinik, dan kategori produk apa pun yang cocok dengan
+  // Master Data Kategori Produk (Makanan, Obat, dst — dipakai kasir Pet Shop)
+  // dianggap Pet Shop. Beban operasional TIDAK ditandai per unit di Buku Kas
+  // saat ini, jadi hanya ditampilkan sebagai total keseluruhan — memecahnya
+  // per unit tanpa data nyata hanya akan mengarang ulang angka yang sama
+  // seperti sebelumnya.
+  const productCategoryNames = new Set(productCategories.map((c) => c.name));
+  const BUSINESS_UNITS = ['Klinik', 'Grooming', 'Pet Hotel', 'Pet Shop'] as const;
+  const classifyUnit = (category: string): (typeof BUSINESS_UNITS)[number] | 'Lainnya' => {
+    if (category === 'Telehealth') return 'Klinik';
+    if ((BUSINESS_UNITS as readonly string[]).includes(category)) return category as (typeof BUSINESS_UNITS)[number];
+    if (productCategoryNames.has(category)) return 'Pet Shop';
+    return 'Lainnya';
   };
 
-  const unitExpense = {
-    Klinik: 3100000,
-    Grooming: 1100000,
-    'Pet Hotel': 1400000,
-    'Pet Shop': 4500000
-  };
+  const paidInvoices = invoices.filter((inv) => inv.status === 'Lunas');
+  const unitRevenue: Record<string, number> = { Klinik: 0, Grooming: 0, 'Pet Hotel': 0, 'Pet Shop': 0, Lainnya: 0 };
+  paidInvoices.forEach((inv) => {
+    inv.items.forEach((item) => {
+      const unit = classifyUnit(item.category);
+      unitRevenue[unit] += item.totalPrice;
+    });
+  });
 
   const totalRev = Object.values(unitRevenue).reduce((a, b) => a + b, 0);
-  const totalExp = Object.values(unitExpense).reduce((a, b) => a + b, 0);
+  const totalExp = cashTransactions.filter((ct) => ct.type === 'Keluar').reduce((sum, ct) => sum + ct.amount, 0);
   const netProfit = totalRev - totalExp;
 
   return (
@@ -425,21 +442,21 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
                         <td className="p-2.5">
                           <span
                             className={`px-2 py-0.5 rounded font-bold text-[10px] inline-flex items-center gap-1 ${
-                              tx.type === 'In' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                              tx.type === 'Masuk' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                             }`}
                           >
-                            {tx.type === 'In' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                            Kas {tx.type === 'In' ? 'Masuk' : 'Keluar'}
+                            {tx.type === 'Masuk' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                            Kas {tx.type === 'Masuk' ? 'Masuk' : 'Keluar'}
                           </span>
                         </td>
                         <td className="p-2.5 font-semibold">{tx.category}</td>
                         <td className="p-2.5">{tx.description}</td>
                         <td
                           className={`p-2.5 font-bold font-mono ${
-                            tx.type === 'In' ? 'text-emerald-700' : 'text-rose-700'
+                            tx.type === 'Masuk' ? 'text-emerald-700' : 'text-rose-700'
                           }`}
                         >
-                          {tx.type === 'In' ? '+' : '-'} Rp {tx.amount.toLocaleString('id-ID')}
+                          {tx.type === 'Masuk' ? '+' : '-'} Rp {tx.amount.toLocaleString('id-ID')}
                         </td>
                       </tr>
                     ))}
@@ -460,18 +477,18 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setCashType('Out')}
+                    onClick={() => setCashType('Keluar')}
                     className={`py-2 rounded font-bold border transition-all ${
-                      cashType === 'Out' ? 'bg-rose-800 text-white border-rose-800' : 'bg-[#F6F1E6] text-[#22242B]'
+                      cashType === 'Keluar' ? 'bg-rose-800 text-white border-rose-800' : 'bg-[#F6F1E6] text-[#22242B]'
                     }`}
                   >
                     Kas Keluar (Beban)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCashType('In')}
+                    onClick={() => setCashType('Masuk')}
                     className={`py-2 rounded font-bold border transition-all ${
-                      cashType === 'In' ? 'bg-emerald-800 text-white border-emerald-800' : 'bg-[#F6F1E6] text-[#22242B]'
+                      cashType === 'Masuk' ? 'bg-emerald-800 text-white border-emerald-800' : 'bg-[#F6F1E6] text-[#22242B]'
                     }`}
                   >
                     Kas Masuk (Injeksi)
@@ -549,14 +566,16 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
           {/* Business Unit Breakdown */}
           <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-2xs space-y-4">
             <h3 className="font-bold text-sm text-[#1B2A45] font-display border-b border-[#E1D6BE] pb-2 flex items-center gap-2">
-              <BarChart2 className="w-4 h-4 text-[#B8905A]" /> Breakdown Performa Laba Rugi Per Unit Bisnis
+              <BarChart2 className="w-4 h-4 text-[#B8905A]" /> Pendapatan Per Unit Bisnis (dari Invoice Lunas)
             </h3>
+            <p className="text-[11px] text-[#6B6656] -mt-2">
+              Beban operasional belum ditandai per unit di Buku Kas, jadi hanya ditampilkan sebagai total keseluruhan di atas — bukan dipecah per unit.
+            </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {Object.keys(unitRevenue).map((unit) => {
-                const rev = (unitRevenue as any)[unit];
-                const exp = (unitExpense as any)[unit];
-                const prof = rev - exp;
+              {BUSINESS_UNITS.map((unit) => {
+                const rev = unitRevenue[unit];
+                const share = totalRev > 0 ? (rev / totalRev) * 100 : 0;
 
                 return (
                   <div key={unit} className="p-4 rounded-xl bg-[#F6F1E6] border border-[#E1D6BE] space-y-2">
@@ -566,19 +585,20 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
                         <span className="text-[#6B6656]">Pendapatan:</span>
                         <span className="font-bold text-emerald-700">Rp {rev.toLocaleString('id-ID')}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-[#6B6656]">Pengeluaran:</span>
-                        <span className="font-semibold text-rose-700">Rp {exp.toLocaleString('id-ID')}</span>
-                      </div>
                       <div className="flex justify-between pt-2 border-t border-[#E1D6BE]">
-                        <span className="font-bold text-[#1B2A45]">Profit:</span>
-                        <span className="font-bold text-[#1B2A45]">Rp {prof.toLocaleString('id-ID')}</span>
+                        <span className="font-bold text-[#1B2A45]">Kontribusi Omzet:</span>
+                        <span className="font-bold text-[#1B2A45]">{share.toFixed(1)}%</span>
                       </div>
                     </div>
                   </div>
                 );
               })}
             </div>
+            {unitRevenue.Lainnya > 0 && (
+              <p className="text-[11px] text-[#6B6656]">
+                + Rp {unitRevenue.Lainnya.toLocaleString('id-ID')} dari kategori item invoice yang belum terpetakan ke unit manapun.
+              </p>
+            )}
           </div>
         </div>
       )}

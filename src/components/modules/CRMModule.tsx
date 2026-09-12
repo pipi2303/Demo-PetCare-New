@@ -638,7 +638,7 @@ export const CRMModule: React.FC = () => {
                 <div className="bg-[#F6F1E6] p-3 rounded-xl border border-[#E1D6BE] text-center space-y-1">
                   <p className="text-[10px] text-[#1B2A45]/70 uppercase font-bold">Saldo Poin Klien</p>
                   <p className="text-2xl font-black text-[#1B2A45]">{selectedCustomer.loyaltyPoints} Pts</p>
-                  <p className="text-[10px] text-emerald-700 font-semibold">1 Poin = Rp 100 Diskon Kasir</p>
+                  <p className="text-[10px] text-emerald-700 font-semibold">1 Poin = Rp 1.000 Diskon Kasir</p>
                 </div>
 
                 <form onSubmit={handleAdjustPoints} className="space-y-3 text-xs">

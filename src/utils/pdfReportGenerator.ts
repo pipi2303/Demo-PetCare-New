@@ -260,6 +260,7 @@ const applyDocumentFooters = (doc: jsPDF, docRefNo: string) => {
  */
 export const generateFinancialReportPDF = (
   invoices: Types.Invoice[],
+  cashTransactions: Types.CashTransaction[],
   stockItems: Types.StockItem[],
   options: FinancialReportOptions
 ): jsPDF => {
@@ -267,34 +268,47 @@ export const generateFinancialReportPDF = (
   const company = options.company || DEFAULT_COMPANY_INFO;
   const docRef = `FIN-REP/${options.periodYear}/${options.periodMonth.toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-  // Financial Calculations
-  const invoiceRevenue = invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
-  // Base monthly operational figures
-  const baseClinicRevenue = 31200000;
-  const totalRevenue = invoiceRevenue + baseClinicRevenue;
-
-  // Breakdown by unit
-  const clinicShare = Math.round(totalRevenue * 0.44);
-  const posRetailShare = Math.round(totalRevenue * 0.28);
-  const groomingShare = Math.round(totalRevenue * 0.16);
-  const hotelShare = Math.round(totalRevenue * 0.12);
-
-  // Operational Expenses
-  const payrollExpense = 6800000;
-  const drugHppExpense = 3400000;
-  const utilitiesExpense = 1600000;
-  const maintenanceExpense = 950000;
-  const marketingExpense = 750000;
-  const totalExpense = payrollExpense + drugHppExpense + utilitiesExpense + maintenanceExpense + marketingExpense;
-
-  const grossProfit = totalRevenue - drugHppExpense;
+  // Financial Calculations — murni dari invoice (status Lunas) & Buku Kas
+  // sungguhan untuk periode yang sudah difilter oleh pemanggil. Tidak ada
+  // angka tambahan/contoh di manapun dalam laporan resmi ini, karena laporan
+  // ini dipakai juga untuk estimasi kewajiban pajak sungguhan.
+  const totalRevenue = invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+  const totalExpense = cashTransactions.reduce((sum, ct) => sum + ct.amount, 0);
   const netProfit = totalRevenue - totalExpense;
-  const profitMarginPercent = ((netProfit / totalRevenue) * 100).toFixed(1);
+  const profitMarginPercent = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : '0.0';
 
   // Tax calculation (UMKM PPh Final 0.5% PP 23/2018 or customized)
   const taxRate = options.taxRatePercent ?? 0.5;
-  const estimatedTax = Math.round((totalRevenue * taxRate) / 100);
+  const estimatedTax = totalRevenue > 0 ? Math.round((totalRevenue * taxRate) / 100) : 0;
   const netProfitAfterTax = netProfit - estimatedTax;
+
+  // Pendapatan per unit bisnis — dipetakan dari kategori tiap item invoice
+  // (bukan persentase tetap 44/28/16/12% yang dikarang). Kategori produk
+  // Pet Shop dikenali lewat daftar kategori stok sungguhan; 'Telehealth'
+  // dihitung sebagai bagian Klinik.
+  const productCategoryNames = new Set(stockItems.map((s) => s.category));
+  const BUSINESS_UNITS = ['Klinik', 'Grooming', 'Pet Hotel', 'Pet Shop'] as const;
+  const classifyUnit = (category: string): (typeof BUSINESS_UNITS)[number] | 'Lainnya' => {
+    if (category === 'Telehealth') return 'Klinik';
+    if ((BUSINESS_UNITS as readonly string[]).includes(category)) return category as (typeof BUSINESS_UNITS)[number];
+    if (productCategoryNames.has(category)) return 'Pet Shop';
+    return 'Lainnya';
+  };
+  const unitRevenue: Record<string, number> = { Klinik: 0, Grooming: 0, 'Pet Hotel': 0, 'Pet Shop': 0, Lainnya: 0 };
+  invoices.forEach((inv) => {
+    inv.items.forEach((item) => {
+      unitRevenue[classifyUnit(item.category)] += item.totalPrice;
+    });
+  });
+
+  // Beban operasional per kategori — dikelompokkan dari kategori kas keluar
+  // sungguhan yang dicatat staf (Buku Kas & payroll HRM), bukan 5 pos tetap
+  // dengan nominal yang dikarang.
+  const expenseByCategory = new Map<string, number>();
+  cashTransactions.forEach((ct) => {
+    expenseByCategory.set(ct.category, (expenseByCategory.get(ct.category) || 0) + ct.amount);
+  });
+  const expenseRows = Array.from(expenseByCategory.entries()).sort((a, b) => b[1] - a[1]);
 
   // 1. Draw Kop Surat & Header
   drawOfficialLetterhead(
@@ -349,18 +363,29 @@ export const generateFinancialReportPDF = (
   doc.setTextColor(27, 42, 69);
   doc.text('I. REKAPITULASI PENDAPATAN PER UNIT BISNIS', 14, currentY);
 
+  const unitRows: string[][] = BUSINESS_UNITS.map((unit, idx) => [
+    String(idx + 1),
+    unit,
+    formatRupiah(unitRevenue[unit]),
+    totalRevenue > 0 ? `${((unitRevenue[unit] / totalRevenue) * 100).toFixed(1)}%` : '0.0%'
+  ]);
+  if (unitRevenue.Lainnya > 0) {
+    unitRows.push([
+      '—',
+      'Lainnya (kategori item belum terpetakan ke unit)',
+      formatRupiah(unitRevenue.Lainnya),
+      totalRevenue > 0 ? `${((unitRevenue.Lainnya / totalRevenue) * 100).toFixed(1)}%` : '0.0%'
+    ]);
+  }
+
   autoTable(doc, {
     startY: currentY + 2,
-    head: [['No', 'Unit Usaha / Departemen', 'Target Anggaran', 'Realisasi Pendapatan', 'Kontribusi', 'Status Kinerja']],
-    body: [
-      ['1', 'Klinik Medis, Tindakan Bedah & Rawat Inap', formatRupiah(clinicShare * 0.9), formatRupiah(clinicShare), '44.0%', 'Mencapai Target (+11.1%)'],
-      ['2', 'Pet Shop Retail, Obat & Kasir POS', formatRupiah(posRetailShare * 0.95), formatRupiah(posRetailShare), '28.0%', 'Mencapai Target (+5.3%)'],
-      ['3', 'Grooming Salon & Spa Hewan', formatRupiah(groomingShare * 1.05), formatRupiah(groomingShare), '16.0%', 'On Track (95.2%)'],
-      ['4', 'Pet Hotel Boarding & Daycare', formatRupiah(hotelShare * 0.9), formatRupiah(hotelShare), '12.0%', 'Mencapai Target (+11.1%)']
-    ],
-    foot: [
-      ['', 'TOTAL PENDAPATAN BULANAN', formatRupiah(totalRevenue * 0.94), formatRupiah(totalRevenue), '100.0%', 'PERTUMBUHAN +6.4%']
-    ],
+    head: [['No', 'Unit Usaha / Departemen', 'Realisasi Pendapatan', 'Kontribusi']],
+    body:
+      unitRows.length > 0 && totalRevenue > 0
+        ? unitRows
+        : [['-', 'Tidak ada invoice lunas pada periode ini', formatRupiah(0), '0.0%']],
+    foot: [['', 'TOTAL PENDAPATAN PERIODE INI', formatRupiah(totalRevenue), '100.0%']],
     theme: 'grid',
     headStyles: { fillColor: [27, 42, 69], textColor: [255, 253, 249], fontSize: 7.5, fontStyle: 'bold' },
     footStyles: { fillColor: [246, 241, 230], textColor: [27, 42, 69], fontSize: 8, fontStyle: 'bold' },
@@ -371,28 +396,32 @@ export const generateFinancialReportPDF = (
 
   currentY = (doc as any).lastAutoTable.finalY + 6;
 
-  // 4. Table 2: Operational Cost Structure & Profit/Loss Statement
+  // 4. Table 2: Operational Cost Structure & Profit/Loss Statement — setiap
+  // baris beban diambil dari kategori Buku Kas & payroll HRM sungguhan, bukan
+  // daftar pos tetap dengan nominal yang dikarang.
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(27, 42, 69);
   doc.text('II. RINCIAN BIAYA OPERASIONAL & LAPORAN LABA RUGI (P&L)', 14, currentY);
 
+  const expenseBodyRows: string[][] =
+    expenseRows.length > 0
+      ? expenseRows.map(([cat, amt]) => [cat, formatRupiah(amt), totalRevenue > 0 ? `${((amt / totalRevenue) * 100).toFixed(1)}%` : '-'])
+      : [['Tidak ada pengeluaran tercatat di Buku Kas pada periode ini', formatRupiah(0), '-']];
+
   autoTable(doc, {
     startY: currentY + 2,
-    head: [['Komponen Biaya / Pos Akuntansi', 'Kategori', 'Alokasi Nominal', 'Rasio thd Omzet']],
-    body: [
-      ['Gaji Dokter Hewan, Paramedis & Staff', 'Beban Tenaga Kerja (Payroll)', formatRupiah(payrollExpense), `${((payrollExpense / totalRevenue) * 100).toFixed(1)}%`],
-      ['HPP Farmasi, Obat-obatan & BMHP Medis', 'Harga Pokok Penjualan (HPP)', formatRupiah(drugHppExpense), `${((drugHppExpense / totalRevenue) * 100).toFixed(1)}%`],
-      ['Listrik, Air, Internet & Utilitas Klinik', 'Beban Utilitas & Fasilitas', formatRupiah(utilitiesExpense), `${((utilitiesExpense / totalRevenue) * 100).toFixed(1)}%`],
-      ['Pemeliharaan Alat Medis & Kandang', 'Pemeliharaan Aset', formatRupiah(maintenanceExpense), `${((maintenanceExpense / totalRevenue) * 100).toFixed(1)}%`],
-      ['Promosi, WhatsApp Gateway & Iklan', 'Beban Pemasaran & Operasional', formatRupiah(marketingExpense), `${((marketingExpense / totalRevenue) * 100).toFixed(1)}%`],
-      ['TOTAL SELURUH BEBAN OPERASIONAL', 'Total Beban Usaha', formatRupiah(totalExpense), `${((totalExpense / totalRevenue) * 100).toFixed(1)}%`],
-      ['LABA BERSIH SEBELUM PAJAK (EBIT)', 'Laba Bersih Operasional', formatRupiah(netProfit), `${profitMarginPercent}%`],
-      ['Estimasi PPh Final UMKM (0.5% PP 23/2018)', 'Kewajiban Pajak Penghasilan', formatRupiah(estimatedTax), '0.5%'],
-      ['LABA BERSIH SETELAH PAJAK (NET INCOME)', 'Laba Bersih Final', formatRupiah(netProfitAfterTax), `${((netProfitAfterTax / totalRevenue) * 100).toFixed(1)}%`]
+    head: [['Kategori Pengeluaran (Buku Kas & Payroll)', 'Nominal', 'Rasio thd Omzet']],
+    body: expenseBodyRows,
+    foot: [
+      ['TOTAL SELURUH BEBAN OPERASIONAL', formatRupiah(totalExpense), totalRevenue > 0 ? `${((totalExpense / totalRevenue) * 100).toFixed(1)}%` : '-'],
+      ['LABA BERSIH SEBELUM PAJAK (EBIT)', formatRupiah(netProfit), `${profitMarginPercent}%`],
+      [`Estimasi PPh Final UMKM (${taxRate}% PP 23/2018)`, formatRupiah(estimatedTax), `${taxRate}%`],
+      ['LABA BERSIH SETELAH PAJAK (NET INCOME)', formatRupiah(netProfitAfterTax), totalRevenue > 0 ? `${((netProfitAfterTax / totalRevenue) * 100).toFixed(1)}%` : '-']
     ],
     theme: 'grid',
     headStyles: { fillColor: [184, 144, 90], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold' },
+    footStyles: { fillColor: [246, 241, 230], textColor: [27, 42, 69], fontSize: 7.5, fontStyle: 'bold' },
     bodyStyles: { fontSize: 7.5, textColor: [34, 36, 43] },
     alternateRowStyles: { fillColor: [254, 253, 250] },
     margin: { left: 14, right: 14 }
@@ -400,26 +429,25 @@ export const generateFinancialReportPDF = (
 
   currentY = (doc as any).lastAutoTable.finalY + 6;
 
-  // 5. Table 3: Sample Registered Invoices Audit Trail
+  // 5. Table 3: Registered Invoices for the period — hanya transaksi
+  // sungguhan; kalau kosong, tampilkan baris "tidak ada transaksi" apa
+  // adanya alih-alih nama pelanggan &amp; nominal contoh yang dikarang.
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(27, 42, 69);
-  doc.text('III. AUDIT SAMPLING TRANSAKSI INVOICE BULAN INI', 14, currentY);
+  doc.text('III. DAFTAR TRANSAKSI INVOICE PERIODE INI', 14, currentY);
 
-  const sampleInvoices = invoices.slice(0, 5).map((inv, idx) => [
-    (idx + 1).toString(),
-    inv.invoiceNo || `INV-2026-${100 + idx}`,
-    inv.customerName || 'Pelanggan Umum',
-    inv.paymentMethod || 'QRIS / Debit',
-    inv.status || 'PAID',
-    formatRupiah(inv.totalAmount || 150000)
-  ]);
-
-  if (sampleInvoices.length === 0) {
-    sampleInvoices.push(['1', 'INV-2026-0801', 'Bpk. Hendra Gunawan', 'QRIS Mandiri', 'PAID', 'Rp 450.000']);
-    sampleInvoices.push(['2', 'INV-2026-0802', 'Ibu Sinta Dewi', 'Debit BCA', 'PAID', 'Rp 820.000']);
-    sampleInvoices.push(['3', 'INV-2026-0803', 'Dr. Andy Pratama', 'Transfer BCA', 'PAID', 'Rp 1.250.000']);
-  }
+  const sampleInvoices =
+    invoices.length > 0
+      ? invoices.slice(0, 5).map((inv, idx) => [
+          (idx + 1).toString(),
+          inv.invoiceNo,
+          inv.customerName,
+          inv.paymentMethod,
+          inv.status,
+          formatRupiah(inv.totalAmount || 0)
+        ])
+      : [['-', '-', 'Tidak ada transaksi invoice lunas pada periode ini', '-', '-', formatRupiah(0)]];
 
   autoTable(doc, {
     startY: currentY + 2,

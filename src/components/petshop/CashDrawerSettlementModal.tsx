@@ -68,24 +68,29 @@ export const CashDrawerSettlementModal: React.FC<CashDrawerSettlementModalProps>
     );
   }, [denom]);
 
-  // Aggregate today's sales from invoices
-  const todayInvoices = invoices.filter((inv) => inv.status === 'Lunas');
+  // Aggregate today's sales from invoices — hari ini saja (bukan sepanjang
+  // masa) supaya rekonsiliasi shift benar-benar mencerminkan uang yang masuk
+  // hari ini. Tidak ada fallback angka contoh: kalau omzet riil Rp0, tampilkan
+  // Rp0 apa adanya — alat rekonsiliasi kas tidak boleh menyembunyikan selisih
+  // sungguhan di balik angka fiktif.
+  const todayStr = new Date().toISOString().substring(0, 10);
+  const todayInvoices = invoices.filter((inv) => inv.status === 'Lunas' && inv.date === todayStr);
 
   const cashSales = todayInvoices
     .filter((inv) => inv.paymentMethod === 'Tunai')
-    .reduce((sum, inv) => sum + inv.totalAmount, 0) || 2530000;
+    .reduce((sum, inv) => sum + inv.totalAmount, 0);
 
   const qrisSales = todayInvoices
     .filter((inv) => inv.paymentMethod === 'QRIS' || inv.paymentMethod === 'GoPay' || inv.paymentMethod === 'OVO' || inv.paymentMethod === 'Dana')
-    .reduce((sum, inv) => sum + inv.totalAmount, 0) || 1840000;
+    .reduce((sum, inv) => sum + inv.totalAmount, 0);
 
   const debitCardSales = todayInvoices
     .filter((inv) => inv.paymentMethod === 'Debit' || inv.paymentMethod === 'Kartu Kredit')
-    .reduce((sum, inv) => sum + inv.totalAmount, 0) || 1420000;
+    .reduce((sum, inv) => sum + inv.totalAmount, 0);
 
   const transferSales = todayInvoices
     .filter((inv) => inv.paymentMethod === 'Transfer Bank' || inv.paymentMethod === 'Midtrans Online')
-    .reduce((sum, inv) => sum + inv.totalAmount, 0) || 650000;
+    .reduce((sum, inv) => sum + inv.totalAmount, 0);
 
   const nonCashTotal = qrisSales + debitCardSales + transferSales;
   const grandTotalSales = cashSales + nonCashTotal;
@@ -132,14 +137,13 @@ export const CashDrawerSettlementModal: React.FC<CashDrawerSettlementModalProps>
     setIsSettled(true);
 
     if (addAuditLog) {
-      addAuditLog({
-        userName: cashierName,
-        userRole: 'kasir',
-        action: 'Tambah',
-        module: 'Kasir POS / Keuangan',
-        target: `Tutup Shift Kasir ${settlementNo}`,
-        details: `Rekonsiliasi kasir shift ${shift} selesai. Total omzet POS: Rp ${grandTotalSales.toLocaleString('id-ID')}, Uang fisik kasir: Rp ${physicalCashTotal.toLocaleString('id-ID')}, Selisih: Rp ${variance.toLocaleString('id-ID')}.`
-      });
+      addAuditLog(
+        'Tambah',
+        'Kasir POS / Keuangan',
+        `Tutup Shift Kasir ${settlementNo}`,
+        `Rekonsiliasi kasir shift ${shift} selesai. Total omzet POS: Rp ${grandTotalSales.toLocaleString('id-ID')}, Uang fisik kasir: Rp ${physicalCashTotal.toLocaleString('id-ID')}, Selisih: Rp ${variance.toLocaleString('id-ID')}.`,
+        { userName: cashierName, userRole: 'kasir', severity: variance === 0 ? 'Info' : 'Kritis' }
+      );
     }
 
     addToast(`Tutup Shift & Rekonsiliasi Kasir ${settlementNo} berhasil disimpan!`, 'success');
