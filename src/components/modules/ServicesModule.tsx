@@ -340,6 +340,14 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const [feedStatus, setFeedStatus] = useState('Habis 100%');
   const [pottyStatus, setPottyStatus] = useState('Normal (Pup & Pipis)');
   const [behaviorNotes, setBehaviorNotes] = useState('Aktif bermain, tidak cemas');
+  // Petugas jaga juga diambil dari staf aktif di Master Data (Paramedik,
+  // atau siapa pun staf aktif kalau belum ada Paramedik), konsisten dengan
+  // pola dokter/groomer — sebelumnya selalu hardcode 'Perawat Dewi' apa pun
+  // staf yang sedang bertugas.
+  const eligibleHotelStaff = employees.filter((e) => e.status === 'Aktif' && (e.role === 'Paramedik' || e.role === 'Groomer'));
+  const [hotelStaffId, setHotelStaffId] = useState('');
+  const selectedHotelStaff =
+    employees.find((e) => e.id === hotelStaffId) || eligibleHotelStaff[0] || employees.find((e) => e.status === 'Aktif');
 
   const [selectedCCTV, setSelectedCCTV] = useState<string | null>(null);
   // Guard klik ganda tombol Check-Out — sebelumnya tanpa ini, staf yang
@@ -402,7 +410,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       eveningFeeding: true,
       eveningRest: true,
       notes: `${feedStatus} | ${pottyStatus} | ${behaviorNotes}`,
-      staffName: 'Perawat Dewi'
+      staffName: selectedHotelStaff?.name || 'Staf Pet Hotel'
     });
 
     addToast(`Catatan monitoring harian untuk ${res.petName} berhasil disimpan!`, 'success');
@@ -2126,6 +2134,21 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                   onChange={(e) => setBehaviorNotes(e.target.value)}
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                 />
+              </div>
+
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Petugas Jaga</label>
+                <select
+                  value={selectedHotelStaff?.id || ''}
+                  onChange={(e) => setHotelStaffId(e.target.value)}
+                  className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                >
+                  {employees.filter((e) => e.status === 'Aktif').map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} ({e.role})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">

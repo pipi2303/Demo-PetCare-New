@@ -74,7 +74,8 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
     addLabTest,
     updateLabResult,
     updatePet,
-    dispenseDrug
+    dispenseDrug,
+    addMedicalRecord
   } = useData();
 
   const { addToast } = useToast();
@@ -244,6 +245,24 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
     updateLabResult(newTest.id, results, diagDraft.labNotes);
 
     addToast(`Hasil laboratorium (${diagDraft.labType}) untuk ${selectedPet.name} tersimpan ke EMR (${newTest.testNo}).`, 'success');
+  };
+
+  // Sebelumnya cuma toast — kalkulasi dosis racikan hilang begitu etiket
+  // "dicetak", tidak pernah masuk rekam medis. Sekarang dicatat sebagai
+  // MedicalRecord seperti resep Telehealth & hasil lab yang sudah diperbaiki.
+  const handlePrintCompoundLabel = () => {
+    if (!selectedPet) return;
+    const totalMg = diagDraft.compoundWeightKg * diagDraft.compoundDosePerKg * diagDraft.compoundTotalCapsules;
+    const perCapsuleMg = diagDraft.compoundWeightKg * diagDraft.compoundDosePerKg;
+    addMedicalRecord({
+      petId: selectedPet.id,
+      date: new Date().toISOString().substring(0, 10),
+      type: 'Tindakan',
+      title: `Obat Racikan - ${diagDraft.compoundName}`,
+      description: `${diagDraft.compoundTotalCapsules} bungkus, ${perCapsuleMg.toFixed(1)} mg/bungkus (total ${totalMg.toFixed(1)} mg) untuk BB ${diagDraft.compoundWeightKg} kg.`,
+      performedBy: petSoaps[0]?.doctorName || 'Tim Medis'
+    });
+    addToast(`Etiket obat racikan "${diagDraft.compoundName}" dicetak & tercatat ke rekam medis.`, 'success');
   };
 
   const handleAddPhoto = () => {
@@ -628,7 +647,7 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
               </div>
 
               <button
-                onClick={() => addToast(`Etiket obat racikan "${diagDraft.compoundName}" berhasil dicetak!`, 'success')}
+                onClick={handlePrintCompoundLabel}
                 className="w-full py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5"
               >
                 <Printer className="w-4 h-4" /> Cetak Etiket Racikan
