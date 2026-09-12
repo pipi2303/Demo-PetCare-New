@@ -81,6 +81,8 @@ interface DataContextType {
   addVacSchedule: (vs: Omit<Types.VacSchedule, 'id'>) => void;
   vacHistories: Types.VacHistory[];
   addVacHistory: (vh: Omit<Types.VacHistory, 'id'>) => void;
+  dewormingRecords: Types.DewormingRecord[];
+  addDewormingRecord: (dr: Omit<Types.DewormingRecord, 'id'>) => Types.DewormingRecord;
 
   // Surgeries
   surgicalProcedures: Types.SurgicalProcedure[];
@@ -94,7 +96,7 @@ interface DataContextType {
   dispenseDrug: (drugId: string, qty: number) => void;
 
   labTests: Types.LabTest[];
-  addLabTest: (lt: Omit<Types.LabTest, 'id' | 'testNo' | 'status' | 'orderedAt'>) => void;
+  addLabTest: (lt: Omit<Types.LabTest, 'id' | 'testNo' | 'status' | 'orderedAt'>) => Types.LabTest;
   updateLabResult: (id: string, results: Types.LabTest['results'], notes?: string) => void;
 
   // Grooming & Hotel Ops
@@ -183,6 +185,8 @@ interface DataContextType {
   deleteEFormTemplate: (id: string) => void;
   eFormSubmissions: Types.EFormSubmission[];
   addEFormSubmission: (efs: Omit<Types.EFormSubmission, 'id' | 'date'>) => Types.EFormSubmission;
+  informedConsents: Types.InformedConsentRecord[];
+  addInformedConsent: (ic: Omit<Types.InformedConsentRecord, 'id'>) => Types.InformedConsentRecord;
 
   ambulanceUnits: Types.AmbulanceUnit[];
   addAmbulanceUnit: (u: Omit<Types.AmbulanceUnit, 'id'>) => void;
@@ -280,6 +284,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [vacSchedules, setVacSchedules] = useLocalState<Types.VacSchedule[]>('vac_schedules', Seed.INITIAL_VAC_SCHEDULES);
   const [vacHistories, setVacHistories] = useLocalState<Types.VacHistory[]>('vac_histories', Seed.INITIAL_VAC_HISTORIES);
+  const [dewormingRecords, setDewormingRecords] = useLocalState<Types.DewormingRecord[]>('deworming_records', []);
   const [surgicalProcedures, setSurgicalProcedures] = useLocalState<Types.SurgicalProcedure[]>('surgical_procedures', Seed.INITIAL_SURGICAL_PROCEDURES);
 
   const [drugs, setDrugs] = useLocalState<Types.Drug[]>('drugs', Seed.INITIAL_DRUGS);
@@ -312,6 +317,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [telehealthSessions, setTelehealthSessions] = useLocalState<Types.TelehealthSession[]>('telehealth_sessions', Seed.INITIAL_TELEHEALTH_SESSIONS);
   const [eFormTemplates, setEFormTemplates] = useLocalState<Types.EFormTemplate[]>('eform_templates', Seed.INITIAL_EFORM_TEMPLATES);
   const [eFormSubmissions, setEFormSubmissions] = useLocalState<Types.EFormSubmission[]>('eform_submissions', Seed.INITIAL_EFORM_SUBMISSIONS);
+  const [informedConsents, setInformedConsents] = useLocalState<Types.InformedConsentRecord[]>('informed_consents', []);
 
   const [ambulanceUnits, setAmbulanceUnits] = useLocalState<Types.AmbulanceUnit[]>('ambulance_units', Seed.INITIAL_AMBULANCE_UNITS);
   const [ambulanceRequests, setAmbulanceRequests] = useLocalState<Types.AmbulanceRequest[]>('ambulance_requests', Seed.INITIAL_AMBULANCE_REQUESTS);
@@ -912,6 +918,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Tambah', 'Vaksinasi & Paspor', vh.vaccineName, `Pemberian vaksin ${vh.vaccineName} (Batch: ${vh.batchNumber}) & penerbitan sertifikat ${vh.certificateNo}`, { severity: 'Warning' });
   };
 
+  const addDewormingRecord = (dr: Omit<Types.DewormingRecord, 'id'>): Types.DewormingRecord => {
+    const newRecord: Types.DewormingRecord = { ...dr, id: 'dw_' + Date.now() };
+    setDewormingRecords((prev) => [newRecord, ...prev]);
+    addAuditLog('Tambah', 'Vaksinasi & Paspor', dr.medicineName, `Pemberian obat cacing/anti-parasit ${dr.medicineName} untuk pasien, jadwal ulang berikutnya ${dr.nextDueDate}`, { severity: 'Info' });
+    return newRecord;
+  };
+
   const addSurgicalProcedure = (sp: Omit<Types.SurgicalProcedure, 'id' | 'procedureNo'>) => {
     const procedureNo = 'SURG-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(10 + Math.random() * 90);
     const newSurg: Types.SurgicalProcedure = {
@@ -990,6 +1003,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setLabTests((prev) => [newTest, ...prev]);
     addAuditLog('Tambah', 'Laboratorium & Diagnostik', newTest.testNo, `Order pemeriksaan laboratorium: ${newTest.testName} untuk pasien ${newTest.petName}`);
+    return newTest;
   };
 
   const updateLabResult = (id: string, results: Types.LabTest['results'], notes?: string) => {
@@ -1422,6 +1436,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newSub;
   };
 
+  const addInformedConsent = (ic: Omit<Types.InformedConsentRecord, 'id'>): Types.InformedConsentRecord => {
+    const newConsent: Types.InformedConsentRecord = { ...ic, id: 'ic_' + Date.now() };
+    setInformedConsents((prev) => [newConsent, ...prev]);
+    addAuditLog('Tambah', 'E-Form & Persetujuan Medis', newConsent.consentNo, `Persetujuan tindakan medis (${newConsent.procedureType}) untuk pasien ${newConsent.petName} ditandatangani oleh ${newConsent.customerName}. Hash: ${newConsent.securityHash}`, { severity: 'Kritis' });
+    return newConsent;
+  };
+
   const addAmbulanceUnit = (u: Omit<Types.AmbulanceUnit, 'id'>) => {
     const newUnit: Types.AmbulanceUnit = { ...u, id: 'au_' + Date.now() };
     setAmbulanceUnits((prev) => [...prev, newUnit]);
@@ -1571,6 +1592,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addVacSchedule,
         vacHistories,
         addVacHistory,
+        dewormingRecords,
+        addDewormingRecord,
         surgicalProcedures,
         addSurgicalProcedure,
         drugs,
@@ -1645,6 +1668,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteEFormTemplate,
         eFormSubmissions,
         addEFormSubmission,
+        informedConsents,
+        addInformedConsent,
         ambulanceUnits,
         addAmbulanceUnit,
         updateAmbulanceUnit,

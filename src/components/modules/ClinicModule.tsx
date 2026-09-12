@@ -97,6 +97,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     drugs = [],
     saveSOAPNote,
     dispenseDrug,
+    addInvoice,
     eFormTemplates = [],
     eFormSubmissions = [],
     addEFormSubmission,
@@ -181,6 +182,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
   // E-Form Signature Pad State
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [hasConsentSignature, setHasConsentSignature] = useState(false);
 
   // Care Plan Creation Modal
   const [showAddCarePlanModal, setShowAddCarePlanModal] = useState(false);
@@ -469,6 +471,43 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
       dispenseDrug(p.drugId, p.qty);
     });
 
+    // Tindakan medis yang dicentang dokter (label UI-nya sendiri bilang
+    // "Masuk Billing Klinik") sebelumnya cuma disimpan ke draft lokal dan
+    // hilang begitu SOAP disimpan — tidak pernah benar-benar ditagihkan.
+    // Sekarang diteruskan sebagai invoice 'Belum Dibayar' ke Kasir (dokter
+    // tidak menagih langsung; pelunasan tetap lewat Billing & Kasir seperti
+    // alur normal, memakai processPayment yang sama).
+    const treatmentItems = soapDraft.selectedTreatments
+      .map((id) => MEDICAL_PROCEDURES.find((proc) => proc.id === id))
+      .filter((proc): proc is (typeof MEDICAL_PROCEDURES)[number] => !!proc)
+      .map((proc) => ({
+        id: 'inv_item_' + Date.now() + Math.random(),
+        category: 'Klinik',
+        name: proc.name,
+        quantity: 1,
+        unitPrice: proc.price,
+        totalPrice: proc.price
+      }));
+
+    if (treatmentItems.length > 0) {
+      const subtotal = treatmentItems.reduce((sum, item) => sum + item.totalPrice, 0);
+      addInvoice({
+        customerId: selectedVisit.customerId,
+        customerName: selectedVisit.customerName,
+        petName: selectedVisit.petName,
+        items: treatmentItems,
+        subtotal,
+        discountAmount: 0,
+        totalAmount: subtotal,
+        paidAmount: 0,
+        paymentMethod: 'Tunai',
+        status: 'Belum Dibayar',
+        loyaltyPointsEarned: 0,
+        cashierName: selectedVisit.doctorName || 'Dokter'
+      });
+      addToast(`Tagihan tindakan medis Rp ${subtotal.toLocaleString('id-ID')} untuk ${selectedVisit.petName} diteruskan ke Kasir.`, 'success');
+    }
+
     // Mark visit finished
     updateVisitStatus(selectedVisit.id, 'Selesai');
 
@@ -506,6 +545,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     ctx.lineCap = 'round';
     ctx.lineTo(x, y);
     ctx.stroke();
+    setHasConsentSignature(true);
   };
 
   const stopDrawing = () => {
@@ -519,9 +559,19 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     if (ctx) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
+    setHasConsentSignature(false);
   };
 
   const handleSaveConsent = () => {
+    // Sebelumnya tab ini bisa menyimpan status 'Ditandatangani' walau kanvas
+    // kosong (beda dari InformedConsentModal yang mewajibkan tanda tangan
+    // terisi) — signatureData jadi data URL kosong/transparan tapi status
+    // tetap mengklaim sudah ditandatangani.
+    if (!hasConsentSignature) {
+      addToast('Harap bubuhkan tanda tangan digital pada kotak yang tersedia sebelum menyimpan persetujuan.', 'error');
+      return;
+    }
+
     const template = eFormTemplates.find((t) => t.id === soapDraft.selectedTemplateId) || eFormTemplates[0];
     const canvas = canvasRef.current;
     const signatureData = canvas ? canvas.toDataURL() : '';

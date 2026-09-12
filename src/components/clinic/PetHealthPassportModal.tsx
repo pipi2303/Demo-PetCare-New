@@ -399,20 +399,23 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-3 font-bold text-slate-900">Drontal Cat Dewormer</td>
-                      <td className="p-3 text-slate-700">2026-02-01</td>
-                      <td className="p-3 text-slate-700">1 Tablet (Sesuai BB 4kg)</td>
-                      <td className="p-3 text-slate-700">drh. Ananda Putri</td>
-                      <td className="p-3 font-bold text-indigo-600">2026-05-01</td>
-                    </tr>
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-3 font-bold text-slate-900">Revolution Plus Spot-On</td>
-                      <td className="p-3 text-slate-700">2026-02-15</td>
-                      <td className="p-3 text-slate-700">1 Pipet Tetes Tengkuk</td>
-                      <td className="p-3 text-slate-700">Ns. Siti Rahma</td>
-                      <td className="p-3 font-bold text-indigo-600">2026-03-15</td>
-                    </tr>
+                    {petDewormings.length > 0 ? (
+                      petDewormings.map((d) => (
+                        <tr key={d.id} className="hover:bg-slate-50">
+                          <td className="p-3 font-bold text-slate-900">{d.medicineName}</td>
+                          <td className="p-3 text-slate-700">{d.date}</td>
+                          <td className="p-3 text-slate-700">{d.dosage}</td>
+                          <td className="p-3 text-slate-700">{d.givenBy}</td>
+                          <td className="p-3 font-bold text-indigo-600">{d.nextDueDate}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td className="p-3 text-slate-500" colSpan={5}>
+                          Belum ada riwayat pemberian obat cacing/anti-parasit untuk pasien ini.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

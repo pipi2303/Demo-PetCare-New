@@ -32,7 +32,7 @@ export const InformedConsentModal: React.FC<InformedConsentModalProps> = ({
   defaultPetId,
   defaultDoctorName = 'drh. Ananda Putri'
 }) => {
-  const { pets = [], customers = [], addAuditLog, addMedicalRecord } = useData();
+  const { pets = [], customers = [], addMedicalRecord, addInformedConsent } = useData();
   const { addToast } = useToast();
 
   const selectedPet = pets.find((p) => p.id === defaultPetId) || pets[0];
@@ -158,8 +158,12 @@ export const InformedConsentModal: React.FC<InformedConsentModalProps> = ({
     const consentNo = `IC-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
     const securityHash = generateSecurityHash();
 
-    const newRecord: InformedConsentRecord = {
-      id: `ic_${Date.now()}`,
+    // Sebelumnya dokumen ini (termasuk gambar tanda tangan & hash keamanan)
+    // hanya disimpan ke useState lokal komponen — hilang begitu modal
+    // ditutup atau halaman di-refresh, walau UI mengklaim "tersimpan
+    // permanen". Sekarang benar-benar disimpan lewat addInformedConsent ke
+    // DataContext (localStorage), jadi bisa dibuka ulang kapan saja.
+    const newRecord = addInformedConsent({
       consentNo,
       petId: currentPet?.id || '',
       petName: currentPet?.name || 'Pasien',
@@ -179,7 +183,7 @@ export const InformedConsentModal: React.FC<InformedConsentModalProps> = ({
       witnessName,
       status: 'Ditandatangani',
       securityHash
-    };
+    });
 
     setSavedConsent(newRecord);
 
@@ -192,18 +196,6 @@ export const InformedConsentModal: React.FC<InformedConsentModalProps> = ({
         title: `Informed Consent Digital: ${procedureType}`,
         description: `Persetujuan Tindakan Medis (${consentNo}) telah ditandatangani secara elektronik oleh ${currentOwner?.name}. Verifikasi Hash: ${securityHash}. Tindakan: ${procedureDetails}`,
         performedBy: doctorName
-      });
-    }
-
-    // Add Audit Log
-    if (addAuditLog) {
-      addAuditLog({
-        userName: doctorName,
-        userRole: 'dokter',
-        action: 'Tambah',
-        module: 'Klinik / EMR',
-        target: `Informed Consent ${consentNo}`,
-        details: `Dokumen persetujuan ${procedureType} untuk pasien ${currentPet?.name} (${currentOwner?.name}) berhasil diverifikasi & ditandatangani.`
       });
     }
 

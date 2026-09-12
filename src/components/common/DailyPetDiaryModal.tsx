@@ -86,17 +86,40 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `💖 _Anabul Anda kami rawat dengan penuh kasih sayang seperti keluarga sendiri!_`;
 
+    // Sebelumnya jurnal harian ini hanya dikirim sebagai teks WhatsApp lalu
+    // hilang — addMedicalRecord sudah di-destructure dari context tapi tak
+    // pernah dipanggil. Tanda bahaya (mis. diare, tidak mau makan, lemas)
+    // yang dicatat staf boarding tidak pernah terlihat dokter di EMR pasien
+    // nanti. Sekarang disimpan permanen ke rekam medis pasien juga.
+    const warningFlags: string[] = [];
+    if (defecation === 'Diare') warningFlags.push('BAB diare/cair');
+    if (appetite === 'Tidak Mau Makan') warningFlags.push('tidak mau makan');
+    if (mood === 'Lemas') warningFlags.push('lemas');
+    if (urination === 'Keruh / Tidak Lancar') warningFlags.push('urin keruh/tidak lancar');
+    const warningPrefix = warningFlags.length > 0 ? `⚠️ PERLU PERHATIAN DOKTER (${warningFlags.join(', ')}). ` : '';
+
+    if (addMedicalRecord && currentPet) {
+      addMedicalRecord({
+        petId: currentPet.id,
+        date: new Date().toISOString().substring(0, 10),
+        type: serviceType === 'Grooming' ? 'Grooming' : serviceType === 'Rawat Inap' ? 'Rawat Inap' : 'Kunjungan',
+        title: `Jurnal Harian ${serviceType} - ${currentPet.name}`,
+        description: `${warningPrefix}Nafsu makan: ${appetite}. BAK: ${urination}. BAB: ${defecation}. Mood: ${mood}. Suhu: ${temperatureC}°C. ${medicationGiven ? `Obat/vitamin: ${medicationGiven}. ` : ''}Catatan caretaker: ${staffNotes}`,
+        performedBy: staffName,
+        attachments: [selectedPhoto]
+      });
+    }
+
     const outcome = await sendWhatsAppNotification(customPhone, message);
 
     if (addAuditLog) {
-      addAuditLog({
-        userName: staffName,
-        userRole: 'perawat',
-        action: 'Tambah',
-        module: 'Pet Hotel / CRM',
-        target: `Jurnal Harian ${currentPet?.name}`,
-        details: `Jurnal harian foto ${serviceType} untuk ${currentPet?.name} berhasil dikirimkan ke WhatsApp pemilik (${customPhone}).`
-      });
+      addAuditLog(
+        'Tambah',
+        'Pet Hotel / CRM',
+        `Jurnal Harian ${currentPet?.name}`,
+        `Jurnal harian foto ${serviceType} untuk ${currentPet?.name} disimpan ke EMR & dikirimkan ke WhatsApp pemilik (${customPhone}).`,
+        { userName: staffName, userRole: 'perawat', severity: warningFlags.length > 0 ? 'Warning' : 'Info' }
+      );
     }
 
     addToast(

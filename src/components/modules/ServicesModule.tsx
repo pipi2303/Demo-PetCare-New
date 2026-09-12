@@ -74,6 +74,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
     groomingSessions = [],
     addGroomingSession,
     updateGroomingStage,
+    groomingPackages = [],
     hotelReservations = [],
     hotelRooms = [],
     addHotelReservation,
@@ -90,7 +91,10 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
     addAmbulanceRequest,
     updateAmbulanceStatus,
     updateAmbulanceUnit,
-    addClinicVisit
+    addClinicVisit,
+    drugs = [],
+    dispenseDrug,
+    addMedicalRecord
   } = useData();
 
   const { addToast } = useToast();
@@ -236,17 +240,39 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
 
     const cust = customers.find((c) => c.id === pet.customerId);
 
+    // Ukuran hewan sebelumnya selalu di-hardcode 'Medium'; sekarang
+    // diperkirakan dari berat badan sungguhan. Harga sebelumnya juga selalu
+    // pakai tarif tetap di kode — sekarang dicari dari paket Master Data
+    // Grooming (per ukuran hewan) kalau tersedia & aktif, supaya perubahan
+    // harga lewat Master Data ikut berlaku di sini. Tarif tetap tetap
+    // dipertahankan sebagai fallback kalau paket belum dikonfigurasi.
+    const petSize: 'Small' | 'Medium' | 'Large' = pet.weightKg < 10 ? 'Small' : pet.weightKg <= 25 ? 'Medium' : 'Large';
+    const masterPackage = groomingPackages.find((gp) => gp.packageType === groomingPackage && gp.isActive);
+    const price = masterPackage
+      ? petSize === 'Small'
+        ? masterPackage.priceSmall
+        : petSize === 'Large'
+        ? masterPackage.priceLarge
+        : masterPackage.priceMedium
+      : groomingPackage === 'Basic'
+      ? 75000
+      : groomingPackage === 'Regular'
+      ? 120000
+      : groomingPackage === 'Premium'
+      ? 180000
+      : 250000;
+
     addGroomingSession({
       petId: pet.id,
       petName: pet.name,
       customerName: cust?.name || 'Pelanggan',
       packageType: groomingPackage,
-      petSize: 'Medium',
+      petSize,
       groomerName: groomer.name,
       stage: 'Antri',
       date: new Date().toISOString().split('T')[0],
       timeSlot: '11:00',
-      price: groomingPackage === 'Basic' ? 75000 : groomingPackage === 'Regular' ? 120000 : groomingPackage === 'Premium' ? 180000 : 250000,
+      price,
       notes: coatNotes
     });
 
@@ -262,6 +288,40 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       const nextStage = stageOrder[currentIndex + 1];
       updateGroomingStage(session.id, nextStage);
       addToast(`Tahapan Grooming ${session.petName} diperbarui ke: ${nextStage}`, 'info');
+
+      // Sesi grooming sebelumnya tidak pernah membuat invoice sama sekali —
+      // pelanggan selesai grooming tanpa tagihan yang pernah tercatat di
+      // sistem finance manapun. Sekarang saat tahap "Selesai" tercapai,
+      // tagihan 'Belum Dibayar' diteruskan ke Kasir (Billing & Kasir),
+      // dilunaskan lewat processPayment seperti alur normal.
+      if (nextStage === 'Selesai') {
+        const pet = pets.find((p) => p.id === session.petId);
+        const cust = customers.find((c) => c.id === pet?.customerId);
+        addInvoice({
+          customerId: cust?.id || 'guest',
+          customerName: session.customerName,
+          petName: session.petName,
+          items: [
+            {
+              id: 'inv_item_' + Date.now() + Math.random(),
+              category: 'Grooming',
+              name: `Grooming ${session.packageType} - ${session.petName}`,
+              quantity: 1,
+              unitPrice: session.price,
+              totalPrice: session.price
+            }
+          ],
+          subtotal: session.price,
+          discountAmount: 0,
+          totalAmount: session.price,
+          paidAmount: 0,
+          paymentMethod: 'Tunai',
+          status: 'Belum Dibayar',
+          loyaltyPointsEarned: 0,
+          cashierName: session.groomerName
+        });
+        addToast(`Tagihan grooming Rp ${session.price.toLocaleString('id-ID')} untuk ${session.petName} diteruskan ke Kasir.`, 'success');
+      }
     }
   };
 
@@ -354,6 +414,23 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const [teleNotes, setTeleNotes] = useState('Pasien tampak lemas, nafsu makan menurun sejak 2 hari lalu.');
   const [teleDiagnosis, setTeleDiagnosis] = useState('Suspek Dehidrasi Ringan / Gastritis');
   const [telePrescription, setTelePrescription] = useState('Nutrimax Pet Syrup 1x5ml, Probiotik Vet 1x sachet');
+  // Resep Telehealth sebelumnya cuma teks bebas dikirim via WA — stok obat
+  // apotek tidak pernah berkurang & tidak bisa direkonsiliasi. Daftar
+  // terstruktur ini (obat + qty dari master Apotek) dipakai untuk benar-benar
+  // memotong stok lewat dispenseDrug saat resep dikirim.
+  const [telePrescribedDrugs, setTelePrescribedDrugs] = useState<{ drugId: string; drugName: string; qty: number }[]>([]);
+  const [teleDrugPickId, setTeleDrugPickId] = useState<string>(drugs[0]?.id || '');
+  const [teleDrugPickQty, setTeleDrugPickQty] = useState<number>(1);
+
+  const handleAddTeleDrug = () => {
+    const drug = drugs.find((d) => d.id === teleDrugPickId);
+    if (!drug) return;
+    setTelePrescribedDrugs((prev) => [...prev, { drugId: drug.id, drugName: drug.name, qty: teleDrugPickQty }]);
+  };
+
+  const handleRemoveTeleDrug = (idx: number) => {
+    setTelePrescribedDrugs((prev) => prev.filter((_, i) => i !== idx));
+  };
 
   const handleEndTelehealthCall = async () => {
     if (activeCallSession) {
@@ -1107,8 +1184,37 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                   </button>
                   <button
                     onClick={() => {
+                      // Reservasi Pet Hotel sebelumnya tidak pernah membuat
+                      // invoice sama sekali — tamu check-out tanpa tagihan
+                      // yang pernah tercatat. Sekarang diteruskan ke Kasir
+                      // sebagai invoice 'Belum Dibayar' saat check-out.
+                      const pet = pets.find((p) => p.id === res.petId);
+                      const cust = customers.find((c) => c.id === pet?.customerId);
+                      addInvoice({
+                        customerId: cust?.id || 'guest',
+                        customerName: res.customerName,
+                        petName: res.petName,
+                        items: [
+                          {
+                            id: 'inv_item_' + Date.now() + Math.random(),
+                            category: 'Pet Hotel',
+                            name: `Boarding ${res.roomType} (${res.totalNights} malam) - ${res.petName}`,
+                            quantity: res.totalNights,
+                            unitPrice: res.dailyRate,
+                            totalPrice: res.totalCost
+                          }
+                        ],
+                        subtotal: res.totalCost,
+                        discountAmount: 0,
+                        totalAmount: res.totalCost,
+                        paidAmount: 0,
+                        paymentMethod: 'Tunai',
+                        status: 'Belum Dibayar',
+                        loyaltyPointsEarned: 0,
+                        cashierName: 'Staf Pet Hotel'
+                      });
                       updateHotelStatus(res.id, 'Selesai');
-                      addToast(`Pasien ${res.petName} telah berhasil Check-Out.`, 'success');
+                      addToast(`Pasien ${res.petName} check-out. Tagihan Rp ${res.totalCost.toLocaleString('id-ID')} diteruskan ke Kasir.`, 'success');
                     }}
                     className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-2xs transition-all"
                   >
@@ -1219,8 +1325,8 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                         <span className="bg-black/60 px-3 py-1 rounded-full text-[#D9B98A] font-bold border border-[#B8905A]/40">
                           HD 1080p | Latency 18ms
                         </span>
-                        <span className="bg-emerald-600/80 px-2.5 py-0.5 rounded text-white font-bold text-[10px]">
-                          Vitals: Detak Jantung 110 bpm | Temp 38.5°C
+                        <span className="bg-amber-600/80 px-2.5 py-0.5 rounded text-white font-bold text-[10px]">
+                          Vitals tidak terukur otomatis — catat manual dari observasi visual di kolom Anamnesa
                         </span>
                       </div>
 
@@ -1266,13 +1372,56 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[#EDE6D6]/80 font-medium">Resep Obat Digital (E-Prescription)</label>
+                    <label className="text-[#EDE6D6]/80 font-medium">Resep Obat Digital (E-Prescription) — Instruksi Pakai</label>
                     <textarea
                       rows={2}
                       value={telePrescription}
                       onChange={(e) => setTelePrescription(e.target.value)}
                       className="w-full p-2 bg-[#101A2C] rounded-lg border border-[#B8905A]/30 text-white focus:outline-none focus:border-[#B8905A]"
                     />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[#EDE6D6]/80 font-medium">Obat dari Stok Apotek (memotong stok saat dikirim)</label>
+                    <div className="flex gap-1.5">
+                      <select
+                        value={teleDrugPickId}
+                        onChange={(e) => setTeleDrugPickId(e.target.value)}
+                        className="flex-1 p-2 bg-[#101A2C] rounded-lg border border-[#B8905A]/30 text-white text-xs"
+                      >
+                        {drugs.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name} (Stok: {d.stock} {d.unit})
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min={1}
+                        value={teleDrugPickQty}
+                        onChange={(e) => setTeleDrugPickQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-16 p-2 bg-[#101A2C] rounded-lg border border-[#B8905A]/30 text-white text-xs text-center"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddTeleDrug}
+                        className="px-3 bg-[#B8905A]/30 hover:bg-[#B8905A]/50 text-[#D9B98A] rounded-lg text-xs font-bold"
+                      >
+                        + Tambah
+                      </button>
+                    </div>
+                    {telePrescribedDrugs.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        {telePrescribedDrugs.map((rx, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-[#101A2C] px-2.5 py-1.5 rounded-lg text-[11px]">
+                            <span className="text-white">{rx.drugName} × {rx.qty}</span>
+                            <button type="button" onClick={() => handleRemoveTeleDrug(idx)} className="text-rose-400 hover:text-rose-300 font-bold">
+                              Hapus
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -1283,6 +1432,23 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                         addToast('Nomor WhatsApp pelanggan tidak ditemukan di data pelanggan.', 'error');
                         return;
                       }
+
+                      // Potong stok apotek untuk tiap obat terstruktur & catat
+                      // ke rekam medis pasien — sebelumnya resep cuma teks WA
+                      // yang hilang begitu terkirim, stok tidak pernah
+                      // berkurang.
+                      telePrescribedDrugs.forEach((rx) => dispenseDrug(rx.drugId, rx.qty));
+                      if (addMedicalRecord) {
+                        addMedicalRecord({
+                          petId: activeCallSession.petId,
+                          date: new Date().toISOString().substring(0, 10),
+                          type: 'Tindakan',
+                          title: `Resep Telehealth - ${activeCallSession.petName}`,
+                          description: `Diagnosa sementara: ${teleDiagnosis}. Instruksi: ${telePrescription}.${telePrescribedDrugs.length > 0 ? ` Obat dipotong dari stok apotek: ${telePrescribedDrugs.map((rx) => `${rx.drugName} x${rx.qty}`).join(', ')}.` : ''}`,
+                          performedBy: activeCallSession.doctorName
+                        });
+                      }
+
                       const text = `Halo Kak ${activeCallSession.customerName}! 🐾 Resep digital untuk ${activeCallSession.petName} dari sesi Telehealth:\n\n${telePrescription}\n\nSilakan tebus di Apotek Klinik PetCare. Terima kasih!`;
                       const outcome = await sendWhatsAppNotification(cust.phone, text);
                       addToast(
