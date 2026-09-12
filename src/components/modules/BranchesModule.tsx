@@ -41,7 +41,10 @@ export const BranchesModule: React.FC = () => {
     deleteBranch,
     interBranchTransfers = [],
     addInterBranchTransfer,
-    markInterBranchTransferReceived
+    markInterBranchTransferReceived,
+    invoices = [],
+    clinicVisits = [],
+    pets = []
   } = useData();
   const { addToast } = useToast();
   const { user } = useAuth();
@@ -77,6 +80,33 @@ export const BranchesModule: React.FC = () => {
   const [transferStockItemId, setTransferStockItemId] = useState(stockItems[0]?.id || '');
   const [transferQty, setTransferQty] = useState<number>(5);
   const selectedTransferStock = stockItems.find((s) => s.id === transferStockItemId);
+
+  // Analisis & Performa — dulu 3 kartu per-cabang dengan omset/pasien/growth
+  // hardcoded (nama cabangnya bahkan tidak cocok dengan data cabang asli).
+  // Invoice & CashTransaction tidak punya field branchId sama sekali di
+  // seluruh aplikasi, jadi omset TIDAK BISA dipecah per cabang secara jujur
+  // saat ini — diganti kartu konsolidasi seluruh jaringan dari data nyata,
+  // dengan catatan eksplisit soal keterbatasan ini (bukan angka karangan).
+  const todayStr = new Date().toISOString().substring(0, 10);
+  const thisMonthKey = todayStr.slice(0, 7);
+  const lastMonthDate = new Date();
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  const lastMonthKey = lastMonthDate.toISOString().slice(0, 7);
+
+  const revenueThisMonth = invoices
+    .filter((i) => i.status === 'Lunas' && i.date?.startsWith(thisMonthKey))
+    .reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+  const revenueLastMonth = invoices
+    .filter((i) => i.status === 'Lunas' && i.date?.startsWith(lastMonthKey))
+    .reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+  const revenueGrowthPercent =
+    revenueLastMonth > 0
+      ? Math.round(((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100)
+      : revenueThisMonth > 0
+      ? 100
+      : 0;
+  const paidInvoicesThisMonth = invoices.filter((i) => i.status === 'Lunas' && i.date?.startsWith(thisMonthKey)).length;
+  const activeClinicQueueToday = clinicVisits.filter((v) => v.status !== 'Selesai' && v.status !== 'Batal').length;
 
   const resetBranchForm = () => {
     setNewBranchName('');
@@ -399,41 +429,58 @@ export const BranchesModule: React.FC = () => {
 
       {/* TAB 3: Performance Analytics */}
       {activeTab === 'analytics' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
-            <h4 className="font-bold text-xs text-[#1B2A45] uppercase tracking-wider">Klinik Utama Kemang</h4>
-            <div className="space-y-1">
-              <span className="text-2xl font-black text-[#1B2A45] font-display">Rp 48.500.000</span>
-              <p className="text-[11px] text-[#6B6656]">Omset Bulan Berjalan (124 Pasien)</p>
-            </div>
-            <div className="w-full bg-[#E1D6BE]/40 h-2 rounded-full overflow-hidden">
-              <div className="bg-[#B8905A] h-full rounded-full" style={{ width: '85%' }} />
-            </div>
-            <span className="text-[10px] text-emerald-700 font-bold block">↑ +14% vs bulan lalu</span>
+        <div className="space-y-4">
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs text-amber-900">
+            <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p>
+              <strong>Data konsolidasi seluruh jaringan, bukan per cabang.</strong> Invoice & transaksi kas belum
+              ditandai cabangnya di mana pun dalam sistem, sehingga omset tidak bisa dipecah secara jujur per cabang
+              saat ini. Angka di bawah dihitung langsung dari data invoice, antrean, dan pasien sungguhan.
+            </p>
           </div>
 
-          <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
-            <h4 className="font-bold text-xs text-[#1B2A45] uppercase tracking-wider">Klinik & Pet Care BSD</h4>
-            <div className="space-y-1">
-              <span className="text-2xl font-black text-[#1B2A45] font-display">Rp 31.200.000</span>
-              <p className="text-[11px] text-[#6B6656]">Omset Bulan Berjalan (78 Pasien)</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-[#6B6656]">
+                <span className="text-[11px] font-bold uppercase tracking-wider">Omset Bulan Berjalan</span>
+                <TrendingUp className="w-4 h-4 text-[#B8905A]" />
+              </div>
+              <span className="text-xl font-black text-[#1B2A45] font-display block">
+                Rp {revenueThisMonth.toLocaleString('id-ID')}
+              </span>
+              <span className={`text-[10px] font-bold block ${revenueGrowthPercent >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {revenueGrowthPercent >= 0 ? '↑' : '↓'} {Math.abs(revenueGrowthPercent)}% vs bulan lalu (Rp {revenueLastMonth.toLocaleString('id-ID')})
+              </span>
             </div>
-            <div className="w-full bg-[#E1D6BE]/40 h-2 rounded-full overflow-hidden">
-              <div className="bg-[#6BA3BE] h-full rounded-full" style={{ width: '62%' }} />
-            </div>
-            <span className="text-[10px] text-emerald-700 font-bold block">↑ +8% vs bulan lalu</span>
-          </div>
 
-          <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
-            <h4 className="font-bold text-xs text-[#1B2A45] uppercase tracking-wider">Express Kelapa Gading</h4>
-            <div className="space-y-1">
-              <span className="text-2xl font-black text-[#1B2A45] font-display">Rp 18.900.000</span>
-              <p className="text-[11px] text-[#6B6656]">Omset Bulan Berjalan (52 Pasien)</p>
+            <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-[#6B6656]">
+                <span className="text-[11px] font-bold uppercase tracking-wider">Invoice Lunas Bulan Ini</span>
+                <Package className="w-4 h-4 text-[#B8905A]" />
+              </div>
+              <span className="text-xl font-black text-[#1B2A45] font-display block">{paidInvoicesThisMonth} Transaksi</span>
+              <span className="text-[10px] text-[#6B6656] block">Seluruh unit bisnis (klinik, pet shop, grooming, hotel)</span>
             </div>
-            <div className="w-full bg-[#E1D6BE]/40 h-2 rounded-full overflow-hidden">
-              <div className="bg-[#D97757] h-full rounded-full" style={{ width: '45%' }} />
+
+            <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-[#6B6656]">
+                <span className="text-[11px] font-bold uppercase tracking-wider">Antrean Klinik Aktif</span>
+                <Calendar className="w-4 h-4 text-[#B8905A]" />
+              </div>
+              <span className="text-xl font-black text-[#1B2A45] font-display block">{activeClinicQueueToday} Pasien</span>
+              <span className="text-[10px] text-[#6B6656] block">Sedang menunggu / diperiksa saat ini</span>
             </div>
-            <span className="text-[10px] text-emerald-700 font-bold block">↑ +21% vs bulan lalu</span>
+
+            <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-[#6B6656]">
+                <span className="text-[11px] font-bold uppercase tracking-wider">Cabang Aktif</span>
+                <Store className="w-4 h-4 text-[#B8905A]" />
+              </div>
+              <span className="text-xl font-black text-[#1B2A45] font-display block">
+                {allBranches.filter((b) => b.isActive).length} / {allBranches.length}
+              </span>
+              <span className="text-[10px] text-[#6B6656] block">{pets.length} pasien hewan terdaftar di jaringan</span>
+            </div>
           </div>
         </div>
       )}
