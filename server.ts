@@ -36,6 +36,15 @@ import {
   verifyWebhookSignature,
   applyWebhookNotification
 } from "./server/paymentService";
+import {
+  createAmbulanceRequest,
+  createTelehealthSession,
+  initOperationsService,
+  listOperations,
+  registerAmbulanceUnit,
+  transitionAmbulanceRequest,
+  transitionTelehealthSession
+} from "./server/operationsService";
 
 async function startServer() {
   const app = express();
@@ -51,6 +60,9 @@ async function startServer() {
 
   // Initialize in-memory session store cleanup daemon
   initSessionService();
+
+  // Persistent server-side operational state for the safety-critical service flows.
+  initOperationsService();
 
   // Reads the "Authorization: Bearer <token>" header and attaches the
   // resolved session (email/role) to the request, or responds 401 if the
@@ -89,6 +101,41 @@ async function startServer() {
   // API Health Endpoint
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", service: "PetCare ERP Backend", time: new Date().toISOString() });
+  });
+
+  // ==========================================
+  // TELEHEALTH & AMBULANCE OPERATIONAL FLOWS
+  // ==========================================
+  const OPERATIONS_ROLES = ["owner_klinik", "owner_petcare", "admin", "dokter", "perawat", "superadmin"];
+  const actorFor = (req: express.Request) => (req as any).session?.email || "system";
+
+  app.get("/api/operations", requireRole(...OPERATIONS_ROLES), (_req, res) => {
+    res.json({ success: true, data: listOperations() });
+  });
+
+  app.post("/api/operations/ambulance/units", requireRole("owner_klinik", "owner_petcare", "admin", "superadmin"), (req, res) => {
+    try { res.status(201).json({ success: true, data: registerAmbulanceUnit(req.body || {}, actorFor(req)) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/operations/ambulance/requests", requireRole(...OPERATIONS_ROLES), (req, res) => {
+    try { res.status(201).json({ success: true, data: createAmbulanceRequest(req.body || {}, actorFor(req)) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/operations/ambulance/requests/:id/transition", requireRole(...OPERATIONS_ROLES), (req, res) => {
+    try { res.json({ success: true, data: transitionAmbulanceRequest(req.params.id, req.body?.status, actorFor(req), { unitId: req.body?.unitId, note: req.body?.note }) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/operations/telehealth/sessions", requireRole("owner_klinik", "owner_petcare", "admin", "dokter", "superadmin"), (req, res) => {
+    try { res.status(201).json({ success: true, data: createTelehealthSession(req.body || {}, actorFor(req)) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/operations/telehealth/sessions/:id/transition", requireRole("owner_klinik", "owner_petcare", "admin", "dokter", "superadmin"), (req, res) => {
+    try { res.json({ success: true, data: transitionTelehealthSession(req.params.id, req.body?.status, actorFor(req), req.body?.note) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
   });
 
   // ==========================================

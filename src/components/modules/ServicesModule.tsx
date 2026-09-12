@@ -42,6 +42,14 @@ import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import { DailyPetDiaryModal } from '../common/DailyPetDiaryModal';
 import { KioskQueueModule } from './KioskQueueModule';
 import { BookingCalendarView } from '../booking/BookingCalendarView';
+import { sendWhatsAppNotification } from '../../utils/sendWhatsApp';
+import {
+  createOperationAmbulanceRequest,
+  createOperationTelehealthSession,
+  registerOperationAmbulanceUnit,
+  transitionOperationAmbulanceRequest,
+  transitionOperationTelehealthSession,
+} from '../../utils/operationsApi';
 import {
   Calendar as CalendarIcon,
   LayoutGrid,
@@ -67,6 +75,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
     addGroomingSession,
     updateGroomingStage,
     hotelReservations = [],
+    hotelRooms = [],
     addHotelReservation,
     updateHotelStatus,
     dailyMonitorings = [],
@@ -74,10 +83,13 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
     telehealthSessions = [],
     addTelehealthSession,
     updateTelehealthStatus,
+    updateTelehealthSession,
+    addInvoice,
     ambulanceUnits = [],
     ambulanceRequests = [],
     addAmbulanceRequest,
     updateAmbulanceStatus,
+    updateAmbulanceUnit,
     addClinicVisit
   } = useData();
 
@@ -144,6 +156,18 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
     const provider = employees.find((e) => e.id === bookingProviderId) || eligibleProviders[0];
     if (!provider) {
       addToast(`Belum ada staf aktif dengan peran "${providerRoleForBookingType(bookingType)}" di Master Data. Tambahkan dulu di menu SDM / Master Data.`, 'error');
+      return;
+    }
+
+    const hasConflict = doctorBookings.some(
+      (b) =>
+        b.doctorId === provider.id &&
+        b.date === bookingDate &&
+        b.timeSlot === bookingTime &&
+        b.status !== 'Batal'
+    );
+    if (hasConflict) {
+      addToast(`${provider.name} sudah punya janji temu lain pada ${bookingDate} jam ${bookingTime}. Pilih jam lain.`, 'error');
       return;
     }
 
@@ -265,17 +289,31 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
     if (!pet) return;
     const cust = customers.find((c) => c.id === pet.customerId);
 
+    const room = hotelRooms.find((r) => r.roomType === hotelRoomType && r.isActive);
+    if (!room) {
+      addToast(`Belum ada kamar aktif dengan tipe "${hotelRoomType}" di Master Data. Tambahkan dulu di menu Master Data Kamar.`, 'error');
+      return;
+    }
+
+    const nights = Math.round(
+      (new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    if (!checkInDate || !checkOutDate || nights <= 0) {
+      addToast('Tanggal check-out harus setelah tanggal check-in.', 'error');
+      return;
+    }
+
     addHotelReservation({
       petId: pet.id,
       petName: pet.name,
       customerName: cust?.name || 'Pelanggan',
       roomType: hotelRoomType,
-      roomNo: `Kandang ${hotelRoomType.includes('VIP') ? 'VIP-02' : 'A3'}`,
+      roomNo: room.roomNo,
       checkInDate,
       checkOutDate,
-      totalNights: 4,
-      dailyRate: 150000,
-      totalCost: 600000,
+      totalNights: nights,
+      dailyRate: room.dailyRate,
+      totalCost: nights * room.dailyRate,
       notes: dietaryNotes,
       status: 'Aktif'
     });
@@ -317,10 +355,48 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const [teleDiagnosis, setTeleDiagnosis] = useState('Suspek Dehidrasi Ringan / Gastritis');
   const [telePrescription, setTelePrescription] = useState('Nutrimax Pet Syrup 1x5ml, Probiotik Vet 1x sachet');
 
-  const handleEndTelehealthCall = () => {
+  const handleEndTelehealthCall = async () => {
     if (activeCallSession) {
-      updateTelehealthStatus(activeCallSession.id, 'Selesai');
-      addToast(`Sesi Telehealth dengan ${activeCallSession.petName} telah selesai. Catatan medis tersimpan.`, 'success');
+      try {
+        if (activeCallSession.operationId) {
+          await transitionOperationTelehealthSession(activeCallSession.operationId, 'completed', 'Konsultasi diselesaikan oleh dokter.');
+        }
+      } catch (error: any) {
+        addToast(error.message || 'Sesi belum dapat ditutup di server.', 'error');
+        return;
+      }
+      updateTelehealthSession(activeCallSession.id, {
+        status: 'Selesai',
+        notes: teleNotes,
+        diagnosis: teleDiagnosis,
+        prescription: telePrescription
+      });
+
+      addInvoice({
+        customerId: activeCallSession.customerId,
+        customerName: activeCallSession.customerName,
+        petName: activeCallSession.petName,
+        items: [
+          {
+            id: 'item_' + Date.now(),
+            category: 'Telehealth',
+            name: `Konsultasi Telehealth — ${activeCallSession.doctorName}`,
+            quantity: 1,
+            unitPrice: activeCallSession.fee,
+            totalPrice: activeCallSession.fee
+          }
+        ],
+        subtotal: activeCallSession.fee,
+        discountAmount: 0,
+        totalAmount: activeCallSession.fee,
+        paidAmount: 0,
+        paymentMethod: 'Tunai',
+        status: 'Belum Dibayar',
+        loyaltyPointsEarned: 0,
+        cashierName: activeCallSession.doctorName
+      });
+
+      addToast(`Sesi Telehealth dengan ${activeCallSession.petName} telah selesai. Catatan medis tersimpan & tagihan diterbitkan.`, 'success');
       setActiveCallSession(null);
     }
   };
@@ -329,13 +405,18 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const [telePetId, setTelePetId] = useState(pets[0]?.id || '');
   const [teleComplaints, setTeleComplaints] = useState('Muntah kuning 2x tadi pagi dan batuk ringan');
   const [teleDoctorId, setTeleDoctorId] = useState('');
+  const [teleDate, setTeleDate] = useState(new Date().toISOString().split('T')[0]);
+  const [teleTimeSlot, setTeleTimeSlot] = useState('14:00');
+  const [teleDurationMinutes, setTeleDurationMinutes] = useState<15 | 30 | 45 | 60>(30);
+  const [teleFee, setTeleFee] = useState(150000);
+  const [teleConsent, setTeleConsent] = useState(false);
 
   // Dokter telehealth juga diambil dari staf aktif di Master Data (role Dokter Hewan),
   // konsisten dengan pola booking dokter di atas — bukan nama hardcoded.
   const eligibleTeleDoctors = employees.filter((e) => e.role === 'Dokter Hewan' && e.status === 'Aktif');
   const selectedTeleDoctor = employees.find((e) => e.id === teleDoctorId) || eligibleTeleDoctors[0];
 
-  const handleCreateTeleSession = (e: React.FormEvent) => {
+  const handleCreateTeleSession = async (e: React.FormEvent) => {
     e.preventDefault();
     const pet = pets.find((p) => p.id === telePetId);
     if (!pet) {
@@ -349,21 +430,59 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       addToast('Belum ada dokter aktif di Master Data untuk sesi Telehealth. Tambahkan dulu di menu SDM / Master Data.', 'error');
       return;
     }
+    if (!teleConsent) {
+      addToast('Persetujuan telehealth dari pemilik wajib dicatat sebelum menjadwalkan sesi.', 'error');
+      return;
+    }
 
-    addTelehealthSession({
+    const hasConflict = telehealthSessions.some(
+      (t) =>
+        t.doctorName === doctor.name &&
+        t.date === teleDate &&
+        t.timeSlot === teleTimeSlot &&
+        t.status !== 'Dibatalkan'
+    );
+    if (hasConflict) {
+      addToast(`${doctor.name} sudah punya sesi Telehealth lain pada ${teleDate} jam ${teleTimeSlot}. Pilih jam lain.`, 'error');
+      return;
+    }
+
+    let operationSession;
+    try {
+      operationSession = await createOperationTelehealthSession({
+        patientName: pet.name,
+        customerId: cust?.id || 'walk-in',
+        doctorId: doctor.id,
+        scheduledAt: `${teleDate}T${teleTimeSlot}:00`,
+        durationMinutes: teleDurationMinutes,
+        consentAcceptedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      addToast(error.message || 'Jadwal telehealth gagal disimpan ke server.', 'error');
+      return;
+    }
+
+    const newSession = addTelehealthSession({
       customerId: cust?.id || '',
       customerName: cust?.name || 'Pelanggan',
       petId: pet.id,
       petName: pet.name,
       doctorName: doctor.name,
-      date: new Date().toISOString().split('T')[0],
-      timeSlot: '14:00',
-      durationMinutes: 30,
+      date: teleDate,
+      timeSlot: teleTimeSlot,
+      durationMinutes: teleDurationMinutes,
       type: 'Konsultasi',
-      fee: 150000,
+      fee: teleFee,
       complaint: teleComplaints,
-      status: 'Menunggu'
+      status: 'Menunggu',
+      operationId: operationSession.id,
+      consentAcceptedAt: new Date().toISOString(),
     });
+
+    if (cust?.phone) {
+      const text = `Halo Kak ${cust.name}! 🐾 Jadwal Konsultasi Video Telehealth untuk ${pet.name} sudah dibuat pada ${teleDate} jam ${teleTimeSlot} bersama ${doctor.name}. Link video call: ${newSession.meetingUrl}`;
+      sendWhatsAppNotification(cust.phone, text);
+    }
 
     addToast(`Jadwal Sesi Telehealth Video untuk ${pet.name} berhasil dibuat!`, 'success');
     setShowAddTeleModal(false);
@@ -375,37 +494,112 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const [showAddAmbulanceModal, setShowAddAmbulanceModal] = useState(false);
   const [callerName, setCallerName] = useState('Rudi Hermawan');
   const [callerPhone, setCallerPhone] = useState('081298765432');
+  const [emergencyPetName, setEmergencyPetName] = useState('');
   const [pickupAddress, setPickupAddress] = useState('Jl. Kemang Raya No. 45, Jakarta Selatan');
   const [emergencyLevel, setEmergencyLevel] = useState<'Emergency' | 'Urgent' | 'Normal'>('Emergency');
   const [emergencyReason, setEmergencyReason] = useState('Kucing tertabrak sepeda motor, pendarahan di kaki belakang');
+  const [ambulanceUnitId, setAmbulanceUnitId] = useState('');
 
-  const handleCreateAmbulanceRequest = (e: React.FormEvent) => {
+  const availableAmbulanceUnits = ambulanceUnits.filter((u) => u.status === 'Tersedia');
+
+  const handleCreateAmbulanceRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    const unit = availableAmbulanceUnits.find((u) => u.id === ambulanceUnitId) || availableAmbulanceUnits[0];
+    if (!unit) {
+      addToast('Tidak ada unit ambulance yang tersedia saat ini.', 'error');
+      return;
+    }
+
+    let operationUnit;
+    let operationRequest;
+    try {
+      operationUnit = await registerOperationAmbulanceUnit({ id: unit.operationId || unit.id, code: unit.code });
+      operationRequest = await createOperationAmbulanceRequest({
+        patientName: emergencyPetName || 'Pasien Darurat',
+        callerName,
+        callerPhone,
+        urgency: emergencyLevel.toLowerCase() as 'emergency' | 'urgent' | 'normal',
+        pickupAddress,
+        notes: emergencyReason,
+      });
+      await transitionOperationAmbulanceRequest(operationRequest.id, 'triaged', { note: emergencyReason });
+      await transitionOperationAmbulanceRequest(operationRequest.id, 'assigned', { unitId: operationUnit.id, note: `Unit ${unit.code} ditugaskan.` });
+    } catch (error: any) {
+      addToast(error.message || 'Dispatch ambulance gagal disimpan ke server.', 'error');
+      return;
+    }
+
     const newReq = addAmbulanceRequest({
       customerName: callerName,
       customerPhone: callerPhone,
-      petName: 'Pasien Darurat',
+      petName: emergencyPetName || 'Pasien Darurat',
       petSpecies: 'Anabul',
       urgency: emergencyLevel,
       pickupAddress,
       destination: 'RS Klinik PetCare Utama',
       notes: emergencyReason,
-      assignedUnitCode: 'AMB-01'
+      assignedUnitCode: unit.code,
+      operationId: operationRequest.id,
     });
 
+    updateAmbulanceUnit(unit.id, { status: 'Bertugas', operationId: operationUnit.id });
+
     const reqNumber = newReq?.requestNo || 'AMB-REQ-LIVE';
-    addToast(`Panggilan Darurat Ambulance Dispatch (${reqNumber}) DITERIMA! Unit AMB-01 diluncurkan.`, 'success');
+    addToast(`Panggilan Darurat Ambulance Dispatch (${reqNumber}) DITERIMA! Unit ${unit.code} diluncurkan.`, 'success');
+
+    if (callerPhone) {
+      const text = `Halo Kak ${callerName}! 🚑 Ambulance PetCare (${unit.code} - ${unit.vehicleName}) sedang menuju lokasi penjemputan di ${pickupAddress}. Mohon bersiap, tim medis segera tiba.`;
+      sendWhatsAppNotification(callerPhone, text);
+    }
+
     setShowAddAmbulanceModal(false);
   };
 
-  const handleUpdateAmbulanceStage = (id: string, currentStatus: Types.AmbulanceRequest['status']) => {
+  const handleUpdateAmbulanceStage = async (id: string, currentStatus: Types.AmbulanceRequest['status']) => {
     let nextStatus: Types.AmbulanceRequest['status'] = 'Menuju Lokasi';
     if (currentStatus === 'Menuju Lokasi') nextStatus = 'Penjemputan';
     else if (currentStatus === 'Penjemputan') nextStatus = 'Perjalanan';
     else if (currentStatus === 'Perjalanan') nextStatus = 'Completed';
 
+    const request = ambulanceRequests.find((item) => item.id === id);
+    try {
+      if (request?.operationId) {
+        if (nextStatus === 'Menuju Lokasi') await transitionOperationAmbulanceRequest(request.operationId, 'en_route');
+        else if (nextStatus === 'Penjemputan') await transitionOperationAmbulanceRequest(request.operationId, 'arrived');
+        else if (nextStatus === 'Perjalanan') await transitionOperationAmbulanceRequest(request.operationId, 'patient_onboard');
+        else {
+          await transitionOperationAmbulanceRequest(request.operationId, 'at_clinic');
+          await transitionOperationAmbulanceRequest(request.operationId, 'handed_over');
+          await transitionOperationAmbulanceRequest(request.operationId, 'closed');
+        }
+      }
+    } catch (error: any) {
+      addToast(error.message || 'Status dispatch gagal diperbarui di server.', 'error');
+      return;
+    }
+
     updateAmbulanceStatus(id, nextStatus);
+
+    if (nextStatus === 'Completed') {
+      const req = ambulanceRequests.find((r) => r.id === id);
+      const unit = req?.assignedUnitCode ? ambulanceUnits.find((u) => u.code === req.assignedUnitCode) : undefined;
+      if (unit) updateAmbulanceUnit(unit.id, { status: 'Tersedia' });
+    }
+
     addToast(`Status Ambulance diperbarui: ${nextStatus}`, 'info');
+  };
+
+  const handleCancelAmbulanceRequest = async (req: Types.AmbulanceRequest) => {
+    try {
+      if (req.operationId) await transitionOperationAmbulanceRequest(req.operationId, 'cancelled', { note: 'Dibatalkan dari dispatcher.' });
+    } catch (error: any) {
+      addToast(error.message || 'Pembatalan belum tersimpan di server.', 'error');
+      return;
+    }
+    updateAmbulanceStatus(req.id, 'Cancelled');
+    const unit = req.assignedUnitCode ? ambulanceUnits.find((u) => u.code === req.assignedUnitCode) : undefined;
+    if (unit) updateAmbulanceUnit(unit.id, { status: 'Tersedia' });
+    addToast(`Panggilan Ambulance ${req.requestNo} dibatalkan. Unit ${req.assignedUnitCode || ''} kembali tersedia.`, 'info');
   };
 
   // Filtered doctor bookings
@@ -419,7 +613,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const groomingActiveCount = groomingSessions.filter((s) => s.stage !== 'Selesai').length;
   const hotelActiveCount = hotelReservations.filter((h) => h.status === 'Aktif').length;
   const telehealthActiveCount = telehealthSessions.filter((t) => t.status === 'Menunggu' || t.status === 'Berlangsung').length;
-  const ambulanceStandbyCount = ambulanceUnits.filter((u) => u.status === 'Standby').length;
+  const ambulanceStandbyCount = ambulanceUnits.filter((u) => u.status === 'Tersedia').length;
 
   const SERVICE_TABS = [
     { id: 'booking', label: 'Booking & Antrian', icon: CalendarCheck, count: bookingReadyCount, countLabel: 'siap' },
@@ -1082,7 +1276,22 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                   </div>
 
                   <button
-                    onClick={() => addToast('Resep Obat Digital dikirim langsung ke Apotek Klinik & WA Pemilik!', 'success')}
+                    onClick={async () => {
+                      if (!activeCallSession) return;
+                      const cust = customers.find((c) => c.id === activeCallSession.customerId);
+                      if (!cust?.phone) {
+                        addToast('Nomor WhatsApp pelanggan tidak ditemukan di data pelanggan.', 'error');
+                        return;
+                      }
+                      const text = `Halo Kak ${activeCallSession.customerName}! 🐾 Resep digital untuk ${activeCallSession.petName} dari sesi Telehealth:\n\n${telePrescription}\n\nSilakan tebus di Apotek Klinik PetCare. Terima kasih!`;
+                      const outcome = await sendWhatsAppNotification(cust.phone, text);
+                      addToast(
+                        outcome.auto
+                          ? `Resep Obat Digital terkirim otomatis ke Apotek Klinik & WA ${activeCallSession.customerName}!`
+                          : `Resep Obat Digital dikirim via WA ke ${activeCallSession.customerName}...`,
+                        outcome.auto ? 'success' : 'info'
+                      );
+                    }}
                     className="w-full py-2.5 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 mt-2"
                   >
                     <Send className="w-4 h-4" /> Kirim Resep ke Apotek Klinik
@@ -1149,9 +1358,18 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                             </span>
                           </td>
                           <td className="p-3 text-right">
-                            {th.status !== 'Selesai' && (
+                            {th.status !== 'Selesai' && th.status !== 'Dibatalkan' && (
                               <button
-                                onClick={() => {
+                                onClick={async () => {
+                                  try {
+                                    if (th.operationId) {
+                                      await transitionOperationTelehealthSession(th.operationId, 'waiting_room', 'Dokter membuka ruang tunggu.');
+                                      await transitionOperationTelehealthSession(th.operationId, 'in_progress', 'Konsultasi dimulai.');
+                                    }
+                                  } catch (error: any) {
+                                    addToast(error.message || 'Sesi tidak dapat dimulai di server.', 'error');
+                                    return;
+                                  }
                                   updateTelehealthStatus(th.id, 'Berlangsung');
                                   setActiveCallSession(th);
                                   addToast(`Memulai sesi video call dengan ${th.petName}...`, 'info');
@@ -1274,13 +1492,21 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                       <span className="px-3 py-1 bg-[#F6F1E6] border border-[#E1D6BE] text-[#1B2A45] font-bold text-xs rounded-lg">
                         Status: {req.status}
                       </span>
-                      {req.status !== 'Completed' && (
-                        <button
-                          onClick={() => handleUpdateAmbulanceStage(req.id, req.status)}
-                          className="px-3 py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs transition-all flex items-center gap-1"
-                        >
-                          Update Status Dispatch <ChevronRight className="w-3.5 h-3.5 text-[#D9B98A]" />
-                        </button>
+                      {req.status !== 'Completed' && req.status !== 'Cancelled' && (
+                        <>
+                          <button
+                            onClick={() => handleUpdateAmbulanceStage(req.id, req.status)}
+                            className="px-3 py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs transition-all flex items-center gap-1"
+                          >
+                            Update Status Dispatch <ChevronRight className="w-3.5 h-3.5 text-[#D9B98A]" />
+                          </button>
+                          <button
+                            onClick={() => handleCancelAmbulanceRequest(req)}
+                            className="px-3 py-1.5 bg-[#FFFDF9] hover:bg-rose-50 text-rose-600 border border-rose-300 font-bold text-xs rounded-lg shadow-2xs transition-all"
+                          >
+                            Batalkan
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -1780,6 +2006,56 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                 </select>
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-[#1B2A45] block mb-1">Tanggal</label>
+                  <input
+                    type="date"
+                    value={teleDate}
+                    onChange={(e) => setTeleDate(e.target.value)}
+                    required
+                    className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-[#1B2A45] block mb-1">Jam</label>
+                  <input
+                    type="time"
+                    value={teleTimeSlot}
+                    onChange={(e) => setTeleTimeSlot(e.target.value)}
+                    required
+                    className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-[#1B2A45] block mb-1">Durasi</label>
+                  <select
+                    value={teleDurationMinutes}
+                    onChange={(e) => setTeleDurationMinutes(Number(e.target.value) as 15 | 30 | 45 | 60)}
+                    className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                  >
+                    <option value={15}>15 menit</option>
+                    <option value={30}>30 menit</option>
+                    <option value={45}>45 menit</option>
+                    <option value={60}>60 menit</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-[#1B2A45] block mb-1">Biaya Konsultasi (Rp)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={teleFee}
+                    onChange={(e) => setTeleFee(Number(e.target.value))}
+                    required
+                    className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="font-bold text-[#1B2A45] block mb-1">Keluhan Pasien</label>
                 <textarea
@@ -1790,6 +2066,18 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                   className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                 />
               </div>
+
+              <label className="flex items-start gap-2 rounded-lg border border-[#E1D6BE] bg-[#F6F1E6] p-3 text-[11px] text-[#22242B] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={teleConsent}
+                  onChange={(e) => setTeleConsent(e.target.checked)}
+                  className="mt-0.5 accent-[#B8905A]"
+                />
+                <span>
+                  Pemilik telah menyetujui konsultasi jarak jauh, memahami keterbatasan pemeriksaan video, dan setuju kasus darurat dapat dialihkan ke klinik/ambulance.
+                </span>
+              </label>
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -1843,6 +2131,35 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                     className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Nama Hewan Peliharaan</label>
+                <input
+                  type="text"
+                  value={emergencyPetName}
+                  onChange={(e) => setEmergencyPetName(e.target.value)}
+                  placeholder="cth. Milo"
+                  required
+                  className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Unit Ambulance Tersedia</label>
+                <select
+                  value={ambulanceUnitId}
+                  onChange={(e) => setAmbulanceUnitId(e.target.value)}
+                  required
+                  className="w-full p-2 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                >
+                  {availableAmbulanceUnits.length === 0 && <option value="">Tidak ada unit tersedia</option>}
+                  {availableAmbulanceUnits.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.code} — {u.vehicleName} ({u.plateNo})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>

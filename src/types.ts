@@ -648,6 +648,11 @@ export interface TelehealthSession {
   fee: number;
   status: 'Menunggu' | 'Berlangsung' | 'Selesai' | 'Dibatalkan';
   meetingUrl: string;
+  notes?: string;
+  diagnosis?: string;
+  prescription?: string;
+  operationId?: string;
+  consentAcceptedAt?: string;
 }
 
 export interface EFormTemplate {
@@ -679,6 +684,7 @@ export interface AmbulanceUnit {
   currentDriver: string;
   currentParamedic: string;
   equipmentStatus: string;
+  operationId?: string;
 }
 
 export interface AmbulanceRequest {
@@ -695,6 +701,7 @@ export interface AmbulanceRequest {
   status: 'Menunggu' | 'Menuju Lokasi' | 'Penjemputan' | 'Perjalanan' | 'Completed' | 'Cancelled';
   requestedAt: string;
   notes?: string;
+  operationId?: string;
 }
 
 export interface PatientPhoto {

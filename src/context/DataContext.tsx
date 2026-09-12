@@ -175,6 +175,7 @@ interface DataContextType {
   telehealthSessions: Types.TelehealthSession[];
   addTelehealthSession: (th: Omit<Types.TelehealthSession, 'id' | 'sessionNo' | 'meetingUrl'>) => Types.TelehealthSession;
   updateTelehealthStatus: (id: string, status: Types.TelehealthSession['status']) => void;
+  updateTelehealthSession: (id: string, updates: Partial<Types.TelehealthSession>) => void;
 
   eFormTemplates: Types.EFormTemplate[];
   addEFormTemplate: (t: Omit<Types.EFormTemplate, 'id'>) => void;
@@ -322,6 +323,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [auditLogs, setAuditLogs] = useLocalState<Types.AuditLog[]>('audit_logs', Seed.INITIAL_AUDIT_LOGS);
   const [notifications, setNotifications] = useLocalState<Types.AppNotification[]>('notifications', Seed.INITIAL_NOTIFICATIONS);
 
+  // Generate a random 3-digit entity code that doesn't collide with existing codes
+  const generateUniqueCode = (prefix: string, existingCodes: string[]): string => {
+    let code: string;
+    do {
+      code = `${prefix}-${Math.floor(100 + Math.random() * 900)}`;
+    } while (existingCodes.includes(code));
+    return code;
+  };
+
   // Audit logger helper with user, branch, and severity awareness
   const addAuditLog = (
     action: Types.AuditLog['action'],
@@ -439,6 +449,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteCustomer = (id: string) => {
     const current = customers.find((c) => c.id === id);
     setCustomers((prev) => prev.filter((c) => c.id !== id));
+    setPets((prev) => prev.filter((p) => p.customerId !== id));
     addAuditLog(
       'Hapus',
       'Master Data & CRM',
@@ -466,6 +477,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updatePet = (id: string, petData: Partial<Types.Pet>) => {
     const current = pets.find((p) => p.id === id);
     setPets((prev) => prev.map((p) => (p.id === id ? { ...p, ...petData } : p)));
+    if (current && petData.customerId && petData.customerId !== current.customerId) {
+      const oldCustomerId = current.customerId;
+      const newCustomerId = petData.customerId;
+      setCustomers((prev) =>
+        prev.map((c) => {
+          if (c.id === oldCustomerId) return { ...c, petCount: Math.max(0, c.petCount - 1) };
+          if (c.id === newCustomerId) return { ...c, petCount: c.petCount + 1 };
+          return c;
+        })
+      );
+    }
     addAuditLog(
       'Edit',
       'Master Pasien Hewan',
@@ -482,6 +504,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deletePet = (id: string) => {
     const current = pets.find((p) => p.id === id);
     setPets((prev) => prev.filter((p) => p.id !== id));
+    if (current) {
+      setCustomers((prev) =>
+        prev.map((c) => (c.id === current.customerId ? { ...c, petCount: Math.max(0, c.petCount - 1) } : c))
+      );
+    }
     addAuditLog('Hapus', 'Master Pasien Hewan', current?.name || id, `Penghapusan data pasien hewan peliharaan: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
@@ -518,7 +545,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newSrv: Types.ServiceItem = {
       ...srvData,
       id: 'srv_' + Date.now(),
-      code: 'SRV-' + Math.floor(100 + Math.random() * 900)
+      code: generateUniqueCode('SRV', services.map((s) => s.code))
     };
     setServices((prev) => [...prev, newSrv]);
     addAuditLog('Tambah', 'Katalog Tarif & Layanan', newSrv.name, `Penambahan tarif layanan: ${newSrv.name} (${newSrv.category}) - Rp ${newSrv.price.toLocaleString('id-ID')}`, { severity: 'Info' });
@@ -706,7 +733,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addClinicVisit = (v: Omit<Types.ClinicVisit, 'id' | 'visitNo' | 'queueNo' | 'status' | 'queuedAt'>): Types.ClinicVisit => {
-    const nextQueue = clinicVisits.length + 1;
+    const nextQueue = clinicVisits.filter((cv) => cv.status !== 'Selesai' && cv.status !== 'Batal').length + 1;
     const newVisit: Types.ClinicVisit = {
       ...v,
       id: 'v_' + Date.now(),
@@ -911,7 +938,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newDrug: Types.Drug = {
       ...d,
       id: 'd_' + Date.now(),
-      code: 'DRG-' + Math.floor(100 + Math.random() * 900)
+      code: generateUniqueCode('DRG', drugs.map((dr) => dr.code))
     };
     setDrugs((prev) => [...prev, newDrug]);
     addAuditLog('Tambah', 'Apotek & Farmasi', newDrug.name, `Penambahan item obat baru: ${newDrug.name} (${newDrug.unit}) - Stok: ${newDrug.stock}`, { severity: 'Info' });
@@ -1122,7 +1149,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newSup: Types.Supplier = {
       ...sup,
       id: 'sup_' + Date.now(),
-      code: 'SUP-' + Math.floor(100 + Math.random() * 900)
+      code: generateUniqueCode('SUP', suppliers.map((s) => s.code))
     };
     setSuppliers((prev) => [...prev, newSup]);
     addAuditLog('Tambah', 'Purchasing & Vendor', newSup.name, `Vendor supplier baru didaftarkan: ${newSup.name} (${newSup.phone})`);
@@ -1257,7 +1284,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newEmp: Types.Employee = {
       ...emp,
       id: 'e_' + Date.now(),
-      nik: 'EMP-' + Math.floor(100 + Math.random() * 900)
+      nik: generateUniqueCode('EMP', employees.map((e) => e.nik))
     };
     setEmployees((prev) => [...prev, newEmp]);
     addAuditLog('Tambah', 'SDM & Akses Karyawan', newEmp.name, `Pendaftaran akun karyawan baru: ${newEmp.name} (Peran: ${newEmp.role}, NIK: ${newEmp.nik})`, { severity: 'Kritis' });
@@ -1350,6 +1377,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateTelehealthStatus = (id: string, status: Types.TelehealthSession['status']) => {
     setTelehealthSessions((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
     addAuditLog('Edit', 'Telehealth & Konsultasi', id, `Status telekonsultasi diubah menjadi: ${status}`);
+  };
+
+  const updateTelehealthSession = (id: string, updates: Partial<Types.TelehealthSession>) => {
+    setTelehealthSessions((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    addAuditLog('Edit', 'Telehealth & Konsultasi', id, `Pembaruan data telekonsultasi: ${id}`);
   };
 
   const addEFormTemplate = (t: Omit<Types.EFormTemplate, 'id'>) => {
@@ -1597,6 +1629,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         telehealthSessions,
         addTelehealthSession,
         updateTelehealthStatus,
+        updateTelehealthSession,
         eFormTemplates,
         addEFormTemplate,
         updateEFormTemplate,

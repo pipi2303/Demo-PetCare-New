@@ -1399,7 +1399,7 @@ export const MasterDataModule: React.FC = () => {
                       </div>
 
                       {/* Triage Triggers / Symptom severity box if available */}
-                      {triage.triggers && triage.triggers.length > 0 && (
+                      {triage.symptomTriggers && triage.symptomTriggers.length > 0 && (
                         <div className="mt-2.5 p-2 rounded-lg bg-[#F6F1E6]/70 border border-[#E1D6BE]/70 text-[11px] space-y-1">
                           <div className="flex items-center justify-between text-[#1B2A45] font-semibold">
                             <span className="flex items-center gap-1 text-[10px] text-[#B8905A] uppercase tracking-wider font-extrabold">
@@ -1420,10 +1420,10 @@ export const MasterDataModule: React.FC = () => {
                             </button>
                           </div>
                           <p className="text-[#1B2A45]/80 text-[11px] font-medium line-clamp-2">
-                            {triage.reasoning}
+                            {triage.summary}
                           </p>
                           <div className="flex flex-wrap gap-1 pt-1">
-                            {triage.triggers.slice(0, 3).map((trig, idx) => (
+                            {triage.symptomTriggers.slice(0, 3).map((trig, idx) => (
                               <span
                                 key={idx}
                                 className="px-1.5 py-0.2 rounded bg-white text-[#1B2A45] border border-[#E1D6BE] text-[9px] font-bold"
@@ -2120,7 +2120,10 @@ export const MasterDataModule: React.FC = () => {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!newCategoryName.trim()) return;
+                if (!newCategoryName.trim()) {
+                  addToast('Nama kategori tidak boleh kosong.', 'error');
+                  return;
+                }
                 addProductCategory(newCategoryName.trim());
                 setNewCategoryName('');
               }}
@@ -2171,7 +2174,10 @@ export const MasterDataModule: React.FC = () => {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!newWarehouseName.trim()) return;
+                if (!newWarehouseName.trim()) {
+                  addToast('Nama gudang tidak boleh kosong.', 'error');
+                  return;
+                }
                 addWarehouse(newWarehouseName.trim());
                 setNewWarehouseName('');
               }}

@@ -54,9 +54,7 @@ export const KioskQueueModule: React.FC = () => {
       return;
     }
 
-    const nextQueueNo = clinicVisits.length + 1;
     const newVisit = addClinicVisit({
-      queueNo: nextQueueNo,
       customerId: selectedCustomer.id,
       customerName: selectedCustomer.name,
       petId: selectedPet.id,
@@ -65,12 +63,11 @@ export const KioskQueueModule: React.FC = () => {
       petBreed: selectedPet.breed,
       doctorId: onDutyDoctor?.id || 'unassigned',
       doctorName: onDutyDoctor?.name || 'Menunggu Penugasan Dokter',
-      complaint,
-      status: 'Menunggu'
+      complaint
     });
 
     setPrintedTicket(newVisit);
-    addToast(`Tiket antrean A-${nextQueueNo.toString().padStart(3, '0')} berhasil dicetak!`, 'success');
+    addToast(`Tiket antrean A-${newVisit.queueNo.toString().padStart(3, '0')} berhasil dicetak!`, 'success');
   };
 
   const handleSendWANotify = async (visit: any) => {
