@@ -41,6 +41,7 @@ import { useToast } from '../../context/ToastContext';
 import { UserRole, SystemGroup, CustomerTierGroup, GroupModulePermission } from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import { MODULE_PERMISSIONS, NavModule } from '../../constants/modulePermissions';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export const SystemGroupsModule: React.FC = () => {
   const { user, users = [] } = useAuth();
@@ -62,6 +63,8 @@ export const SystemGroupsModule: React.FC = () => {
   } = useData();
   const customerTiers = customerTierGroups;
   const { addToast } = useToast();
+  const { can } = usePermissions();
+  const canDeleteSystemGroups = can('systemGroups', 'delete');
 
   const [activeTab, setActiveTab] = useState<'userGroups' | 'customerTiers' | 'matrixRBAC' | 'departmentHierarchy'>('userGroups');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('grp-medis');
@@ -145,6 +148,10 @@ export const SystemGroupsModule: React.FC = () => {
   };
 
   const handleDeleteTier = (tier: CustomerTierGroup) => {
+    if (!canDeleteSystemGroups) {
+      addToast('Akun/grup Anda tidak memiliki hak "Hapus" untuk Grup Sistem & Tier Klien. Hubungi Owner/Admin.', 'error');
+      return;
+    }
     if (!window.confirm(`Hapus tier membership "${tier.tierName}"?`)) return;
     deleteCustomerTierGroup(tier.id);
     addToast(`Tier membership "${tier.tierName}" dihapus.`, 'success');

@@ -114,6 +114,10 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
   const { addToast } = useToast();
 
   const [selectedVisitId, setSelectedVisitId] = useState<string>(clinicVisits[0]?.id || '');
+  // Guard tombol Simpan SOAP: klik ganda / re-select visit yang sudah
+  // 'Selesai' sebelumnya bisa memicu dispenseDrug & addInvoice dobel untuk
+  // kunjungan yang sama karena tidak ada pengecekan status/in-flight.
+  const [isSavingSOAP, setIsSavingSOAP] = useState(false);
 
   // Tab state synced with activeModule
   const [activeTab, setActiveTab] = useState<'soap' | 'vitals' | 'anatomical' | 'carePlan' | 'eform'>(
@@ -438,7 +442,12 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
   };
 
   const handleSaveSOAP = () => {
-    if (!selectedVisit) return;
+    if (!selectedVisit || isSavingSOAP) return;
+    if (selectedVisit.status === 'Selesai') {
+      addToast('Kunjungan ini sudah Selesai & tertagih. Pilih pasien lain dari Antrean.', 'warning');
+      return;
+    }
+    setIsSavingSOAP(true);
 
     // Save SOAP Note
     saveSOAPNote({
@@ -515,6 +524,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     clearDraft();
 
     addToast(`SOAP Note untuk ${selectedVisit.petName} tersimpan & draft lokal telah dibersihkan.`, 'success');
+    setIsSavingSOAP(false);
   };
 
   // Canvas Handlers
@@ -1060,9 +1070,11 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
               <div className="pt-2 flex items-center justify-end gap-3">
                 <button
                   onClick={handleSaveSOAP}
-                  className="px-5 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-2"
+                  disabled={isSavingSOAP || selectedVisit?.status === 'Selesai'}
+                  className="px-5 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] disabled:opacity-50 disabled:cursor-not-allowed text-[#FFFDF9] text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-2"
                 >
-                  <Save className="w-4 h-4 text-[#D9B98A]" /> Simpan SOAP & Potong Stok Farmasi
+                  <Save className="w-4 h-4 text-[#D9B98A]" />
+                  {isSavingSOAP ? 'Menyimpan...' : 'Simpan SOAP & Potong Stok Farmasi'}
                 </button>
               </div>
             </div>

@@ -27,6 +27,7 @@ import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Branch } from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface InterBranchTransfer {
   id: string;
@@ -52,6 +53,8 @@ export const BranchesModule: React.FC = () => {
     deleteBranch
   } = useData();
   const { addToast } = useToast();
+  const { can } = usePermissions();
+  const canDeleteBranch = can('branches', 'delete');
 
   const [activeTab, setActiveTab] = useState<'branchesList' | 'stockTransfer' | 'analytics'>('branchesList');
   const [searchQuery, setSearchQuery] = useState('');
@@ -164,6 +167,10 @@ export const BranchesModule: React.FC = () => {
   const handleDeleteBranch = (branch: Branch) => {
     if (branch.isMainBranch) {
       addToast('Kantor pusat tidak dapat dihapus.', 'error');
+      return;
+    }
+    if (!canDeleteBranch) {
+      addToast('Akun/grup Anda tidak memiliki hak "Hapus" untuk Manajemen Cabang. Hubungi Owner/Admin.', 'error');
       return;
     }
     if (!window.confirm(`Hapus cabang "${branch.name}"? Data terkait cabang ini tidak akan otomatis terhapus.`)) return;

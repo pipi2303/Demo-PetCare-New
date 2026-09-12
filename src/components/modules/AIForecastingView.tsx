@@ -60,7 +60,6 @@ export const AIForecastingView: React.FC = () => {
     suppliers = [],
     purchaseOrders = [],
     addPurchaseOrder,
-    updateStockItem,
     inpatients = [],
     doctorBookings = []
   } = useData();
@@ -126,27 +125,6 @@ export const AIForecastingView: React.FC = () => {
       nextSelection[item.sku] = select;
     });
     setSelectedItemCheckboxes(nextSelection);
-  };
-
-  // 1-Click Sync Dynamic ROP to Master stockItems
-  const handleSyncRopToMaster = () => {
-    let syncedCount = 0;
-    forecastSummary.items.forEach((forecast) => {
-      const match = stockItems.find(
-        (s) =>
-          s.sku.toLowerCase() === forecast.sku.toLowerCase() ||
-          s.name.toLowerCase().includes(forecast.name.toLowerCase().slice(0, 10))
-      );
-      if (match) {
-        updateStockItem(match.id, { minStock: forecast.reorderPoint });
-        syncedCount++;
-      }
-    });
-
-    addToast(
-      `Berhasil memperbarui ${syncedCount} item Min. Stok di master inventaris sesuai kalkulasi ROP musiman AI!`,
-      'success'
-    );
   };
 
   // Prepare & Preview Auto PO
@@ -278,14 +256,23 @@ export const AIForecastingView: React.FC = () => {
               <Bot className="w-4 h-4 text-[#FFFDF9]" />
               Analisis Epidemiologi AI
             </button>
-            <button
-              onClick={handleSyncRopToMaster}
-              className="px-4 py-2.5 bg-[#101A2C] hover:bg-[#15233B] text-[#D9B98A] border border-[#B8905A]/40 rounded-xl font-bold text-xs flex items-center gap-2 shadow-xs transition-all"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Terapkan ROP ke Master
-            </button>
           </div>
+        </div>
+
+        {/* Kejujuran fitur: model ini adalah simulator skenario musiman untuk
+            katalog tetap ~20 SKU obat/vaksin kritis (bukan dihitung dari
+            riwayat mutasi stok sungguhan setiap item). Dulu ada tombol
+            "Terapkan ROP ke Master" yang menimpa minStock produksi dengan
+            angka simulasi ini secara langsung — sudah dihapus karena bisa
+            mematikan alarm stok item fast-moving atau memicu reorder terus-
+            menerus untuk item lambat. Untuk ROP berbasis data mutasi stok
+            riil per-item, lihat tab "Saran PO AI" (AIPOSuggestionsView). */}
+        <div className="relative z-10 mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5">
+          <Info className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-[#EDE6D6]/90 leading-relaxed">
+            <span className="font-bold text-amber-300">Model Simulasi Skenario, bukan data real-time: </span>
+            Tabel di bawah menghitung ROP/Safety Stock dari katalog tetap ~20 obat & vaksin kritis dengan asumsi laju konsumsi musiman standar industri veteriner — <strong>bukan</strong> dari riwayat mutasi stok toko/klinik ini. Gunakan sebagai referensi perencanaan skenario "what-if", dan jangan disamakan dengan Saran PO AI (tab Inventaris) yang dihitung dari data mutasi stok 30 hari sungguhan.
+          </p>
         </div>
 
         {/* Realtime KPI Strip */}

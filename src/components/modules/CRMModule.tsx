@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { sendWhatsAppNotification } from '../../utils/sendWhatsApp';
+import { usePermissions } from '../../hooks/usePermissions';
 import { Reminder, Customer } from '../../types';
 import {
   MessageSquare,
@@ -39,6 +40,8 @@ export const CRMModule: React.FC = () => {
     invoices = []
   } = useData();
   const { addToast } = useToast();
+  const { can } = usePermissions();
+  const canDeleteReminder = can('crm', 'delete');
 
   const [activeTab, setActiveTab] = useState<'reminders' | 'broadcast' | 'customer360'>('reminders');
 
@@ -309,6 +312,10 @@ export const CRMModule: React.FC = () => {
 
                           <button
                             onClick={() => {
+                              if (!canDeleteReminder) {
+                                addToast('Akun/grup Anda tidak memiliki hak "Hapus" untuk CRM. Hubungi Owner/Admin.', 'error');
+                                return;
+                              }
                               if (window.confirm('Hapus jadwal pengingat ini?')) {
                                 deleteReminder(r.id);
                                 addToast('Pengingat dihapus.', 'info');

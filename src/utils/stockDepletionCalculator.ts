@@ -103,9 +103,17 @@ export function calculateInventoryDepletionAndPoSuggestions(
     return matchCat && matchWh;
   });
 
+  // Jendela 30 hari asli — tanpa ini, seluruh riwayat 'Keluar' sepanjang
+  // masa dijumlah dan disebut "30 hari", sehingga avgDailyBurn/reorderPoint
+  // terus membengkak seiring waktu alih-alih mencerminkan laju jual terkini.
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
   const analyzedItems: StockDepletionAnalysisItem[] = filteredStock.map((item) => {
     // 1. Gather historical 30-day movement logs
-    const itemMoves = stockMovements.filter((m) => m.itemId === item.id);
+    const itemMoves = stockMovements.filter(
+      (m) => m.itemId === item.id && new Date(m.date) >= thirtyDaysAgo
+    );
     const outgoingMoves = itemMoves.filter((m) => m.type === 'Keluar');
     const recordedOutgoingQty = outgoingMoves.reduce((acc, m) => acc + m.quantity, 0);
 

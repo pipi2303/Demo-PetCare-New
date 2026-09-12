@@ -342,6 +342,10 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const [behaviorNotes, setBehaviorNotes] = useState('Aktif bermain, tidak cemas');
 
   const [selectedCCTV, setSelectedCCTV] = useState<string | null>(null);
+  // Guard klik ganda tombol Check-Out — sebelumnya tanpa ini, staf yang
+  // klik dua kali (atau lag UI) bisa membuat invoice duplikat untuk masa
+  // inap yang sama sebelum kartu reservasi sempat hilang dari daftar.
+  const [checkingOutIds, setCheckingOutIds] = useState<Set<string>>(new Set());
 
   const handleCreateHotelReservation = (e: React.FormEvent) => {
     e.preventDefault();
@@ -421,6 +425,10 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const [telePrescribedDrugs, setTelePrescribedDrugs] = useState<{ drugId: string; drugName: string; qty: number }[]>([]);
   const [teleDrugPickId, setTeleDrugPickId] = useState<string>(drugs[0]?.id || '');
   const [teleDrugPickQty, setTeleDrugPickQty] = useState<number>(1);
+  // Guard tombol Kirim Resep — tombolnya async (menunggu sendWhatsAppNotification)
+  // dan tanpa ini, klik ganda selagi menunggu WA terkirim bisa memotong stok
+  // apotek & mencatat rekam medis dua kali untuk resep yang sama.
+  const [isSendingTeleRx, setIsSendingTeleRx] = useState(false);
 
   const handleAddTeleDrug = () => {
     const drug = drugs.find((d) => d.id === teleDrugPickId);
@@ -1145,9 +1153,12 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
             </div>
           </div>
 
-          {/* Active Hotel Guests */}
+          {/* Active Hotel Guests — kartu yang statusnya sudah 'Selesai' (sudah
+              check-out) disembunyikan dari sini; sebelumnya tetap tampil
+              dengan tombol Check-Out aktif, sehingga klik ulang membuat
+              invoice duplikat untuk masa inap yang sama. */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {hotelReservations.map((res) => (
+            {hotelReservations.filter((res) => res.status !== 'Selesai').map((res) => (
               <div key={res.id} className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
                 <div className="flex justify-between items-start border-b border-[#E1D6BE] pb-2">
                   <div>
@@ -1183,7 +1194,11 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                     <Tv className="w-3.5 h-3.5" /> CCTV Stream Live
                   </button>
                   <button
+                    disabled={checkingOutIds.has(res.id)}
                     onClick={() => {
+                      if (checkingOutIds.has(res.id)) return;
+                      setCheckingOutIds((prev) => new Set(prev).add(res.id));
+
                       // Reservasi Pet Hotel sebelumnya tidak pernah membuat
                       // invoice sama sekali — tamu check-out tanpa tagihan
                       // yang pernah tercatat. Sekarang diteruskan ke Kasir
@@ -1216,7 +1231,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                       updateHotelStatus(res.id, 'Selesai');
                       addToast(`Pasien ${res.petName} check-out. Tagihan Rp ${res.totalCost.toLocaleString('id-ID')} diteruskan ke Kasir.`, 'success');
                     }}
-                    className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-2xs transition-all"
+                    className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-2xs transition-all"
                   >
                     Check-Out
                   </button>
@@ -1425,13 +1440,15 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                   </div>
 
                   <button
+                    disabled={isSendingTeleRx}
                     onClick={async () => {
-                      if (!activeCallSession) return;
+                      if (!activeCallSession || isSendingTeleRx) return;
                       const cust = customers.find((c) => c.id === activeCallSession.customerId);
                       if (!cust?.phone) {
                         addToast('Nomor WhatsApp pelanggan tidak ditemukan di data pelanggan.', 'error');
                         return;
                       }
+                      setIsSendingTeleRx(true);
 
                       // Potong stok apotek untuk tiap obat terstruktur & catat
                       // ke rekam medis pasien — sebelumnya resep cuma teks WA
@@ -1448,19 +1465,24 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                           performedBy: activeCallSession.doctorName
                         });
                       }
+                      setTelePrescribedDrugs([]);
 
-                      const text = `Halo Kak ${activeCallSession.customerName}! 🐾 Resep digital untuk ${activeCallSession.petName} dari sesi Telehealth:\n\n${telePrescription}\n\nSilakan tebus di Apotek Klinik PetCare. Terima kasih!`;
-                      const outcome = await sendWhatsAppNotification(cust.phone, text);
-                      addToast(
-                        outcome.auto
-                          ? `Resep Obat Digital terkirim otomatis ke Apotek Klinik & WA ${activeCallSession.customerName}!`
-                          : `Resep Obat Digital dikirim via WA ke ${activeCallSession.customerName}...`,
-                        outcome.auto ? 'success' : 'info'
-                      );
+                      try {
+                        const text = `Halo Kak ${activeCallSession.customerName}! 🐾 Resep digital untuk ${activeCallSession.petName} dari sesi Telehealth:\n\n${telePrescription}\n\nSilakan tebus di Apotek Klinik PetCare. Terima kasih!`;
+                        const outcome = await sendWhatsAppNotification(cust.phone, text);
+                        addToast(
+                          outcome.auto
+                            ? `Resep Obat Digital terkirim otomatis ke Apotek Klinik & WA ${activeCallSession.customerName}!`
+                            : `Resep Obat Digital dikirim via WA ke ${activeCallSession.customerName}...`,
+                          outcome.auto ? 'success' : 'info'
+                        );
+                      } finally {
+                        setIsSendingTeleRx(false);
+                      }
                     }}
-                    className="w-full py-2.5 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 mt-2"
+                    className="w-full py-2.5 bg-[#B8905A] hover:bg-[#9E7848] disabled:opacity-50 disabled:cursor-not-allowed text-[#FFFDF9] font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 mt-2"
                   >
-                    <Send className="w-4 h-4" /> Kirim Resep ke Apotek Klinik
+                    <Send className="w-4 h-4" /> {isSendingTeleRx ? 'Mengirim...' : 'Kirim Resep ke Apotek Klinik'}
                   </button>
                 </div>
               </div>
