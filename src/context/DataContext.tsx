@@ -12,7 +12,7 @@ interface DataContextType {
   updateBranch: (id: string, b: Partial<Types.Branch>) => void;
   deleteBranch: (id: string) => void;
   tenants: Types.Tenant[];
-  addTenant: (tenant: Omit<Types.Tenant, 'id' | 'createdAt'>) => void;
+  addTenant: (tenant: Omit<Types.Tenant, 'id' | 'createdAt'>) => Types.Tenant;
 
   // App Settings (SettingsModule) — persisten & dipakai lintas modul
   // (invoicePrefix/taxRate untuk faktur & kasir, profil klinik untuk kop
@@ -426,7 +426,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Hapus', 'Cabang & Multi-Lokasi', current?.name || id, `Penghapusan cabang: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
-  const addTenant = (tenantData: Omit<Types.Tenant, 'id' | 'createdAt'>) => {
+  const addTenant = (tenantData: Omit<Types.Tenant, 'id' | 'createdAt'>): Types.Tenant => {
     const newTenant: Types.Tenant = {
       ...tenantData,
       id: 't_' + Date.now(),
@@ -434,6 +434,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setTenants((prev) => [newTenant, ...prev]);
     addAuditLog('Tambah', 'SaaS Multi-Tenant', newTenant.name, `Tenant organisasi baru '${newTenant.name}' didaftarkan (Paket: ${newTenant.plan})`, { severity: 'Kritis' });
+    return newTenant;
   };
 
   const updateAppSettings = (patch: Partial<Types.AppSettings>) => {
