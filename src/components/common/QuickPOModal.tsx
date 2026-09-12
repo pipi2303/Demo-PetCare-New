@@ -123,6 +123,18 @@ export const QuickPOModal: React.FC<QuickPOModalProps> = ({
     }
   }, [isOpen, initialItems, defaultSupplierName, customNotes, suppliers, stockItems]);
 
+  // Escape key handler to close modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const currentSupplier = suppliers.find((s) => s.id === selectedSupplierId) || suppliers[0];
@@ -211,18 +223,6 @@ export const QuickPOModal: React.FC<QuickPOModalProps> = ({
       setActiveModule('purchasing');
     }
   };
-
-  // Escape key handler to close modal
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
   return (
     <div

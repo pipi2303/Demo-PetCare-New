@@ -24,7 +24,7 @@ interface StockMutationModalProps {
 }
 
 export const StockMutationModal: React.FC<StockMutationModalProps> = ({ onClose }) => {
-  const { stockItems = [], branches = [], addAuditLog, addStockMovement } = useData();
+  const { stockItems = [], branches = [], addAuditLog, addStockMovement, updateStockItem } = useData();
   const { addToast } = useToast();
 
   const [sourceBranchId, setSourceBranchId] = useState<string>(branches[0]?.id || 'b1');
@@ -111,11 +111,28 @@ export const StockMutationModal: React.FC<StockMutationModalProps> = ({ onClose 
       return;
     }
 
+    // Validasi stok cukup sebelum surat jalan diterbitkan. Catatan: StockItem
+    // saat ini belum punya kartu stok per-cabang (hanya per-gudang), jadi
+    // kuantitas dikurangi dari kartu stok pusat yang dipilih — supaya jumlah
+    // yang dimutasi benar-benar keluar dari stok yang tercatat, bukan cuma
+    // tercatat di log tanpa mengubah stok sama sekali.
+    for (const it of transferItems) {
+      const stock = stockItems.find((s) => s.id === it.itemId);
+      if (!stock || stock.stock < it.quantity) {
+        addToast(`Stok ${it.itemName} tidak mencukupi untuk mutasi (tersedia: ${stock?.stock ?? 0} ${it.unit}).`, 'error');
+        return;
+      }
+    }
+
     const transferNo = `MUT-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
     const suratJalanNo = `SJ-${transferNo}`;
 
-    // Record stock movement
+    // Kurangi stok & catat pergerakan
     transferItems.forEach((it) => {
+      const stock = stockItems.find((s) => s.id === it.itemId);
+      if (stock && updateStockItem) {
+        updateStockItem(stock.id, { stock: stock.stock - it.quantity });
+      }
       if (addStockMovement) {
         addStockMovement({
           itemId: it.itemId,

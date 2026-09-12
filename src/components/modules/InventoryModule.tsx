@@ -265,6 +265,11 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
     const stock = stockItems.find((s) => s.id === selectedStockId);
     if (!stock) return;
 
+    if (fromWh === toWh) {
+      addToast('Gudang asal dan gudang tujuan tidak boleh sama.', 'error');
+      return;
+    }
+
     if (stock.stock < transferQty) {
       addToast(`Stok ${stock.name} tidak mencukupi untuk ditransfer (${stock.stock} ${stock.unit}).`, 'error');
       return;
@@ -272,6 +277,30 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
 
     // Deduct stock from source warehouse
     updateStockItem(stock.id, { stock: stock.stock - transferQty });
+
+    // Add stock to destination warehouse: kalau SKU yang sama sudah punya
+    // kartu stok di gudang tujuan, tambahkan ke sana; kalau belum ada, buka
+    // kartu stok baru di gudang tujuan dengan SKU yang sama supaya jumlah
+    // yang ditransfer tidak hilang begitu saja.
+    const destStock = stockItems.find((s) => s.sku === stock.sku && s.warehouse === toWh);
+    if (destStock) {
+      updateStockItem(destStock.id, { stock: destStock.stock + transferQty });
+    } else {
+      addStockItem({
+        sku: stock.sku,
+        name: stock.name,
+        category: stock.category,
+        warehouse: toWh,
+        stock: transferQty,
+        minStock: stock.minStock,
+        unit: stock.unit,
+        purchasePrice: stock.purchasePrice,
+        sellingPrice: stock.sellingPrice,
+        supplierName: stock.supplierName,
+        expiryDate: stock.expiryDate,
+        batchNumber: stock.batchNumber
+      });
+    }
 
     // Record movement
     addStockMovement({

@@ -129,7 +129,7 @@ interface DataContextType {
   deleteWarehouse: (id: string) => void;
 
   stockItems: Types.StockItem[];
-  addStockItem: (si: Omit<Types.StockItem, 'id' | 'sku'>) => void;
+  addStockItem: (si: Omit<Types.StockItem, 'id' | 'sku'> & { sku?: string }) => Types.StockItem;
   updateStockItem: (id: string, si: Partial<Types.StockItem>) => void;
   stockMovements: Types.StockMovement[];
   addStockMovement: (sm: Omit<Types.StockMovement, 'id' | 'date'>) => void;
@@ -1109,14 +1109,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Hapus', 'Master Data', current?.name || id, `Gudang/lokasi dihapus: ${current?.name || id}`, { severity: 'Warning' });
   };
 
-  const addStockItem = (si: Omit<Types.StockItem, 'id' | 'sku'>) => {
+  const addStockItem = (si: Omit<Types.StockItem, 'id' | 'sku'> & { sku?: string }) => {
     const newItem: Types.StockItem = {
       ...si,
       id: 'si_' + Date.now(),
-      sku: 'SKU-' + Math.floor(1000 + Math.random() * 9000)
+      sku: si.sku || 'SKU-' + Math.floor(1000 + Math.random() * 9000)
     };
     setStockItems((prev) => [...prev, newItem]);
     addAuditLog('Tambah', 'Inventaris & Gudang', newItem.name, `Penambahan item stok gudang baru: ${newItem.name} (SKU: ${newItem.sku})`, { severity: 'Info' });
+    return newItem;
   };
 
   const updateStockItem = (id: string, siData: Partial<Types.StockItem>) => {
@@ -1185,9 +1186,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setPurchaseOrders((prev) => prev.map((p) => (p.id === poId ? { ...p, status: 'Diterima' } : p)));
 
-    // Update stock items
+    // Update stock items. Quick PO (reorder cepat) menulis itemName sebagai
+    // "Nama Barang [SKU]", sedangkan PO manual menulis nama polos apa adanya
+    // — cocokkan dengan SKU di dalam kurung dulu, baru fallback ke nama
+    // persis, supaya kedua sumber PO tetap menambah stok saat diterima.
     po.items.forEach((item) => {
-      const stock = stockItems.find((s) => s.name === item.itemName);
+      const skuMatch = item.itemName.match(/\[([^\]]+)\]\s*$/);
+      const sku = skuMatch ? skuMatch[1].trim() : null;
+      const nameWithoutSku = item.itemName.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
+      const stock = stockItems.find(
+        (s) => (sku && s.sku === sku) || s.name === item.itemName || s.name === nameWithoutSku
+      );
       if (stock) {
         updateStockItem(stock.id, { stock: stock.stock + item.quantity });
         addStockMovement({
