@@ -48,7 +48,7 @@ import { ResponsiveContainer, BarChart, Bar, LineChart, Line, CartesianGrid, XAx
 import { DoseCalculator, DRUG_PROTOCOLS } from '../common/DoseCalculator';
 import { PinConfirmModal } from '../auth/PinConfirmModal';
 import { usePermissions } from '../../hooks/usePermissions';
-import { CctvMonitor, ROOMS_DATA as CCTV_ROOMS } from '../common/CctvMonitor';
+import { CctvMonitor, deriveCctvRooms } from '../common/CctvMonitor';
 import { QueueDisplay } from '../common/QueueDisplay';
 import { PredictiveInventoryWidget } from '../common/PredictiveInventoryWidget';
 import { PredictiveTrafficGrowthWidget } from '../common/PredictiveTrafficGrowthWidget';
@@ -297,6 +297,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
     pets,
     clinicVisits,
     hotelReservations,
+    inpatients,
     groomingSessions,
     telehealthSessions,
     invoices,
@@ -1456,8 +1457,8 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
               <span>{DRUG_PROTOCOLS.length} Protokol Obat</span>
             </span>
             <span className="px-2.5 py-1 rounded-lg bg-white/10 text-white/90 border border-white/15 flex items-center gap-1.5 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>{CCTV_ROOMS.length} CCTV Online</span>
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span>{deriveCctvRooms(hotelReservations || [], inpatients || [], pets || []).length} Kamar Dipantau (Pratinjau Demo)</span>
             </span>
             <button
               onClick={() => setShowFullQueueModal(true)}

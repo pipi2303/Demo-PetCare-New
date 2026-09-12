@@ -176,9 +176,14 @@ export const CloudBackupModule: React.FC = () => {
       await new Promise((r) => setTimeout(r, 400));
 
       if (data.success) {
+        // Payload yang dikirim hanya ringkasan JUMLAH record (pets.length,
+        // customers.length, dst), bukan isi data sungguhan — jadi ini catat
+        // metadata snapshot, bukan cadangan penuh yang bisa dipulihkan.
+        // Pesan sebelumnya ("Integritas data diverifikasi") membuatnya
+        // terdengar seperti cadangan lengkap yang aman direstore.
         addToast(
-          `Backup database berhasil diunggah ke ${data.snapshot.cloudBucket}! Integritas data diverifikasi (SHA-256).`,
-          'success'
+          `Snapshot metadata (jumlah record) berhasil dicatat ke ${data.snapshot.cloudBucket}. Catatan: ini belum mencadangkan isi data sungguhan — lihat catatan Mode Demo di dialog Restore.`,
+          'info'
         );
         fetchBackupData();
       } else {
@@ -266,9 +271,17 @@ export const CloudBackupModule: React.FC = () => {
       const res = await fetch(`/api/backup/restore/${selectedSnapshotForRestore.id}`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (data.success) {
+        // Sebelumnya toast ini mengklaim "Database berhasil dipulihkan...
+        // Integritas data terjaga sempurna" — padahal endpoint backend hanya
+        // membalas metadata snapshot, tidak pernah benar-benar menulis apa
+        // pun ke localStorage aplikasi ini (tempat seluruh data bisnis
+        // sungguhan tersimpan). Kalau staf mengira restore sungguhan
+        // terjadi saat insiden kehilangan data nyata, tidak ada yang benar
+        // pulih. Sampai backup/restore sungguhan dibangun (lihat Fase 01
+        // Fondasi Data), pesan ini jujur menyatakan ini simulasi demo.
         addToast(
-          `Database berhasil dipulihkan dari snapshot ${selectedSnapshotForRestore.filename}! Integritas data terjaga sempurna.`,
-          'success'
+          `Simulasi restore untuk snapshot ${selectedSnapshotForRestore.filename} selesai. Ini DEMO — belum ada pemulihan data sungguhan ke aplikasi (lihat catatan di atas modal).`,
+          'info'
         );
         setSelectedSnapshotForRestore(null);
       }
@@ -705,9 +718,12 @@ export const CloudBackupModule: React.FC = () => {
               </div>
             </div>
 
-            <p className="text-[11px] text-[#6B6656]">
-              Proses restore akan memverifikasi integritas bit, merekonstruksi data EMR, transaksi dan master data, lalu menyinkronkannya kembali secara aman.
-            </p>
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-[11px] text-amber-900 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <span>
+                <strong>Mode Demo:</strong> tombol ini mensimulasikan alur restore untuk keperluan pratinjau produk. Belum ada pemulihan data sungguhan ke aplikasi ini — jangan andalkan sebagai prosedur pemulihan bencana (disaster recovery) yang sesungguhnya sampai fitur backup/restore nyata dibangun.
+              </span>
+            </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button
