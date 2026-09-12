@@ -90,6 +90,9 @@ interface DataContextType {
   dewormingRecords: Types.DewormingRecord[];
   addDewormingRecord: (dr: Omit<Types.DewormingRecord, 'id'>) => Types.DewormingRecord;
 
+  customerNotes: Types.CustomerNote[];
+  addCustomerNote: (customerId: string, note: string) => Types.CustomerNote;
+
   // Inter-branch stock transfer (surat jalan, bukan pemindahan angka stok —
   // lihat catatan di Types.InterBranchTransfer)
   interBranchTransfers: Types.InterBranchTransfer[];
@@ -298,6 +301,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [vacSchedules, setVacSchedules] = useLocalState<Types.VacSchedule[]>('vac_schedules', Seed.INITIAL_VAC_SCHEDULES);
   const [vacHistories, setVacHistories] = useLocalState<Types.VacHistory[]>('vac_histories', Seed.INITIAL_VAC_HISTORIES);
   const [dewormingRecords, setDewormingRecords] = useLocalState<Types.DewormingRecord[]>('deworming_records', []);
+  const [customerNotes, setCustomerNotes] = useLocalState<Types.CustomerNote[]>('customer_notes', []);
   const [interBranchTransfers, setInterBranchTransfers] = useLocalState<Types.InterBranchTransfer[]>('inter_branch_transfers', []);
   const [surgicalProcedures, setSurgicalProcedures] = useLocalState<Types.SurgicalProcedure[]>('surgical_procedures', Seed.INITIAL_SURGICAL_PROCEDURES);
 
@@ -943,6 +947,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDewormingRecords((prev) => [newRecord, ...prev]);
     addAuditLog('Tambah', 'Vaksinasi & Paspor', dr.medicineName, `Pemberian obat cacing/anti-parasit ${dr.medicineName} untuk pasien, jadwal ulang berikutnya ${dr.nextDueDate}`, { severity: 'Info' });
     return newRecord;
+  };
+
+  const addCustomerNote = (customerId: string, note: string): Types.CustomerNote => {
+    const newNote: Types.CustomerNote = {
+      id: 'cn_' + Date.now(),
+      customerId,
+      date: new Date().toISOString().substring(0, 10),
+      note,
+      authorName: user?.name || 'Staf CRM'
+    };
+    setCustomerNotes((prev) => [...prev, newNote]);
+    addAuditLog('Tambah', 'CRM & Loyalty', customerId, `Catatan interaksi baru ditambahkan untuk pelanggan.`, { severity: 'Info' });
+    return newNote;
   };
 
   // Mutasi stok antar cabang: stok itu satu pool bersama (StockItem tidak
@@ -1660,6 +1677,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addVacHistory,
         dewormingRecords,
         addDewormingRecord,
+        customerNotes,
+        addCustomerNote,
         interBranchTransfers,
         addInterBranchTransfer,
         markInterBranchTransferReceived,

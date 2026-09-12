@@ -357,6 +357,17 @@ export interface DewormingRecord {
   nextDueDate: string;
 }
 
+// Catatan interaksi CRM per pelanggan — sebelumnya Record<customerId, string>
+// di useState lokal CRMModule.tsx (di-seed 2 catatan contoh, hilang saat
+// reload). Sekarang array persisten seperti koleksi lain di aplikasi ini.
+export interface CustomerNote {
+  id: string;
+  customerId: string;
+  date: string;
+  note: string;
+  authorName: string;
+}
+
 export interface EctoRecord {
   id: string;
   petId: string;

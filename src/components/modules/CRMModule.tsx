@@ -37,7 +37,9 @@ export const CRMModule: React.FC = () => {
     adjustCustomerPoints,
     pets = [],
     clinicVisits = [],
-    invoices = []
+    invoices = [],
+    customerNotes = [],
+    addCustomerNote
   } = useData();
   const { addToast } = useToast();
   const { can } = usePermissions();
@@ -62,15 +64,23 @@ export const CRMModule: React.FC = () => {
   const [broadcastTemplate, setBroadcastTemplate] = useState(
     'Halo Kak {NAMA}! 🐾 PetCare ERP memberikan promo spesial diskon 20% untuk paket Premium Grooming anabul kesayangan Kakak ({NAMA_HEWAN}) minggu ini. Hubungi kami untuk reservasi!'
   );
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+
+  // Daftar penerima nyata untuk target segmentasi terpilih — sebelumnya badge
+  // "Target Pelanggan: N Kontak" menghitung angka ini dengan benar, tapi
+  // tombol kirim mengabaikannya total dan cuma mengirim ke customers[0].
+  // Dipakai bersama oleh badge (hitung) dan handleLaunchBroadcast (kirim).
+  const broadcastRecipients: Customer[] =
+    broadcastTarget === 'Semua'
+      ? customers
+      : ['Silver', 'Gold', 'Platinum'].includes(broadcastTarget)
+      ? customers.filter((c) => c.membershipTier === broadcastTarget)
+      : customers.filter((c) => pets.some((p) => p.customerId === c.id && p.species === broadcastTarget));
 
   // Customer 360 State
   const [selectedCustId, setSelectedCustId] = useState<string>(customers[0]?.id || '');
   const [pointAdjustment, setPointAdjustment] = useState<number>(100);
   const [pointReason, setPointReason] = useState<string>('Bonus Ulang Tahun / Promotion');
-  const [crmNotes, setCrmNotes] = useState<Record<string, string>>({
-    c1: 'Pelanggan VIP Platinum. Selalu meminta slot pagi jam 09:00 dengan drh. Ananda.',
-    c2: 'Anabul Max agak rewel dengan suara petir, perlu ditempatkan di ruang tenang.'
-  });
   const [newCrmNoteInput, setNewCrmNoteInput] = useState('');
 
   const handleSendWA = async (phone: string, text: string) => {
@@ -78,6 +88,43 @@ export const CRMModule: React.FC = () => {
     addToast(
       outcome.auto ? `Pesan WhatsApp terkirim otomatis ke ${phone}.` : `Membuka WhatsApp Web ke ${phone}...`,
       outcome.auto ? 'success' : 'info'
+    );
+  };
+
+  // Sebelumnya tombol ini cuma kirim ke customers[0] lalu toast bohong
+  // "diluncurkan untuk N penerima" pakai customers.length — filter target
+  // segmentasi (Silver/Gold/Anjing/dst) tidak pernah benar-benar dipakai
+  // untuk kirim. Sekarang benar-benar loop ke seluruh broadcastRecipients.
+  const handleLaunchBroadcast = async () => {
+    if (isBroadcasting) return;
+    if (broadcastRecipients.length === 0) {
+      addToast('Tidak ada pelanggan yang cocok dengan target segmentasi ini.', 'warning');
+      return;
+    }
+    setIsBroadcasting(true);
+    let autoCount = 0;
+    let manualCount = 0;
+    let skippedCount = 0;
+    for (const cust of broadcastRecipients) {
+      if (!cust.phone) {
+        skippedCount++;
+        continue;
+      }
+      const custPet = pets.find((p) => p.customerId === cust.id);
+      const msg = broadcastTemplate
+        .replaceAll('{NAMA}', cust.name)
+        .replaceAll('{NAMA_HEWAN}', custPet?.name || 'anabul Anda');
+      const outcome = await sendWhatsAppNotification(cust.phone, msg);
+      if (outcome.auto) autoCount++;
+      else manualCount++;
+    }
+    setIsBroadcasting(false);
+    addToast(
+      `Broadcast selesai: ${autoCount + manualCount} dari ${broadcastRecipients.length} kontak target "${broadcastTarget}" diproses` +
+        `${autoCount > 0 ? ` (${autoCount} terkirim otomatis)` : ''}` +
+        `${manualCount > 0 ? ` (${manualCount} dibuka manual via WhatsApp Web)` : ''}` +
+        `${skippedCount > 0 ? `. ${skippedCount} kontak dilewati karena tidak ada nomor WA.` : '.'}`,
+      'success'
     );
   };
 
@@ -123,11 +170,13 @@ export const CRMModule: React.FC = () => {
     addToast(`Poin loyalitas ${selectedCustomer.name} berhasil disesuaikan (${pointAdjustment > 0 ? '+' : ''}${pointAdjustment})!`, 'success');
   };
 
+  const selectedCustomerNotes = customerNotes
+    .filter((n) => n.customerId === selectedCustomer?.id)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
   const handleAddCrmNote = () => {
     if (!newCrmNoteInput.trim() || !selectedCustomer) return;
-    const currentNote = crmNotes[selectedCustomer.id] || '';
-    const updated = currentNote ? `${currentNote}\n[${new Date().toISOString().substring(0, 10)}] ${newCrmNoteInput}` : `[${new Date().toISOString().substring(0, 10)}] ${newCrmNoteInput}`;
-    setCrmNotes({ ...crmNotes, [selectedCustomer.id]: updated });
+    addCustomerNote(selectedCustomer.id, newCrmNoteInput.trim());
     setNewCrmNoteInput('');
     addToast('Catatan CRM pelanggan berhasil disimpan!', 'success');
   };
@@ -428,11 +477,7 @@ export const CRMModule: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-1.5 text-xs font-bold text-[#1B2A45] bg-[#F6F1E6] px-3 py-1.5 rounded-lg border border-[#E1D6BE]">
-              <Users className="w-4 h-4" /> Target Pelanggan: {
-                broadcastTarget === 'Semua' ? customers.length :
-                ['Silver', 'Gold', 'Platinum'].includes(broadcastTarget) ? customers.filter((c) => c.membershipTier === broadcastTarget).length :
-                pets.filter((p) => p.species === broadcastTarget).length
-              } Kontak
+              <Users className="w-4 h-4" /> Target Pelanggan: {broadcastRecipients.length} Kontak
             </div>
           </div>
 
@@ -500,19 +545,12 @@ export const CRMModule: React.FC = () => {
 
           <div className="pt-2 border-t border-[#E1D6BE]/60 flex justify-end">
             <button
-              onClick={() => {
-                const sample = customers[0];
-                if (!sample) return;
-                const samplePet = pets.find((p) => p.customerId === sample.id);
-                const msg = broadcastTemplate
-                  .replace('{NAMA}', sample.name)
-                  .replace('{NAMA_HEWAN}', samplePet?.name || 'Milo');
-                handleSendWA(sample.phone, msg);
-                addToast(`Broadcast WhatsApp diluncurkan untuk ${customers.length} penerima target!`, 'success');
-              }}
-              className="px-5 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-md transition-all flex items-center gap-2"
+              onClick={handleLaunchBroadcast}
+              disabled={isBroadcasting}
+              className="px-5 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] disabled:opacity-50 disabled:cursor-not-allowed text-[#FFFDF9] font-bold text-xs rounded-lg shadow-md transition-all flex items-center gap-2"
             >
-              <Send className="w-4 h-4 text-[#E1D6BE]" /> Meluncurkan Broadcast WA
+              <Send className="w-4 h-4 text-[#E1D6BE]" />
+              {isBroadcasting ? `Mengirim ke ${broadcastRecipients.length} Kontak...` : 'Meluncurkan Broadcast WA'}
             </button>
           </div>
         </div>
@@ -614,8 +652,16 @@ export const CRMModule: React.FC = () => {
                     Catatan Khusus Klien (CRM Interaction History)
                   </h4>
 
-                  <div className="bg-[#F6F1E6] p-3 rounded-lg border border-[#E1D6BE] text-xs font-mono text-[#1B2A45] whitespace-pre-line leading-relaxed min-h-20">
-                    {crmNotes[selectedCustomer.id] || 'Belum ada catatan khusus untuk pelanggan ini.'}
+                  <div className="bg-[#F6F1E6] p-3 rounded-lg border border-[#E1D6BE] text-xs text-[#1B2A45] leading-relaxed min-h-20 space-y-1.5">
+                    {selectedCustomerNotes.length === 0 ? (
+                      <span className="font-mono">Belum ada catatan khusus untuk pelanggan ini.</span>
+                    ) : (
+                      selectedCustomerNotes.map((n) => (
+                        <p key={n.id} className="font-mono">
+                          <span className="text-[#6B6656]">[{n.date} • {n.authorName}]</span> {n.note}
+                        </p>
+                      ))
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 text-xs">
