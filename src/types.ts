@@ -60,6 +60,44 @@ export interface Branch {
   isMainBranch?: boolean;
 }
 
+// Konfigurasi sistem dari SettingsModule — dulu semua tombol "Simpan" di
+// sini cuma addToast tanpa persist apa pun. Sekarang nilai-nilai ini
+// disimpan permanen DAN benar-benar dipakai modul lain: invoicePrefix &
+// taxRate/enableTax dibaca saat membuat invoice/checkout kasir, dan profil
+// klinik dipakai sebagai identitas kop surat di laporan PDF resmi.
+export interface AppSettings {
+  clinicName: string;
+  slogan: string;
+  sipNumber: string;
+  taxId: string;
+  clinicPhone: string;
+  clinicEmail: string;
+  clinicAddress: string;
+  operationalHours: string;
+
+  invoicePrefix: string;
+  invoiceHeader: string;
+  invoiceFooter: string;
+  taxRate: number;
+  enableTax: boolean;
+  serviceFeePercent: number;
+  roundingMode: 'round' | 'floor' | 'ceil';
+  cashierAutoPrint: boolean;
+
+  waSessionName: string;
+  waPhoneConnected: string;
+  waApiKey: string;
+  autoReminderHMinus1: boolean;
+  autoVaccineAlert: boolean;
+  autoSendInvoicePdf: boolean;
+
+  paperWidth: '58mm' | '80mm';
+  printerConnection: 'bluetooth' | 'usb' | 'network';
+  printerDeviceName: string;
+  printerIpAddress: string;
+  cutPaperAfterPrint: boolean;
+}
+
 export type MembershipTier = 'Silver' | 'Gold' | 'Platinum';
 
 export interface Customer {

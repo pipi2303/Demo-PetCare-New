@@ -50,7 +50,7 @@ import {
 
 export const SettingsModule: React.FC = () => {
   const { addToast } = useToast();
-  const { branches = [], activeBranchId, doctorBookings = [] } = useData();
+  const { branches = [], activeBranchId, doctorBookings = [], appSettings, updateAppSettings } = useData();
 
   const [activeTab, setActiveTab] = useState<'profile' | 'invoice' | 'whatsapp' | 'printer' | 'backup' | 'google_calendar'>('profile');
 
@@ -63,54 +63,94 @@ export const SettingsModule: React.FC = () => {
     setGcalConfig(loadGoogleCalendarConfig());
   }, []);
 
-  // Clinic Profile State
-  const [clinicName, setClinicName] = useState('VetCare Animal Hospital & Pet Clinic');
-  const [slogan, setSlogan] = useState('Pelayanan Medis Hewan Terpercaya & Kasih Sayang Sepenuh Hati');
-  const [sipNumber, setSipNumber] = useState('503/SIP-DOKTER-HEWAN/DPMPTSP/2024');
-  const [taxId, setTaxId] = useState('09.432.871.2-031.000 (NPWP Badan)');
-  const [clinicPhone, setClinicPhone] = useState('+62 812-3456-7890');
-  const [clinicEmail, setClinicEmail] = useState('klinik@vetcare-hospital.id');
-  const [clinicAddress, setClinicAddress] = useState('Jl. Kemang Raya No. 45B, Jakarta Selatan 12730');
-  const [operationalHours, setOperationalHours] = useState('Senin - Minggu: 08:00 - 21:00 (Emergency 24 Jam)');
+  // Clinic Profile State — draft lokal diinisialisasi dari appSettings
+  // (persisten di DataContext), disimpan permanen saat handleSaveProfile.
+  // Sebelumnya semua field ini hardcode & handleSaveProfile cuma addToast
+  // tanpa menulis ke mana pun — data "tersimpan" hilang begitu halaman
+  // di-reload, dan tidak ada modul lain yang benar-benar membacanya.
+  const [clinicName, setClinicName] = useState(appSettings.clinicName);
+  const [slogan, setSlogan] = useState(appSettings.slogan);
+  const [sipNumber, setSipNumber] = useState(appSettings.sipNumber);
+  const [taxId, setTaxId] = useState(appSettings.taxId);
+  const [clinicPhone, setClinicPhone] = useState(appSettings.clinicPhone);
+  const [clinicEmail, setClinicEmail] = useState(appSettings.clinicEmail);
+  const [clinicAddress, setClinicAddress] = useState(appSettings.clinicAddress);
+  const [operationalHours, setOperationalHours] = useState(appSettings.operationalHours);
 
   // Invoice & POS Format State
-  const [invoicePrefix, setInvoicePrefix] = useState('INV-VET');
-  const [invoiceHeader, setInvoiceHeader] = useState('VETCARE ANIMAL CLINIC & PET SHOP');
-  const [invoiceFooter, setInvoiceFooter] = useState('Terima kasih atas kepercayaan Anda merawat anabul tercinta bersama kami.');
-  const [taxRate, setTaxRate] = useState<number>(11);
-  const [enableTax, setEnableTax] = useState<boolean>(true);
-  const [serviceFeePercent, setServiceFeePercent] = useState<number>(0);
-  const [roundingMode, setRoundingMode] = useState<'round' | 'floor' | 'ceil'>('round');
-  const [cashierAutoPrint, setCashierAutoPrint] = useState<boolean>(true);
+  const [invoicePrefix, setInvoicePrefix] = useState(appSettings.invoicePrefix);
+  const [invoiceHeader, setInvoiceHeader] = useState(appSettings.invoiceHeader);
+  const [invoiceFooter, setInvoiceFooter] = useState(appSettings.invoiceFooter);
+  const [taxRate, setTaxRate] = useState<number>(appSettings.taxRate);
+  const [enableTax, setEnableTax] = useState<boolean>(appSettings.enableTax);
+  const [serviceFeePercent, setServiceFeePercent] = useState<number>(appSettings.serviceFeePercent);
+  const [roundingMode, setRoundingMode] = useState<'round' | 'floor' | 'ceil'>(appSettings.roundingMode);
+  const [cashierAutoPrint, setCashierAutoPrint] = useState<boolean>(appSettings.cashierAutoPrint);
 
   // WhatsApp Gateway State
   const [waConnected, setWaConnected] = useState<boolean>(true);
-  const [waSessionName, setWaSessionName] = useState('VetCare-Gateway-Office');
-  const [waPhoneConnected, setWaPhoneConnected] = useState('+62 812-9876-5432');
-  const [waApiKey, setWaApiKey] = useState('vc_live_98ab71029c8e14d3f281');
-  const [autoReminderHMinus1, setAutoReminderHMinus1] = useState<boolean>(true);
-  const [autoVaccineAlert, setAutoVaccineAlert] = useState<boolean>(true);
-  const [autoSendInvoicePdf, setAutoSendInvoicePdf] = useState<boolean>(true);
+  const [waSessionName, setWaSessionName] = useState(appSettings.waSessionName);
+  const [waPhoneConnected, setWaPhoneConnected] = useState(appSettings.waPhoneConnected);
+  const [waApiKey, setWaApiKey] = useState(appSettings.waApiKey);
+  const [autoReminderHMinus1, setAutoReminderHMinus1] = useState<boolean>(appSettings.autoReminderHMinus1);
+  const [autoVaccineAlert, setAutoVaccineAlert] = useState<boolean>(appSettings.autoVaccineAlert);
+  const [autoSendInvoicePdf, setAutoSendInvoicePdf] = useState<boolean>(appSettings.autoSendInvoicePdf);
 
   // Printer Configuration State
-  const [paperWidth, setPaperWidth] = useState<'58mm' | '80mm'>('80mm');
-  const [printerConnection, setPrinterConnection] = useState<'bluetooth' | 'usb' | 'network'>('bluetooth');
-  const [printerDeviceName, setPrinterDeviceName] = useState('RP-80 Thermal POS Printer');
-  const [printerIpAddress, setPrinterIpAddress] = useState('192.168.1.188');
-  const [cutPaperAfterPrint, setCutPaperAfterPrint] = useState<boolean>(true);
+  const [paperWidth, setPaperWidth] = useState<'58mm' | '80mm'>(appSettings.paperWidth);
+  const [printerConnection, setPrinterConnection] = useState<'bluetooth' | 'usb' | 'network'>(appSettings.printerConnection);
+  const [printerDeviceName, setPrinterDeviceName] = useState(appSettings.printerDeviceName);
+  const [printerIpAddress, setPrinterIpAddress] = useState(appSettings.printerIpAddress);
+  const [cutPaperAfterPrint, setCutPaperAfterPrint] = useState<boolean>(appSettings.cutPaperAfterPrint);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    addToast('Profil klinik & identitas operasional berhasil diperbarui!', 'success');
+    updateAppSettings({
+      clinicName,
+      slogan,
+      sipNumber,
+      taxId,
+      clinicPhone,
+      clinicEmail,
+      clinicAddress,
+      operationalHours
+    });
+    addToast('Profil klinik & identitas operasional berhasil diperbarui! Dipakai juga sebagai kop surat laporan PDF resmi.', 'success');
   };
 
   const handleSaveInvoiceSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    addToast('Pengaturan format invoice, PPN & kasir POS berhasil disimpan!', 'success');
+    updateAppSettings({
+      invoicePrefix,
+      invoiceHeader,
+      invoiceFooter,
+      taxRate,
+      enableTax,
+      serviceFeePercent,
+      roundingMode,
+      cashierAutoPrint,
+      // Field printer disimpan bersamaan karena tabnya sendiri tidak punya
+      // tombol Simpan terpisah (lihat TAB 4) — perubahan di sana langsung
+      // diterapkan ke draft lokal, ikut tersimpan saat tab lain disimpan.
+      paperWidth,
+      printerConnection,
+      printerDeviceName,
+      printerIpAddress,
+      cutPaperAfterPrint
+    });
+    addToast('Pengaturan format invoice, PPN & kasir POS berhasil disimpan! Prefix & PPN langsung dipakai di Kasir Pet Shop.', 'success');
   };
 
   const handleSaveWaSettings = (e: React.FormEvent) => {
     e.preventDefault();
+    updateAppSettings({
+      waSessionName,
+      waPhoneConnected,
+      waApiKey,
+      autoReminderHMinus1,
+      autoVaccineAlert,
+      autoSendInvoicePdf
+    });
     addToast('Konfigurasi WhatsApp Gateway & pesan otomatis berhasil disimpan!', 'success');
   };
 

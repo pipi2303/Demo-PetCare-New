@@ -14,6 +14,12 @@ interface DataContextType {
   tenants: Types.Tenant[];
   addTenant: (tenant: Omit<Types.Tenant, 'id' | 'createdAt'>) => void;
 
+  // App Settings (SettingsModule) — persisten & dipakai lintas modul
+  // (invoicePrefix/taxRate untuk faktur & kasir, profil klinik untuk kop
+  // surat PDF resmi).
+  appSettings: Types.AppSettings;
+  updateAppSettings: (patch: Partial<Types.AppSettings>) => void;
+
   // Master Data
   customers: Types.Customer[];
   addCustomer: (cust: Omit<Types.Customer, 'id' | 'createdAt' | 'loyaltyPoints' | 'totalSpent' | 'petCount'>) => Types.Customer;
@@ -271,6 +277,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeBranchId, setActiveBranchId] = useState<string>('all');
   const [tenants, setTenants] = useLocalState<Types.Tenant[]>('tenants', Seed.INITIAL_TENANTS);
   const [branches, setBranches] = useLocalState<Types.Branch[]>('branches', Seed.INITIAL_BRANCHES);
+  const [appSettings, setAppSettings] = useLocalState<Types.AppSettings>('app_settings', Seed.DEFAULT_APP_SETTINGS);
 
   // Entities
   const [customers, setCustomers] = useLocalState<Types.Customer[]>('customers', Seed.INITIAL_CUSTOMERS);
@@ -427,6 +434,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setTenants((prev) => [newTenant, ...prev]);
     addAuditLog('Tambah', 'SaaS Multi-Tenant', newTenant.name, `Tenant organisasi baru '${newTenant.name}' didaftarkan (Paket: ${newTenant.plan})`, { severity: 'Kritis' });
+  };
+
+  const updateAppSettings = (patch: Partial<Types.AppSettings>) => {
+    setAppSettings((prev) => ({ ...prev, ...patch }));
+    addAuditLog('Edit', 'Pengaturan Sistem', 'Konfigurasi Aplikasi', `Pengaturan sistem diperbarui: ${Object.keys(patch).join(', ')}`, { severity: 'Info' });
   };
 
   const addCustomer = (custData: Omit<Types.Customer, 'id' | 'createdAt' | 'loyaltyPoints' | 'totalSpent' | 'petCount'>): Types.Customer => {
@@ -1279,7 +1291,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newInv: Types.Invoice = {
       ...invData,
       id: 'inv_' + Date.now(),
-      invoiceNo: 'INV-' + Date.now().toString().slice(-6),
+      invoiceNo: (appSettings.invoicePrefix || 'INV') + '-' + Date.now().toString().slice(-6),
       date: new Date().toISOString().substring(0, 10)
     };
     setInvoices((prev) => [newInv, ...prev]);
@@ -1594,6 +1606,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteBranch,
         tenants,
         addTenant,
+        appSettings,
+        updateAppSettings,
         customers,
         addCustomer,
         updateCustomer,

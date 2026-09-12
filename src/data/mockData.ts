@@ -2,6 +2,7 @@ import {
   User,
   Tenant,
   Branch,
+  AppSettings,
   Customer,
   Pet,
   ServiceItem,
@@ -1330,3 +1331,39 @@ export const INITIAL_WAREHOUSES: Warehouse[] = [
   { id: 'wh3', name: 'Grooming Supply' },
   { id: 'wh4', name: 'Pet Shop' }
 ];
+
+// Nilai awal identik dengan yang dulu hardcoded langsung di SettingsModule.tsx
+// (jadi tidak ada perubahan tampilan saat pertama kali dimuat) — sekarang
+// jadi titik awal yang benar-benar bisa diedit & tersimpan lewat DataContext.
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  clinicName: 'VetCare Animal Hospital & Pet Clinic',
+  slogan: 'Pelayanan Medis Hewan Terpercaya & Kasih Sayang Sepenuh Hati',
+  sipNumber: '503/SIP-DOKTER-HEWAN/DPMPTSP/2024',
+  taxId: '09.432.871.2-031.000 (NPWP Badan)',
+  clinicPhone: '+62 812-3456-7890',
+  clinicEmail: 'klinik@vetcare-hospital.id',
+  clinicAddress: 'Jl. Kemang Raya No. 45B, Jakarta Selatan 12730',
+  operationalHours: 'Senin - Minggu: 08:00 - 21:00 (Emergency 24 Jam)',
+
+  invoicePrefix: 'INV-VET',
+  invoiceHeader: 'VETCARE ANIMAL CLINIC & PET SHOP',
+  invoiceFooter: 'Terima kasih atas kepercayaan Anda merawat anabul tercinta bersama kami.',
+  taxRate: 11,
+  enableTax: true,
+  serviceFeePercent: 0,
+  roundingMode: 'round',
+  cashierAutoPrint: true,
+
+  waSessionName: 'VetCare-Gateway-Office',
+  waPhoneConnected: '+62 812-9876-5432',
+  waApiKey: 'vc_live_98ab71029c8e14d3f281',
+  autoReminderHMinus1: true,
+  autoVaccineAlert: true,
+  autoSendInvoicePdf: true,
+
+  paperWidth: '80mm',
+  printerConnection: 'bluetooth',
+  printerDeviceName: 'RP-80 Thermal POS Printer',
+  printerIpAddress: '192.168.1.188',
+  cutPaperAfterPrint: true
+};

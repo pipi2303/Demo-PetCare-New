@@ -72,9 +72,24 @@ export const ReportsExportModule: React.FC = () => {
     vacHistories = [],
     cashTransactions = [],
     branches = [],
-    activeBranchId
+    activeBranchId,
+    appSettings
   } = useData();
   const { addToast } = useToast();
+
+  // Identitas kop surat resmi sekarang dari Pengaturan Sistem (Profil
+  // Klinik) — sebelumnya laporan resmi selalu memakai DEFAULT_COMPANY_INFO
+  // hardcoded apa pun yang Owner isi di Settings. branchName tetap diisi
+  // terpisah oleh pemanggil (selectedBranchName, bisa diganti di form).
+  const reportCompanyInfoBase: Omit<typeof DEFAULT_COMPANY_INFO, 'branchName'> = {
+    clinicName: appSettings.clinicName,
+    subTitle: appSettings.slogan,
+    address: appSettings.clinicAddress,
+    phone: appSettings.clinicPhone,
+    email: appSettings.clinicEmail,
+    npwp: appSettings.taxId,
+    licenseNo: appSettings.sipNumber
+  };
 
   const [activeMainTab, setActiveMainTab] = useState<'financialPdf' | 'medicalPdf' | 'csvExport'>('financialPdf');
   const [selectedMonth, setSelectedMonth] = useState<string>('Agustus');
@@ -198,7 +213,7 @@ export const ReportsExportModule: React.FC = () => {
         periodMonth: selectedMonth,
         periodYear: selectedYear,
         company: {
-          ...DEFAULT_COMPANY_INFO,
+          ...reportCompanyInfoBase,
           branchName: selectedBranchName
         },
         includeTaxCalculation,
@@ -230,7 +245,7 @@ export const ReportsExportModule: React.FC = () => {
         periodMonth: selectedMonth,
         periodYear: selectedYear,
         company: {
-          ...DEFAULT_COMPANY_INFO,
+          ...reportCompanyInfoBase,
           branchName: selectedBranchName
         },
         includeEpidemiology: true,
@@ -961,14 +976,14 @@ export const ReportsExportModule: React.FC = () => {
                   </div>
                   <div>
                     <h2 className="text-base md:text-lg font-extrabold text-[#1B2A45] font-display">
-                      {DEFAULT_COMPANY_INFO.clinicName}
+                      {reportCompanyInfoBase.clinicName}
                     </h2>
-                    <p className="text-xs text-[#6B6656]">{DEFAULT_COMPANY_INFO.subTitle}</p>
+                    <p className="text-xs text-[#6B6656]">{reportCompanyInfoBase.subTitle}</p>
                     <p className="text-[11px] text-[#6B6656] mt-0.5">
-                      {DEFAULT_COMPANY_INFO.address} | Telp: {DEFAULT_COMPANY_INFO.phone}
+                      {reportCompanyInfoBase.address} | Telp: {reportCompanyInfoBase.phone}
                     </p>
                     <p className="text-[10px] text-[#B8905A] font-bold mt-0.5">
-                      NPWP: {DEFAULT_COMPANY_INFO.npwp} | Izin: {DEFAULT_COMPANY_INFO.licenseNo}
+                      NPWP: {reportCompanyInfoBase.npwp} | Izin: {reportCompanyInfoBase.licenseNo}
                     </p>
                   </div>
                 </div>

@@ -73,7 +73,8 @@ export const PetShopModule: React.FC = () => {
     updateStockItem,
     adjustCustomerPoints,
     addCustomer,
-    addStockMovement
+    addStockMovement,
+    appSettings
   } = useData();
   const { addToast } = useToast();
 
@@ -258,7 +259,10 @@ export const PetShopModule: React.FC = () => {
 
   const totalDiscount = voucherDiscount + pointDiscountRupiah;
   const taxableAmount = Math.max(0, cartSubtotal - totalDiscount);
-  const taxPPN = Math.round(taxableAmount * 0.11); // 11% PPN
+  // Tarif & aktif/tidaknya PPN sekarang dari Pengaturan Sistem (dulu 0.11
+  // hardcoded di sini, tidak pernah membaca konfigurasi apa pun).
+  const activeTaxRatePercent = appSettings.enableTax ? appSettings.taxRate : 0;
+  const taxPPN = Math.round(taxableAmount * (activeTaxRatePercent / 100));
   const grandTotal = taxableAmount + taxPPN;
   const earnedPoints = isGuestCustomer ? 0 : Math.floor(grandTotal / 10000); // 1 point per 10k spent for members
 
@@ -1115,7 +1119,7 @@ export const PetShopModule: React.FC = () => {
                 </div>
               )}
               <div className="flex justify-between text-[#EDE6D6]/80">
-                <span>PPN 11%:</span>
+                <span>PPN {activeTaxRatePercent}%:</span>
                 <span className="font-bold">Rp {taxPPN.toLocaleString('id-ID')}</span>
               </div>
               <div className="flex justify-between border-t border-slate-700 pt-2 text-sm font-extrabold text-[#D9B98A]">
@@ -1402,7 +1406,7 @@ export const PetShopModule: React.FC = () => {
               {completedInvoice.discountAmount > 0 && (
                 <div className="flex justify-between text-emerald-700"><span>Diskon:</span><span>- Rp {completedInvoice.discountAmount.toLocaleString('id-ID')}</span></div>
               )}
-              <div className="flex justify-between"><span>PPN 11%:</span><span>Rp {completedInvoice.taxPPN.toLocaleString('id-ID')}</span></div>
+              <div className="flex justify-between"><span>PPN {activeTaxRatePercent}%:</span><span>Rp {completedInvoice.taxPPN.toLocaleString('id-ID')}</span></div>
               <div className="flex justify-between font-bold text-xs text-slate-900 border-t border-slate-200 pt-1">
                 <span>TOTAL:</span>
                 <span>Rp {completedInvoice.totalAmount.toLocaleString('id-ID')}</span>
