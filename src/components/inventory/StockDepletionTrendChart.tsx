@@ -66,6 +66,11 @@ export interface ItemDepletionSeries {
   isBelowMinStockNow: boolean;
   dipBelowMinDayIndex: number | null;
   velocityScore: number;
+  // true kalau belum ada mutasi 'Keluar' tercatat untuk item ini dalam 30
+  // hari terakhir, sehingga burn rate & kurva 30 harinya masih tebakan
+  // berbasis kategori produk (dihitung tapi sebelumnya tidak pernah sampai
+  // ke UI — badge "Data Riil"/"Estimasi" di bawah memakainya).
+  usedEstimate: boolean;
 }
 
 const PALETTE = [
@@ -181,7 +186,7 @@ export const StockDepletionTrendChart: React.FC<StockDepletionTrendChartProps> =
     today.setHours(0, 0, 0, 0);
 
     return topMoving.map((scored, index) => {
-      const { item, monthlyDemand, velocityScore, itemMovements } = scored;
+      const { item, monthlyDemand, velocityScore, itemMovements, usedEstimate } = scored;
       const palette = PALETTE[index % PALETTE.length];
       const dailyBurnRate = Math.max(0.1, Number((monthlyDemand / 30).toFixed(2)));
 
@@ -310,7 +315,8 @@ export const StockDepletionTrendChart: React.FC<StockDepletionTrendChartProps> =
         daysOfSupplyRemaining: daysOfSupply,
         isBelowMinStockNow: currentStock <= item.minStock,
         dipBelowMinDayIndex: dipDayIndex,
-        velocityScore
+        velocityScore,
+        usedEstimate
       };
     });
   }, [stockItems, stockMovements]);
@@ -805,6 +811,8 @@ export const StockDepletionTrendChart: React.FC<StockDepletionTrendChartProps> =
             <p className="text-xs text-[#94A3B8] max-w-2xl mt-0.5">
               Analisis matematis lintasan konsumsi persediaan harian untuk produk berkecepatan tinggi (*fast-moving*),
               memetakan titik kritis batas minimum stok (*min-stock threshold*), dan memprediksi kehabisan barang.
+              Kurva selalu dihaluskan secara matematis menuju stok saat ini — hari tanpa mutasi tercatat memakai simulasi
+              berbasis kategori produk, ditandai badge "Estimasi" pada item terkait.
             </p>
           </div>
         </div>
@@ -1076,6 +1084,16 @@ export const StockDepletionTrendChart: React.FC<StockDepletionTrendChartProps> =
                     </span>
                     <span>&bull;</span>
                     <span className="text-amber-400">&minus;{series.avgDailyBurn}/hari</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded font-bold ${
+                        series.usedEstimate
+                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                          : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      }`}
+                      title={series.usedEstimate ? 'Belum ada mutasi Keluar tercatat 30 hari terakhir — burn rate ditebak dari kategori produk' : 'Dihitung dari mutasi stok nyata 30 hari terakhir'}
+                    >
+                      {series.usedEstimate ? 'Estimasi' : 'Data Riil'}
+                    </span>
                   </div>
                 </div>
 
@@ -1185,6 +1203,15 @@ export const StockDepletionTrendChart: React.FC<StockDepletionTrendChartProps> =
                       {focusedSeries.item.sku}
                     </span>
                     <span className="text-slate-400 text-[11px]">{focusedSeries.item.category} &bull; {focusedSeries.item.warehouse}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        focusedSeries.usedEstimate
+                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                          : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      }`}
+                    >
+                      {focusedSeries.usedEstimate ? 'Burn Rate Estimasi' : 'Burn Rate Data Riil'}
+                    </span>
                   </div>
                   <h3 className="text-sm font-bold text-slate-100 font-display">
                     Analisis Mendalam: {focusedSeries.item.name}

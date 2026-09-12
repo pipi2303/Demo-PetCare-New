@@ -648,9 +648,15 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
                 <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
                   <FileImage className="w-4 h-4 text-[#B8905A]" /> Citra Radiologi & Hasil Hematologi ({selectedPet?.name})
                 </h3>
-                <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                  Terverifikasi Dokter
-                </span>
+                {petLabs.length > 0 ? (
+                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                    {petLabs.length} Hasil Tersimpan
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded bg-[#F6F1E6] text-[#6B6656] font-bold text-[10px] border border-[#E1D6BE]">
+                    Belum Ada Hasil Tersimpan
+                  </span>
+                )}
               </div>
 
               {/* Sample X-Ray Image Viewer */}
@@ -671,7 +677,11 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
                 </div>
               </div>
 
-              {/* Blood Lab Parameter Table */}
+              {/* Blood Lab Parameter Table — hanya relevan kalau jenis
+                  pemeriksaan yang sedang dipilih adalah Darah Lengkap.
+                  Sebelumnya tabel hematologi ini selalu tampil apa pun jenis
+                  pemeriksaannya (Rontgen/USG/Urinalisis), menyesatkan. */}
+              {diagDraft.labType === 'Darah Lengkap' && (
               <div className="space-y-2 pt-2">
                 <h4 className="font-bold text-xs text-[#1B2A45]">Hasil Darah Lengkap (Hematologi)</h4>
                 <div className="overflow-x-auto">
@@ -736,6 +746,39 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
                     </tbody>
                   </table>
                 </div>
+              </div>
+              )}
+
+              {/* Riwayat hasil lab tersimpan — sebelumnya petLabs dihitung
+                  tapi tak pernah dirender di tab ini, jadi staf harus pindah
+                  ke tab Timeline untuk melihat hasil yang baru diunggah. */}
+              <div className="space-y-2 pt-2">
+                <h4 className="font-bold text-xs text-[#1B2A45]">Riwayat Hasil Lab & Radiologi Tersimpan</h4>
+                {petLabs.length > 0 ? (
+                  <div className="space-y-2">
+                    {petLabs.map((lab) => (
+                      <div key={lab.id} className="p-3 bg-[#F6F1E6]/60 border border-[#E1D6BE] rounded-lg text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[#1B2A45]">{lab.testName} • {lab.testNo}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            lab.status === 'Selesai' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {lab.status}
+                          </span>
+                        </div>
+                        <p className="text-[#6B6656]">Diminta oleh {lab.orderedBy} • {lab.orderedAt}</p>
+                        {lab.results && lab.results.length > 0 && (
+                          <p className="text-[#22242B]">
+                            {lab.results.map((r) => `${r.parameter}: ${r.value}`).join(' • ')}
+                          </p>
+                        )}
+                        {lab.notes && <p className="text-[#6B6656] italic">"{lab.notes}"</p>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#6B6656]">Belum ada hasil lab/radiologi tersimpan untuk pasien ini.</p>
+                )}
               </div>
             </div>
           </div>

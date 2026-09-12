@@ -504,19 +504,24 @@ export const generateMedicalReportPDF = (
   pets: Types.Pet[],
   inpatients: Types.Inpatient[],
   labTests: Types.LabTest[],
+  surgicalProcedures: Types.SurgicalProcedure[],
+  vacHistories: Types.VacHistory[],
   options: MedicalReportOptions
 ): jsPDF => {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const company = options.company || DEFAULT_COMPANY_INFO;
   const docRef = `MED-SUM/${options.periodYear}/${options.periodMonth.toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-  // Medical stats calculation
-  const totalEncounters = clinicVisits.length + 118;
-  const outpatientVisits = totalEncounters - (inpatients.length + 12);
-  const totalInpatients = inpatients.length + 12;
-  const totalLabTests = labTests.length + 38;
-  const totalSurgeries = 14;
-  const totalVaccinations = 42;
+  // Medical stats calculation — murni dari koleksi rekam medis sungguhan
+  // yang dikirim komponen pemanggil, tanpa angka tambahan fiktif
+  // (sebelumnya clinicVisits.length + 118, dst — beda dari KPI di layar
+  // yang sudah pakai data asli, sehingga angka di layar & PDF tidak cocok).
+  const totalEncounters = clinicVisits.length;
+  const totalInpatients = inpatients.length;
+  const outpatientVisits = totalEncounters - totalInpatients;
+  const totalLabTests = labTests.length;
+  const totalSurgeries = surgicalProcedures.length;
+  const totalVaccinations = vacHistories.length;
 
   // Species distribution breakdown
   const canineCount = Math.round(totalEncounters * 0.42);
@@ -612,10 +617,20 @@ export const generateMedicalReportPDF = (
   currentY = (doc as any).lastAutoTable.finalY + 6;
 
   // 4. Table 2: Epidemiology & 8 Diagnosa Terbanyak
+  // Tabel ini & Tabel III (Audit Farmasi) di bawah masih berupa distribusi
+  // contoh/ilustratif — menghitung frekuensi diagnosa & dispensing riil
+  // butuh parsing teks bebas dari SOAP/resep yang belum digarap di
+  // perbaikan ini. Diberi label eksplisit supaya tidak disalahartikan
+  // sebagai data riil, konsisten dengan KPI di atas yang sudah data asli.
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(27, 42, 69);
-  doc.text('II. POLA EPIDEMIOLOGI & 8 DIAGNOSA PENYAKIT TERBANYAK', 14, currentY);
+  doc.text('II. POLA EPIDEMIOLOGI & 8 DIAGNOSA PENYAKIT TERBANYAK (CONTOH ILUSTRATIF)', 14, currentY);
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(184, 144, 90);
+  doc.text('Distribusi benchmark industri — belum dihitung dari teks diagnosa SOAP riil per kunjungan.', 14, currentY + 3.5);
+  currentY += 3.5;
 
   autoTable(doc, {
     startY: currentY + 2,
@@ -640,7 +655,12 @@ export const generateMedicalReportPDF = (
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(27, 42, 69);
-  doc.text('III. AUDIT PEMAKAIAN FARMASI & DIAGNOSTIK LABORATORIUM', 14, currentY);
+  doc.text('III. AUDIT PEMAKAIAN FARMASI & DIAGNOSTIK LABORATORIUM (CONTOH ILUSTRATIF)', 14, currentY);
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(184, 144, 90);
+  doc.text('Distribusi benchmark industri — belum dihitung dari riwayat dispensing & hasil lab riil per kategori.', 14, currentY + 3.5);
+  currentY += 3.5;
 
   autoTable(doc, {
     startY: currentY + 2,

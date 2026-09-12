@@ -242,7 +242,7 @@ export const ReportsExportModule: React.FC = () => {
         notes: managementNotes
       };
 
-      const pdfDoc = generateMedicalReportPDF(clinicVisits, pets, inpatients, labTests, options);
+      const pdfDoc = generateMedicalReportPDF(clinicVisits, pets, inpatients, labTests, surgicalProcedures, vacHistories, options);
       const filename = `Rekapitulasi_Medis_${selectedMonth}_${selectedYear}_PetCare_ERP.pdf`;
       downloadPDFDocument(pdfDoc, filename);
 

@@ -347,32 +347,11 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
                         </tr>
                       ))
                     ) : (
-                      <>
-                        <tr className="hover:bg-slate-50">
-                          <td className="p-3 font-bold text-slate-900">Vaksin Feline Tricat (FVRCP)</td>
-                          <td className="p-3 text-slate-700">2026-01-15</td>
-                          <td className="p-3 font-bold text-indigo-600">2027-01-15</td>
-                          <td className="p-3 text-slate-600 font-mono text-[11px]">B-9982 (Exp: 2027-10)</td>
-                          <td className="p-3 text-slate-700">drh. Ananda Putri (SIP: 503/VET/2024)</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                              Valid & Aktif
-                            </span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-slate-50">
-                          <td className="p-3 font-bold text-slate-900">Vaksin Rabies Imunisasi</td>
-                          <td className="p-3 text-slate-700">2026-01-15</td>
-                          <td className="p-3 font-bold text-indigo-600">2027-01-15</td>
-                          <td className="p-3 text-slate-600 font-mono text-[11px]">RB-4410 (Exp: 2027-12)</td>
-                          <td className="p-3 text-slate-700">drh. Ananda Putri (SIP: 503/VET/2024)</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                              Valid & Aktif
-                            </span>
-                          </td>
-                        </tr>
-                      </>
+                      <tr>
+                        <td className="p-3 text-slate-500" colSpan={6}>
+                          Belum ada riwayat vaksinasi tercatat untuk pasien ini.
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
@@ -441,9 +420,8 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
                     </div>
                   ))
                 ) : (
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-2">
-                    <p className="font-semibold text-slate-800">Pemeriksaan Fisik Terakhir (General Check-up):</p>
-                    <p>• Suhu: 38.5°C (Normal) • Denyut Jantung: 140 bpm • Kondisi Bulu & Kulit: Bersih & Bebas Jamur • Gigi & Gusi: Sedikit Tartar Grade 1.</p>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600">
+                    Belum ada rekam medis tercatat untuk pasien ini.
                   </div>
                 )}
               </div>
