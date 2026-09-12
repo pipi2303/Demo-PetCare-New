@@ -25,22 +25,10 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { Branch } from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import { usePermissions } from '../../hooks/usePermissions';
-
-interface InterBranchTransfer {
-  id: string;
-  transferNo: string;
-  sourceBranchName: string;
-  destBranchName: string;
-  itemName: string;
-  qty: number;
-  unit: string;
-  status: 'Terkirim' | 'Diterima' | 'Dalam Pengiriman';
-  date: string;
-  requestedBy: string;
-}
 
 export const BranchesModule: React.FC = () => {
   const {
@@ -50,9 +38,13 @@ export const BranchesModule: React.FC = () => {
     stockItems = [],
     addBranch,
     updateBranch,
-    deleteBranch
+    deleteBranch,
+    interBranchTransfers = [],
+    addInterBranchTransfer,
+    markInterBranchTransferReceived
   } = useData();
   const { addToast } = useToast();
+  const { user } = useAuth();
   const { can } = usePermissions();
   const canDeleteBranch = can('branches', 'delete');
 
@@ -73,39 +65,18 @@ export const BranchesModule: React.FC = () => {
   // Data cabang aktual dari DataContext - tersinkron dengan seluruh modul lain (filter cabang, dsb)
   const allBranches = branches;
 
-  // Sample Stock Transfers
-  const [transfers, setTransfers] = useState<InterBranchTransfer[]>([
-    {
-      id: 'tr-001',
-      transferNo: 'MUTASI-2026-0811',
-      sourceBranchName: 'Klinik Utama Kemang (Hospital Pusat)',
-      destBranchName: 'Klinik & Pet Care BSD City',
-      itemName: 'Vaksin Nobivac Tricat Trio (10 Vial)',
-      qty: 10,
-      unit: 'vial',
-      status: 'Diterima',
-      date: '2026-08-11',
-      requestedBy: 'Drh. Ratna Permata'
-    },
-    {
-      id: 'tr-002',
-      transferNo: 'MUTASI-2026-0813',
-      sourceBranchName: 'Klinik Utama Kemang (Hospital Pusat)',
-      destBranchName: 'VetCare Express & Grooming Kelapa Gading',
-      itemName: 'Shampoo Anti-Fungal Medicated 1L',
-      qty: 5,
-      unit: 'botol',
-      status: 'Dalam Pengiriman',
-      date: '2026-08-13',
-      requestedBy: 'Budi Santoso'
-    }
-  ]);
+  // Riwayat mutasi stok antar cabang — sekarang dari koleksi persisten
+  // DataContext (interBranchTransfers), bukan lagi useState lokal yang
+  // di-seed 2 catatan contoh dan hilang setiap reload halaman.
+  const transfers = interBranchTransfers;
 
-  // Transfer Form State
-  const [transferSource, setTransferSource] = useState(allBranches[0]?.name || '');
-  const [transferDest, setTransferDest] = useState(allBranches[1]?.name || '');
-  const [transferItem, setTransferItem] = useState(stockItems[0]?.name || 'Amoxicillin 250mg');
+  // Transfer Form State — pilih cabang & item stok SUNGGUHAN (bukan lagi
+  // teks bebas tanpa validasi kuantitas terhadap stok yang benar-benar ada).
+  const [transferSourceId, setTransferSourceId] = useState(allBranches[0]?.id || '');
+  const [transferDestId, setTransferDestId] = useState(allBranches[1]?.id || '');
+  const [transferStockItemId, setTransferStockItemId] = useState(stockItems[0]?.id || '');
   const [transferQty, setTransferQty] = useState<number>(5);
+  const selectedTransferStock = stockItems.find((s) => s.id === transferStockItemId);
 
   const resetBranchForm = () => {
     setNewBranchName('');
@@ -180,25 +151,45 @@ export const BranchesModule: React.FC = () => {
 
   const handleCreateTransfer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (transferSource === transferDest) {
+    const sourceBranch = allBranches.find((b) => b.id === transferSourceId);
+    const destBranch = allBranches.find((b) => b.id === transferDestId);
+    if (!sourceBranch || !destBranch) {
+      addToast('Pilih cabang asal dan tujuan yang valid.', 'error');
+      return;
+    }
+    if (transferSourceId === transferDestId) {
       addToast('Cabang asal dan cabang tujuan tidak boleh sama!', 'error');
       return;
     }
+    if (!selectedTransferStock) {
+      addToast('Pilih produk/obat yang akan dimutasi.', 'error');
+      return;
+    }
+    if (transferQty <= 0) {
+      addToast('Jumlah mutasi harus lebih dari 0.', 'error');
+      return;
+    }
+    if (transferQty > selectedTransferStock.stock) {
+      addToast(`Stok ${selectedTransferStock.name} tidak mencukupi (tersedia ${selectedTransferStock.stock} ${selectedTransferStock.unit}).`, 'error');
+      return;
+    }
 
-    const created: InterBranchTransfer = {
-      id: `tr-${Date.now().toString().slice(-4)}`,
-      transferNo: `MUTASI-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${Math.floor(Math.random() * 900 + 100)}`,
-      sourceBranchName: transferSource,
-      destBranchName: transferDest,
-      itemName: transferItem,
+    // Catatan: stok itu satu pool bersama seluruh cabang (StockItem tidak
+    // punya branchId), jadi mutasi ini TIDAK mengurangi/menambah angka
+    // stock — hanya menerbitkan surat jalan + jejak audit StockMovement
+    // yang benar-benar tersimpan (lihat addInterBranchTransfer).
+    const created = addInterBranchTransfer({
+      sourceBranchId: sourceBranch.id,
+      sourceBranchName: sourceBranch.name,
+      destBranchId: destBranch.id,
+      destBranchName: destBranch.name,
+      stockItemId: selectedTransferStock.id,
+      itemName: selectedTransferStock.name,
       qty: transferQty,
-      unit: 'item',
-      status: 'Dalam Pengiriman',
-      date: new Date().toISOString().split('T')[0],
-      requestedBy: 'Manager Logistik'
-    };
+      unit: selectedTransferStock.unit,
+      requestedBy: user?.name || 'Staf Logistik'
+    });
 
-    setTransfers([created, ...transfers]);
     setShowTransferModal(false);
     addToast(`Surat Jalan Mutasi Stok ${created.transferNo} berhasil diterbitkan!`, 'success');
   };
@@ -360,6 +351,13 @@ export const BranchesModule: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E1D6BE] bg-white">
+                {transfers.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="p-4 text-center text-[#6B6656]">
+                      Belum ada mutasi stok antar cabang yang diterbitkan.
+                    </td>
+                  </tr>
+                )}
                 {transfers.map((tr) => (
                   <tr key={tr.id} className="hover:bg-[#F6F1E6]/40">
                     <td className="p-3 font-mono font-bold text-[#1B2A45]">{tr.transferNo}</td>
@@ -382,7 +380,7 @@ export const BranchesModule: React.FC = () => {
                       {tr.status === 'Dalam Pengiriman' && (
                         <button
                           onClick={() => {
-                            setTransfers(transfers.map((t) => t.id === tr.id ? { ...t, status: 'Diterima' } : t));
+                            markInterBranchTransferReceived(tr.id);
                             addToast(`Mutasi stok ${tr.transferNo} telah dikonfirmasi diterima di cabang tujuan!`, 'success');
                           }}
                           className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg cursor-pointer"
@@ -568,15 +566,19 @@ export const BranchesModule: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreateTransfer} className="space-y-3 text-xs">
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800">
+                Stok adalah satu pool bersama seluruh cabang — mutasi ini menerbitkan surat jalan &amp; jejak audit, angka stok tidak berubah.
+              </div>
+
               <div>
                 <label className="font-bold text-[#1B2A45] block mb-1">Cabang Asal (Pengirim)</label>
                 <select
-                  value={transferSource}
-                  onChange={(e) => setTransferSource(e.target.value)}
+                  value={transferSourceId}
+                  onChange={(e) => setTransferSourceId(e.target.value)}
                   className="w-full p-2.5 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] font-semibold text-[#1B2A45]"
                 >
                   {allBranches.map((b) => (
-                    <option key={b.id} value={b.name}>{b.name}</option>
+                    <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
               </div>
@@ -584,31 +586,38 @@ export const BranchesModule: React.FC = () => {
               <div>
                 <label className="font-bold text-[#1B2A45] block mb-1">Cabang Tujuan (Penerima)</label>
                 <select
-                  value={transferDest}
-                  onChange={(e) => setTransferDest(e.target.value)}
+                  value={transferDestId}
+                  onChange={(e) => setTransferDestId(e.target.value)}
                   className="w-full p-2.5 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] font-semibold text-[#1B2A45]"
                 >
                   {allBranches.map((b) => (
-                    <option key={b.id} value={b.name}>{b.name}</option>
+                    <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="font-bold text-[#1B2A45] block mb-1">Nama Produk / Obat</label>
-                <input
-                  type="text"
-                  value={transferItem}
-                  onChange={(e) => setTransferItem(e.target.value)}
+                <label className="font-bold text-[#1B2A45] block mb-1">Produk / Obat (dari Master Inventaris)</label>
+                <select
+                  value={transferStockItemId}
+                  onChange={(e) => setTransferStockItemId(e.target.value)}
                   className="w-full p-2.5 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] font-bold text-[#1B2A45]"
-                />
+                >
+                  {stockItems.length === 0 && <option value="">Belum ada item stok di Master Inventaris</option>}
+                  {stockItems.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.sku}) — tersedia {s.stock} {s.unit}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label className="font-bold text-[#1B2A45] block mb-1">Jumlah Mutasi</label>
+                <label className="font-bold text-[#1B2A45] block mb-1">
+                  Jumlah Mutasi {selectedTransferStock ? `(maks. ${selectedTransferStock.stock} ${selectedTransferStock.unit})` : ''}
+                </label>
                 <input
                   type="number"
                   min="1"
+                  max={selectedTransferStock?.stock}
                   value={transferQty}
                   onChange={(e) => setTransferQty(Number(e.target.value))}
                   className="w-full p-2.5 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] font-bold text-[#1B2A45]"

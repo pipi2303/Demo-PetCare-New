@@ -84,6 +84,12 @@ interface DataContextType {
   dewormingRecords: Types.DewormingRecord[];
   addDewormingRecord: (dr: Omit<Types.DewormingRecord, 'id'>) => Types.DewormingRecord;
 
+  // Inter-branch stock transfer (surat jalan, bukan pemindahan angka stok —
+  // lihat catatan di Types.InterBranchTransfer)
+  interBranchTransfers: Types.InterBranchTransfer[];
+  addInterBranchTransfer: (t: Omit<Types.InterBranchTransfer, 'id' | 'transferNo' | 'date' | 'status'>) => Types.InterBranchTransfer;
+  markInterBranchTransferReceived: (id: string) => void;
+
   // Surgeries
   surgicalProcedures: Types.SurgicalProcedure[];
   addSurgicalProcedure: (sp: Omit<Types.SurgicalProcedure, 'id' | 'procedureNo'>) => void;
@@ -285,6 +291,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [vacSchedules, setVacSchedules] = useLocalState<Types.VacSchedule[]>('vac_schedules', Seed.INITIAL_VAC_SCHEDULES);
   const [vacHistories, setVacHistories] = useLocalState<Types.VacHistory[]>('vac_histories', Seed.INITIAL_VAC_HISTORIES);
   const [dewormingRecords, setDewormingRecords] = useLocalState<Types.DewormingRecord[]>('deworming_records', []);
+  const [interBranchTransfers, setInterBranchTransfers] = useLocalState<Types.InterBranchTransfer[]>('inter_branch_transfers', []);
   const [surgicalProcedures, setSurgicalProcedures] = useLocalState<Types.SurgicalProcedure[]>('surgical_procedures', Seed.INITIAL_SURGICAL_PROCEDURES);
 
   const [drugs, setDrugs] = useLocalState<Types.Drug[]>('drugs', Seed.INITIAL_DRUGS);
@@ -923,6 +930,46 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDewormingRecords((prev) => [newRecord, ...prev]);
     addAuditLog('Tambah', 'Vaksinasi & Paspor', dr.medicineName, `Pemberian obat cacing/anti-parasit ${dr.medicineName} untuk pasien, jadwal ulang berikutnya ${dr.nextDueDate}`, { severity: 'Info' });
     return newRecord;
+  };
+
+  // Mutasi stok antar cabang: stok itu satu pool bersama (StockItem tidak
+  // punya branchId), jadi ini TIDAK memanggil updateStockItem — hanya
+  // menerbitkan surat jalan persisten + StockMovement type 'Transfer' asli
+  // sebagai jejak audit fisik barang berpindah lokasi cabang. Sebelumnya
+  // ini cuma useState lokal di BranchesModule.tsx yang hilang saat reload
+  // dan tidak pernah memanggil addStockMovement sama sekali.
+  const addInterBranchTransfer = (
+    t: Omit<Types.InterBranchTransfer, 'id' | 'transferNo' | 'date' | 'status'>
+  ): Types.InterBranchTransfer => {
+    const newTransfer: Types.InterBranchTransfer = {
+      ...t,
+      id: 'ibt_' + Date.now(),
+      transferNo: 'MUTASI-' + new Date().toISOString().split('T')[0].replace(/-/g, '') + '-' + Math.floor(100 + Math.random() * 900),
+      date: new Date().toISOString().substring(0, 10),
+      status: 'Dalam Pengiriman'
+    };
+    setInterBranchTransfers((prev) => [newTransfer, ...prev]);
+
+    addStockMovement({
+      itemId: t.stockItemId,
+      itemName: t.itemName,
+      type: 'Transfer',
+      quantity: t.qty,
+      fromWarehouse: t.sourceBranchName,
+      toWarehouse: t.destBranchName,
+      referenceNo: newTransfer.transferNo,
+      operator: t.requestedBy
+    });
+
+    return newTransfer;
+  };
+
+  const markInterBranchTransferReceived = (id: string) => {
+    const t = interBranchTransfers.find((x) => x.id === id);
+    setInterBranchTransfers((prev) => prev.map((x) => (x.id === id ? { ...x, status: 'Diterima' } : x)));
+    if (t) {
+      addAuditLog('Edit', 'Manajemen Multi-Cabang', t.transferNo, `Mutasi stok ${t.transferNo} (${t.itemName} x${t.qty}) dikonfirmasi diterima di ${t.destBranchName}.`, { severity: 'Info' });
+    }
   };
 
   const addSurgicalProcedure = (sp: Omit<Types.SurgicalProcedure, 'id' | 'procedureNo'>) => {
@@ -1598,6 +1645,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addVacHistory,
         dewormingRecords,
         addDewormingRecord,
+        interBranchTransfers,
+        addInterBranchTransfer,
+        markInterBranchTransferReceived,
         surgicalProcedures,
         addSurgicalProcedure,
         drugs,

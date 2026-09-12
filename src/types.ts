@@ -473,6 +473,26 @@ export interface StockMovement {
   operator: string;
 }
 
+// Surat jalan mutasi stok antar cabang. Stok itu sendiri tetap satu pool
+// bersama seluruh cabang (StockItem tidak punya branchId) — catatan ini
+// adalah dokumen serah-terima fisik & jejak audit (lewat StockMovement
+// type 'Transfer' terkait), BUKAN pemindahan angka stok per cabang.
+export interface InterBranchTransfer {
+  id: string;
+  transferNo: string;
+  sourceBranchId: string;
+  sourceBranchName: string;
+  destBranchId: string;
+  destBranchName: string;
+  stockItemId: string;
+  itemName: string;
+  qty: number;
+  unit: string;
+  status: 'Dalam Pengiriman' | 'Diterima';
+  date: string;
+  requestedBy: string;
+}
+
 export interface Supplier {
   id: string;
   code: string;
