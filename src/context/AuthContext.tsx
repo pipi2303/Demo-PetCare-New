@@ -39,6 +39,7 @@ export interface AuthContextType {
   isLocked: boolean;
   lockApp: () => void;
   unlockApp: (pin: string) => Promise<{ success: boolean; message?: string }>;
+  changePin: (currentPassword: string, newPin: string) => Promise<{ success: boolean; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -288,6 +289,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return result;
   };
 
+  // Ganti PIN akun yang sedang login. Target email selalu dari sesi
+  // server-side (backend membaca req.session.email, bukan dari body) —
+  // frontend tidak perlu (dan tidak bisa) mengganti PIN akun lain.
+  const changePin = async (currentPassword: string, newPin: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch('/api/auth/change-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ currentPassword, newPin })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        recordSecurityLog('Edit', 'PIN Otorisasi', `Percobaan ganti PIN gagal untuk ${user?.email || 'akun tidak diketahui'}.`, user, 'Warning');
+        return { success: false, message: data.message || 'Gagal mengganti PIN.' };
+      }
+      recordSecurityLog('Edit', 'PIN Otorisasi', `PIN berhasil diganti untuk ${user?.name || user?.email}.`, user, 'Kritis');
+      return { success: true };
+    } catch (e) {
+      return { success: false, message: 'Tidak dapat terhubung ke server autentikasi. Coba lagi.' };
+    }
+  };
+
   // Directory-only lookup (name/email/role, no secrets) so UI can show which
   // persona a "quick switch" button targets before the PIN is entered.
   const findAccountEmailByRole = (role: UserRole): string | null => {
@@ -333,7 +356,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         closeLoginScreen,
         isLocked,
         lockApp,
-        unlockApp
+        unlockApp,
+        changePin
       }}
     >
       {children}

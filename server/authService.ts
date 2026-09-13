@@ -131,6 +131,11 @@ export function verifyPin(email: string, plainPin: string): boolean {
   return verifyHash(plainPin, stored);
 }
 
+export function setPin(email: string, plainPin: string) {
+  pinStore[email.toLowerCase()] = hashPassword(plainPin);
+  persistPinStore();
+}
+
 /**
  * Find the account whose PIN matches (used for the PIN-only fast shift
  * login, where the caller doesn't know which email to check yet). Returns

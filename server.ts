@@ -20,6 +20,7 @@ import {
   createResetToken,
   consumeResetToken,
   verifyPin,
+  setPin,
   findAccountByPin,
   getAccountInfo
 } from "./server/authService";
@@ -329,6 +330,36 @@ async function startServer() {
       if (oldToken) destroySession(oldToken);
       const token = createSession(account.email, account.role, account.ownershipType);
       res.json({ success: true, token, account });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Change the CURRENT session's own PIN. Target email always comes from the
+  // verified session (req.session.email), never from the client body — a
+  // caller can only ever change their own PIN. Gated behind the account's
+  // password (a stronger secret) since a 4-digit PIN can't safely verify
+  // itself; also rejects a PIN already in use by a DIFFERENT account so the
+  // PIN-only quick-login (findAccountByPin) stays unambiguous.
+  app.post("/api/auth/change-pin", requireSession, (req, res) => {
+    try {
+      const email = (req as any).session.email as string;
+      const { currentPassword, newPin } = req.body || {};
+      if (!currentPassword || !newPin) {
+        return res.status(400).json({ success: false, message: "Kata sandi saat ini dan PIN baru wajib diisi." });
+      }
+      if (typeof newPin !== "string" || !/^\d{4}$/.test(newPin)) {
+        return res.status(400).json({ success: false, message: "PIN baru harus berupa 4 digit angka." });
+      }
+      if (!verifyPassword(email, currentPassword)) {
+        return res.status(401).json({ success: false, message: "Kata sandi saat ini tidak sesuai." });
+      }
+      const existingOwner = findAccountByPin(newPin);
+      if (existingOwner && existingOwner.toLowerCase() !== email.toLowerCase()) {
+        return res.status(409).json({ success: false, message: "PIN tersebut sudah dipakai akun lain. Pilih PIN yang berbeda." });
+      }
+      setPin(email, newPin);
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
     }
