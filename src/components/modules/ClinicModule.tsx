@@ -9,6 +9,7 @@ import { PetHealthPassportModal } from '../clinic/PetHealthPassportModal';
 import { TriageUrgencyBadge } from '../clinic/TriageUrgencyBadge';
 import { TriageUrgencyModal } from '../clinic/TriageUrgencyModal';
 import { useAutoSaveDraft } from '../../hooks/useAutoSaveDraft';
+import { authHeaders } from '../../utils/authToken';
 import { NavModule } from '../layout/Sidebar';
 import {
   Stethoscope,
@@ -96,6 +97,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     drugs = [],
     saveSOAPNote,
     dispenseDrug,
+    addInvoice,
     eFormTemplates = [],
     eFormSubmissions = [],
     addEFormSubmission,
@@ -112,6 +114,10 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
   const { addToast } = useToast();
 
   const [selectedVisitId, setSelectedVisitId] = useState<string>(clinicVisits[0]?.id || '');
+  // Guard tombol Simpan SOAP: klik ganda / re-select visit yang sudah
+  // 'Selesai' sebelumnya bisa memicu dispenseDrug & addInvoice dobel untuk
+  // kunjungan yang sama karena tidak ada pengecekan status/in-flight.
+  const [isSavingSOAP, setIsSavingSOAP] = useState(false);
 
   // Tab state synced with activeModule
   const [activeTab, setActiveTab] = useState<'soap' | 'vitals' | 'anatomical' | 'carePlan' | 'eform'>(
@@ -180,6 +186,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
   // E-Form Signature Pad State
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [hasConsentSignature, setHasConsentSignature] = useState(false);
 
   // Care Plan Creation Modal
   const [showAddCarePlanModal, setShowAddCarePlanModal] = useState(false);
@@ -267,7 +274,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     try {
       const res = await fetch('/api/ai/analyze-history-soap', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           petInfo: {
             name: pet?.name || selectedVisit?.petName || 'Pasien',
@@ -435,8 +442,13 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
   };
 
   const handleSaveSOAP = () => {
-    if (!selectedVisit) return;
-
+    if (!selectedVisit || isSavingSOAP) return;
+    if (selectedVisit.status === 'Selesai') {
+      addToast('Kunjungan ini sudah Selesai & tertagih. Pilih pasien lain dari Antrean.', 'warning');
+      return;
+    }
+    setIsSavingSOAP(true);
+    try {
     // Save SOAP Note
     saveSOAPNote({
       visitId: selectedVisit.id,
@@ -468,6 +480,43 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
       dispenseDrug(p.drugId, p.qty);
     });
 
+    // Tindakan medis yang dicentang dokter (label UI-nya sendiri bilang
+    // "Masuk Billing Klinik") sebelumnya cuma disimpan ke draft lokal dan
+    // hilang begitu SOAP disimpan — tidak pernah benar-benar ditagihkan.
+    // Sekarang diteruskan sebagai invoice 'Belum Dibayar' ke Kasir (dokter
+    // tidak menagih langsung; pelunasan tetap lewat Billing & Kasir seperti
+    // alur normal, memakai processPayment yang sama).
+    const treatmentItems = soapDraft.selectedTreatments
+      .map((id) => MEDICAL_PROCEDURES.find((proc) => proc.id === id))
+      .filter((proc): proc is (typeof MEDICAL_PROCEDURES)[number] => !!proc)
+      .map((proc) => ({
+        id: 'inv_item_' + Date.now() + Math.random(),
+        category: 'Klinik',
+        name: proc.name,
+        quantity: 1,
+        unitPrice: proc.price,
+        totalPrice: proc.price
+      }));
+
+    if (treatmentItems.length > 0) {
+      const subtotal = treatmentItems.reduce((sum, item) => sum + item.totalPrice, 0);
+      addInvoice({
+        customerId: selectedVisit.customerId,
+        customerName: selectedVisit.customerName,
+        petName: selectedVisit.petName,
+        items: treatmentItems,
+        subtotal,
+        discountAmount: 0,
+        totalAmount: subtotal,
+        paidAmount: 0,
+        paymentMethod: 'Tunai',
+        status: 'Belum Dibayar',
+        loyaltyPointsEarned: 0,
+        cashierName: selectedVisit.doctorName || 'Dokter'
+      });
+      addToast(`Tagihan tindakan medis Rp ${subtotal.toLocaleString('id-ID')} untuk ${selectedVisit.petName} diteruskan ke Kasir.`, 'success');
+    }
+
     // Mark visit finished
     updateVisitStatus(selectedVisit.id, 'Selesai');
 
@@ -475,6 +524,9 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     clearDraft();
 
     addToast(`SOAP Note untuk ${selectedVisit.petName} tersimpan & draft lokal telah dibersihkan.`, 'success');
+    } finally {
+      setIsSavingSOAP(false);
+    }
   };
 
   // Canvas Handlers
@@ -505,6 +557,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     ctx.lineCap = 'round';
     ctx.lineTo(x, y);
     ctx.stroke();
+    setHasConsentSignature(true);
   };
 
   const stopDrawing = () => {
@@ -518,9 +571,19 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     if (ctx) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
+    setHasConsentSignature(false);
   };
 
   const handleSaveConsent = () => {
+    // Sebelumnya tab ini bisa menyimpan status 'Ditandatangani' walau kanvas
+    // kosong (beda dari InformedConsentModal yang mewajibkan tanda tangan
+    // terisi) — signatureData jadi data URL kosong/transparan tapi status
+    // tetap mengklaim sudah ditandatangani.
+    if (!hasConsentSignature) {
+      addToast('Harap bubuhkan tanda tangan digital pada kotak yang tersedia sebelum menyimpan persetujuan.', 'error');
+      return;
+    }
+
     const template = eFormTemplates.find((t) => t.id === soapDraft.selectedTemplateId) || eFormTemplates[0];
     const canvas = canvasRef.current;
     const signatureData = canvas ? canvas.toDataURL() : '';
@@ -1009,9 +1072,11 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
               <div className="pt-2 flex items-center justify-end gap-3">
                 <button
                   onClick={handleSaveSOAP}
-                  className="px-5 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-2"
+                  disabled={isSavingSOAP || selectedVisit?.status === 'Selesai'}
+                  className="px-5 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] disabled:opacity-50 disabled:cursor-not-allowed text-[#FFFDF9] text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-2"
                 >
-                  <Save className="w-4 h-4 text-[#D9B98A]" /> Simpan SOAP & Potong Stok Farmasi
+                  <Save className="w-4 h-4 text-[#D9B98A]" />
+                  {isSavingSOAP ? 'Menyimpan...' : 'Simpan SOAP & Potong Stok Farmasi'}
                 </button>
               </div>
             </div>

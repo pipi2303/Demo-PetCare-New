@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { authHeaders } from '../../utils/authToken';
 import {
   Sparkles,
   Layout,
@@ -170,7 +171,7 @@ export const LayoutOptimizationAssistant: React.FC<LayoutOptimizationAssistantPr
     try {
       const resp = await fetch('/api/ai/optimize-layout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           userRole: roleToUse,
           userName: user?.name || 'Staf Klinik',

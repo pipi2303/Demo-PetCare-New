@@ -1,25 +1,34 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole, AuditLog } from '../types';
 import { INITIAL_USERS } from '../data/mockData';
+import { getAuthToken, setAuthToken, authHeaders } from '../utils/authToken';
 
 export interface LoginOptions {
   branchId?: string;
   branchName?: string;
+}
+
+interface ServerAccount {
+  email: string;
+  name: string;
+  role: UserRole;
   ownershipType?: string;
+  branchId?: string;
+  branchName?: string;
 }
 
 export interface AuthContextType {
   user: User | null;
+  token: string | null;
   users: User[];
   activeBranchId: string;
   setActiveBranchId: (branchId: string) => void;
   activeOwnership: string;
   setActiveOwnership: (ownership: string) => void;
   login: (emailOrPhone: string, pass: string, options?: LoginOptions) => Promise<{ success: boolean; message?: string }>;
-  loginWithPin: (pin: string, branchId?: string) => { success: boolean; message?: string };
-  loginAsUser: (targetUser: User, options?: LoginOptions) => void;
-  loginAsDemoUser: (userId: string, branchId?: string) => void;
-  switchRole: (role: UserRole) => void;
+  loginWithPin: (pin: string, branchId?: string) => Promise<{ success: boolean; message?: string }>;
+  switchAccount: (targetEmail: string, pin: string) => Promise<{ success: boolean; message?: string }>;
+  findAccountEmailByRole: (role: UserRole) => string | null;
   logout: () => void;
   isAuthenticated: boolean;
   isLoginScreenOpen: boolean;
@@ -70,9 +79,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Fallback
       }
     }
-    // Default logged in as Owner Klinik for immediate exploration
+    // Default logged in as Owner Klinik for immediate exploration. Note: this
+    // demo default carries NO session token, so any server action gated by
+    // requireSession/requireRole (backup, WA, AI) will still demand a real
+    // login — only local UI browsing is unauthenticated by default.
     return INITIAL_USERS[0];
   });
+
+  // Server-issued session token. Kept in sync with localStorage via
+  // authToken.ts so plain (non-React) utils can read it too.
+  const [token, setToken] = useState<string | null>(() => getAuthToken());
 
   const [activeBranchId, setActiveBranchIdState] = useState<string>(() => {
     return localStorage.getItem('petcare_active_branch') || user?.branchId || 'b1';
@@ -110,185 +126,156 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user]);
 
+  // Apply a server-confirmed session: role/ownership/branch always come from
+  // `account` (the server's own record), never from client-side guesses.
+  // Cosmetic fields (avatar, phone, groupId, ...) are filled in from the
+  // matching local directory entry when available, purely for display.
+  const applySession = (
+    newToken: string,
+    account: ServerAccount,
+    opts?: { branchId?: string; branchName?: string; logMessage: string }
+  ) => {
+    const directoryMatch = INITIAL_USERS.find((u) => u.email.toLowerCase() === account.email.toLowerCase());
+    const branchIdToUse = opts?.branchId || account.branchId || activeBranchId || 'b1';
+    const ownershipToUse = account.ownershipType || activeOwnership || 'owner_klinik';
+
+    const loggedUser: User = {
+      ...(directoryMatch || {}),
+      id: directoryMatch?.id || account.email,
+      name: account.name,
+      email: account.email,
+      role: account.role,
+      active: true,
+      branchId: branchIdToUse,
+      branchName: opts?.branchName || account.branchName,
+      ownershipType: ownershipToUse
+    };
+
+    setToken(newToken);
+    setAuthToken(newToken);
+    setUser(loggedUser);
+    // Deliberately NOT calling setActiveBranchId/setActiveOwnership here —
+    // both read `user` from their own closure and merge onto it, which
+    // would race against the setUser() above (still the PREVIOUS user at
+    // this point) and clobber the just-applied session. branchId/ownership
+    // are already correct inside loggedUser, so just mirror the plain
+    // state + localStorage bookkeeping directly.
+    setActiveBranchIdState(branchIdToUse);
+    localStorage.setItem('petcare_active_branch', branchIdToUse);
+    setActiveOwnershipState(ownershipToUse);
+    localStorage.setItem('petcare_active_ownership', ownershipToUse);
+    setIsLoginScreenOpen(false);
+
+    recordSecurityLog('Login', account.email, opts?.logMessage || `Sesi aktif untuk ${account.name} (${account.role})`, loggedUser, 'Info', branchIdToUse);
+  };
+
   const login = async (emailOrPhone: string, pass: string, options?: LoginOptions): Promise<{ success: boolean; message?: string }> => {
     const cleanIdent = emailOrPhone.trim().toLowerCase();
+    // Client only resolves an identifier -> email for convenience (phone/id
+    // login); the server independently re-verifies the password and is the
+    // sole source of the resulting role/ownership.
     const found = INITIAL_USERS.find(
       (u) =>
         u.email.toLowerCase() === cleanIdent ||
         (u.phone && u.phone.replace(/\D/g, '') === cleanIdent.replace(/\D/g, '')) ||
         u.id.toLowerCase() === cleanIdent
     );
+    const emailToTry = found?.email || emailOrPhone;
 
-    if (found) {
-      let passwordValid = false;
-      try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: found.email, password: pass })
-        });
-        const data = await res.json();
-        passwordValid = !!data.success;
-      } catch (e) {
-        recordSecurityLog('Login', found.email, 'Gagal menghubungi server autentikasi saat login.', null, 'Kritis');
-        return { success: false, message: 'Tidak dapat terhubung ke server autentikasi. Coba lagi.' };
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailToTry, password: pass })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        recordSecurityLog('Login', emailToTry, `Percobaan login gagal untuk ${emailToTry}`, null, 'Warning');
+        return { success: false, message: data.message || 'Email, nomor HP, atau kata sandi tidak sesuai.' };
       }
 
-      if (!passwordValid) {
-        recordSecurityLog(
-          'Login',
-          found.email,
-          `Percobaan login gagal: kata sandi salah untuk ${found.email}`,
-          null,
-          'Warning'
-        );
-        return { success: false, message: 'Email, nomor HP, atau kata sandi tidak sesuai dengan database pengguna.' };
-      }
-
-      const branchIdToUse = options?.branchId || found.branchId || activeBranchId || 'b1';
-      const ownershipToUse = options?.ownershipType || found.ownershipType || activeOwnership || 'owner_klinik';
-      
-      // If logging in as an owner or ownership is explicitly selected, synchronize role
-      let roleToUse = found.role;
-      if (ownershipToUse && (ownershipToUse === 'owner_klinik' || ownershipToUse === 'owner_petshop' || ownershipToUse === 'owner_petcare')) {
-        if (found.role.startsWith('owner') || found.role === 'owner') {
-          roleToUse = ownershipToUse as UserRole;
-        }
-      }
-
-      const loggedUser: User = {
-        ...found,
-        role: roleToUse,
-        branchId: branchIdToUse,
-        branchName: options?.branchName || found.branchName,
-        ownershipType: ownershipToUse
-      };
-
-      setUser(loggedUser);
-      setActiveBranchId(branchIdToUse);
-      setActiveOwnership(ownershipToUse);
-      setIsLoginScreenOpen(false);
-
-      recordSecurityLog(
-        'Login',
-        found.email,
-        `Login berhasil untuk ${found.name} (${found.role}) di cabang ${branchIdToUse} dengan kepemilikan ${ownershipToUse}`,
-        loggedUser,
-        'Info',
-        options?.branchName || found.branchName
-      );
+      applySession(data.token, data.account, {
+        branchId: options?.branchId,
+        branchName: options?.branchName,
+        logMessage: `Login berhasil untuk ${data.account.name} (${data.account.role})`
+      });
       return { success: true };
+    } catch (e) {
+      recordSecurityLog('Login', emailToTry, 'Gagal menghubungi server autentikasi saat login.', null, 'Kritis');
+      return { success: false, message: 'Tidak dapat terhubung ke server autentikasi. Coba lagi.' };
     }
-
-    recordSecurityLog(
-      'Login',
-      emailOrPhone,
-      `Percobaan login gagal dengan kredensial: ${emailOrPhone}`,
-      null,
-      'Warning'
-    );
-    return { success: false, message: 'Email, nomor HP, atau kata sandi tidak sesuai dengan database pengguna.' };
   };
 
-  const loginWithPin = (pin: string, branchId?: string): { success: boolean; message?: string } => {
+  const loginWithPin = async (pin: string, branchId?: string): Promise<{ success: boolean; message?: string }> => {
     const cleanPin = pin.trim();
-    const found = INITIAL_USERS.find((u) => u.pin === cleanPin);
+    try {
+      const res = await fetch('/api/auth/login-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: cleanPin })
+      });
+      const data = await res.json();
 
-    if (found) {
-      const branchIdToUse = branchId || found.branchId || activeBranchId || 'b1';
-      const loggedUser: User = {
-        ...found,
-        branchId: branchIdToUse
-      };
-
-      setUser(loggedUser);
-      setActiveBranchId(branchIdToUse);
-      if (found.ownershipType) {
-        setActiveOwnership(found.ownershipType);
+      if (!data.success) {
+        recordSecurityLog('Login', 'PIN Otorisasi', `Percobaan login PIN gagal`, null, 'Warning');
+        return { success: false, message: data.message || 'PIN otorisasi 4-digit tidak valid atau tidak terdaftar.' };
       }
-      setIsLoginScreenOpen(false);
 
-      recordSecurityLog(
-        'Login',
-        `PIN: ${found.name}`,
-        `Login cepat via PIN berhasil untuk staff ${found.name} (${found.role})`,
-        loggedUser,
-        'Info'
-      );
+      applySession(data.token, data.account, {
+        branchId,
+        logMessage: `Login cepat via PIN berhasil untuk staff ${data.account.name} (${data.account.role})`
+      });
       return { success: true };
+    } catch (e) {
+      recordSecurityLog('Login', 'PIN Otorisasi', 'Gagal menghubungi server autentikasi saat login PIN.', null, 'Kritis');
+      return { success: false, message: 'Tidak dapat terhubung ke server autentikasi. Coba lagi.' };
     }
-
-    recordSecurityLog(
-      'Login',
-      'PIN Otorisasi',
-      `Percobaan login PIN gagal (${cleanPin})`,
-      null,
-      'Warning'
-    );
-    return { success: false, message: 'PIN otorisasi 4-digit tidak valid atau tidak terdaftar pada karyawan aktif.' };
   };
 
-  const loginAsUser = (targetUser: User, options?: LoginOptions) => {
-    const branchIdToUse = options?.branchId || targetUser.branchId || activeBranchId || 'b1';
-    const ownershipToUse = options?.ownershipType || targetUser.ownershipType || activeOwnership || targetUser.role;
-    
-    let roleToUse = targetUser.role;
-    if (ownershipToUse && (ownershipToUse === 'owner_klinik' || ownershipToUse === 'owner_petshop' || ownershipToUse === 'owner_petcare')) {
-      if (targetUser.role.startsWith('owner') || targetUser.role === 'owner') {
-        roleToUse = ownershipToUse as UserRole;
+  // Switch the active session to a different demo persona/account. Requires
+  // the CURRENT session to still be valid, plus the TARGET account's own
+  // PIN — verified server-side. This replaces the old one-click `switchRole`
+  // that could impersonate any account with zero credentials.
+  const switchAccount = async (targetEmail: string, pin: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch('/api/auth/switch-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ targetEmail, pin: pin.trim() })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        recordSecurityLog('Edit', 'Peran Otorisasi', `Percobaan ganti akun ke ${targetEmail} gagal (PIN salah atau sesi tidak valid).`, user, 'Warning');
+        return { success: false, message: data.message || 'PIN tidak sesuai untuk akun tujuan.' };
       }
-    }
 
-    const loggedUser: User = {
-      ...targetUser,
-      role: roleToUse,
-      branchId: branchIdToUse,
-      branchName: options?.branchName || targetUser.branchName,
-      ownershipType: ownershipToUse
-    };
-
-    setUser(loggedUser);
-    setActiveBranchId(branchIdToUse);
-    setActiveOwnership(ownershipToUse);
-    setIsLoginScreenOpen(false);
-
-    recordSecurityLog(
-      'Login',
-      targetUser.name,
-      `Otentikasi cepat profil: ${targetUser.name} (${roleToUse}) - Cabang: ${branchIdToUse} - Kepemilikan: ${ownershipToUse}`,
-      loggedUser,
-      'Info',
-      options?.branchName || targetUser.branchName
-    );
-  };
-
-  const loginAsDemoUser = (userId: string, branchId?: string) => {
-    const found = INITIAL_USERS.find((u) => u.id === userId);
-    if (found) {
-      loginAsUser(found, { branchId });
+      applySession(data.token, data.account, {
+        logMessage: `Mengalihkan profil aktif ke ${data.account.name} (${data.account.role})`
+      });
+      return { success: true };
+    } catch (e) {
+      return { success: false, message: 'Tidak dapat terhubung ke server autentikasi. Coba lagi.' };
     }
   };
 
-  const switchRole = (role: UserRole) => {
-    const found = INITIAL_USERS.find((u) => u.role === role);
-    if (found) {
-      loginAsUser(found, { ownershipType: role.startsWith('owner_') ? role : found.ownershipType });
-      recordSecurityLog('Edit', 'Peran Otorisasi', `Mengalihkan profil aktif ke pengguna dengan peran: ${role.replace('_', ' ')} (${found.name})`, found, 'Warning');
-    } else if (user) {
-      const updatedOwnership = role.startsWith('owner_') ? role : user.ownershipType;
-      const updated: User = { ...user, role, ownershipType: updatedOwnership };
-      setUser(updated);
-      if (role.startsWith('owner_')) {
-        setActiveOwnership(role);
-      }
-      recordSecurityLog('Edit', 'Peran Otorisasi', `Mengubah hak akses aktif pengguna ${user.name} menjadi: ${role.replace('_', ' ')}`, updated, 'Warning');
-    }
+  // Directory-only lookup (name/email/role, no secrets) so UI can show which
+  // persona a "quick switch" button targets before the PIN is entered.
+  const findAccountEmailByRole = (role: UserRole): string | null => {
+    const found = INITIAL_USERS.find((u) => u.role === role) || INITIAL_USERS.find((u) => u.ownershipType === role);
+    return found?.email || null;
   };
 
   const logout = () => {
     if (user) {
       recordSecurityLog('Logout', user.name, `Pengguna ${user.name} (${user.role}) menutup sesi dan logout dari sistem.`, user, 'Info');
     }
+    if (token) {
+      fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }).catch(() => {});
+    }
+    setToken(null);
+    setAuthToken(null);
     setUser(null);
     setIsLoginScreenOpen(true);
   };
@@ -300,6 +287,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
+        token,
         users: INITIAL_USERS,
         activeBranchId,
         setActiveBranchId,
@@ -307,9 +295,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setActiveOwnership,
         login,
         loginWithPin,
-        loginAsUser,
-        loginAsDemoUser,
-        switchRole,
+        switchAccount,
+        findAccountEmailByRole,
         logout,
         isAuthenticated: !!user,
         isLoginScreenOpen,
@@ -329,5 +316,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-

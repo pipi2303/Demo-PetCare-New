@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { useAutoSaveDraft } from '../../hooks/useAutoSaveDraft';
@@ -49,6 +49,10 @@ interface DiagnosticsModuleProps {
 interface DiagDraftData {
   labType: 'Rontgen X-Ray' | 'Darah Lengkap' | 'USG Abdomen' | 'Urinalisis';
   labNotes: string;
+  hbValue: string;
+  wbcValue: string;
+  pltValue: string;
+  sgptValue: string;
   newWeight: string;
   newWeightDate: string;
   compoundName: string;
@@ -68,7 +72,10 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
     invoices = [],
     addPatientPhoto,
     addLabTest,
-    dispenseDrug
+    updateLabResult,
+    updatePet,
+    dispenseDrug,
+    addMedicalRecord
   } = useData();
 
   const { addToast } = useToast();
@@ -110,20 +117,31 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
     else if (activeModule === 'patientGallery') setActiveTab('gallery');
   }, [activeModule]);
 
-  // Sample weight history logs
-  const [weightLogs, setWeightLogs] = useState([
-    { date: '2026-01-10', weight: 4.2 },
-    { date: '2026-03-15', weight: 4.5 },
-    { date: '2026-05-20', weight: 4.8 },
-    { date: '2026-07-01', weight: 5.1 },
-    { date: '2026-08-11', weight: 5.3 }
-  ]);
+  // Manual weight entries dicatat per pasien (id hewan) — sebelumnya
+  // weightLogs adalah satu array contoh yang dibagi SEMUA pasien (ganti
+  // pasien, grafik tetap sama), dan entri baru tidak pernah tertaut ke
+  // pasien manapun. Ditambah baris asli dari SOAP (kunjungan sungguhan,
+  // sudah tertaut petId) di bawah, setelah selectedPet diketahui.
+  const [manualWeightLogsByPet, setManualWeightLogsByPet] = useState<Record<string, { date: string; weight: number }[]>>({});
 
   const selectedPet = pets.find((p) => p.id === selectedPetId) || pets[0];
+
+  const weightLogs = useMemo(() => {
+    if (!selectedPet) return [];
+    const fromVisits = soapNotes
+      .filter((s) => s.petId === selectedPet.id && typeof s.weightKg === 'number')
+      .map((s) => ({ date: s.date, weight: s.weightKg as number }));
+    const manual = manualWeightLogsByPet[selectedPet.id] || [];
+    return [...fromVisits, ...manual].sort((a, b) => a.date.localeCompare(b.date));
+  }, [soapNotes, selectedPet, manualWeightLogsByPet]);
 
   const defaultDiagValues: DiagDraftData = {
     labType: 'Rontgen X-Ray',
     labNotes: 'Pemeriksaan kondisi paru & struktur tulang pasca kecelakaan ringan.',
+    hbValue: '13.5',
+    wbcValue: '17.2',
+    pltValue: '280',
+    sgptValue: '42',
     newWeight: '',
     newWeightDate: new Date().toISOString().substring(0, 10),
     compoundName: 'Puyer Batuk & Antiinflamasi',
@@ -154,28 +172,97 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
   const [newPhotoCaption, setNewPhotoCaption] = useState('');
   const [newPhotoUrl, setNewPhotoUrl] = useState('https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=600&auto=format&fit=crop&q=80');
 
-  // Pharmacy Prescription Fulfillment Queue State
-  const [prescriptionQueue, setPrescriptionQueue] = useState([
-    { id: 'rx1', patientName: selectedPet?.name || 'Milo', customerName: selectedPet?.customerName || 'Budi', items: 'Amoxicillin 250mg, Dexamethasone', status: 'Sedang Disiapkan', doctor: 'Drh. Anisa', time: '10:30' },
-    { id: 'rx2', patientName: 'Luna', customerName: 'Dewi', items: 'Ivermectin Injection, Vitamin B Complex', status: 'Menunggu Racik', doctor: 'Drh. Rian', time: '11:15' },
-    { id: 'rx3', patientName: 'Ciko', customerName: 'Eka', items: 'Ketoconazole Shampoo, Salep Kulit', status: 'Siap Diserahkan', doctor: 'Drh. Anisa', time: '09:45' }
-  ]);
+  // Pharmacy Prescription Fulfillment Queue — sebelumnya 3 entri contoh
+  // hardcoded, sama sekali terputus dari resep nyata yang dibuat dokter di
+  // SOAP (ClinicModule). Sekarang diturunkan langsung dari soapNotes yang
+  // punya resep (prescribedDrugs), digabung dengan data pasien sungguhan.
+  // Status racik (Menunggu/Disiapkan/Siap/Selesai) masih status kerja lokal
+  // (bukan diagnosa/data medis), disimpan per soapNoteId di komponen ini.
+  const [rxStatusMap, setRxStatusMap] = useState<Record<string, string>>({});
+  const prescriptionQueue = useMemo(() => {
+    return soapNotes
+      .filter((s) => s.prescribedDrugs && s.prescribedDrugs.length > 0)
+      .slice(0, 15)
+      .map((s) => {
+        const rxPet = pets.find((p) => p.id === s.petId);
+        return {
+          id: s.id,
+          patientName: rxPet?.name || 'Pasien',
+          customerName: rxPet?.customerName || '-',
+          items: s.prescribedDrugs.map((d) => `${d.drugName} (${d.dosage})`).join(', '),
+          status: rxStatusMap[s.id] || 'Menunggu Racik',
+          doctor: s.doctorName,
+          time: s.date
+        };
+      });
+  }, [soapNotes, pets, rxStatusMap]);
 
   const previewImg = 'https://images.unsplash.com/photo-1516549655169-df83a0774514?w=600&auto=format&fit=crop&q=80';
 
   const handleAddWeight = () => {
+    if (!selectedPet) return;
     if (!diagDraft.newWeight || isNaN(parseFloat(diagDraft.newWeight))) {
       addToast('Masukkan angka berat badan yang valid.', 'error');
       return;
     }
     const val = parseFloat(diagDraft.newWeight);
-    setWeightLogs([...weightLogs, { date: diagDraft.newWeightDate, weight: val }]);
+    setManualWeightLogsByPet((prev) => ({
+      ...prev,
+      [selectedPet.id]: [...(prev[selectedPet.id] || []), { date: diagDraft.newWeightDate, weight: val }]
+    }));
+    updatePet(selectedPet.id, { weightKg: val });
     updateDraft({ newWeight: '' });
-    addToast(`Berhasil mencatat berat badan ${val} kg untuk ${selectedPet?.name}.`, 'success');
+    addToast(`Berhasil mencatat berat badan ${val} kg untuk ${selectedPet.name}.`, 'success');
   };
 
-  const handleSimulateUpload = () => {
-    addToast(`Dokumen hasil laboratorium (${diagDraft.labType}) untuk ${selectedPet?.name} berhasil diunggah ke EMR.`, 'success');
+  // Sebelumnya cuma toast — addLabTest sudah di-destructure dari context tapi
+  // tak pernah dipanggil, jadi hasil lab yang "diunggah" dokter hilang begitu
+  // tab ditinggalkan. Sekarang benar-benar tersimpan sebagai LabTest, dengan
+  // hasil hematologi (kalau jenis pemeriksaannya Darah Lengkap) diambil dari
+  // 4 kolom yang sekarang bisa diedit di tabel pratinjau, bukan angka tetap.
+  const handleUploadLabResult = () => {
+    if (!selectedPet) return;
+    const latestDoctor = petSoaps[0]?.doctorName || 'Tim Medis';
+
+    const results =
+      diagDraft.labType === 'Darah Lengkap'
+        ? [
+            { parameter: 'Hemoglobin (Hb)', value: `${diagDraft.hbValue} g/dL`, unit: 'g/dL', referenceRange: '12.0 - 18.0 g/dL' },
+            { parameter: 'Leukosit (WBC)', value: `${diagDraft.wbcValue} x10³/µL`, unit: 'x10³/µL', referenceRange: '5.5 - 16.5 x10³/µL' },
+            { parameter: 'Trombosit (PLT)', value: `${diagDraft.pltValue} x10³/µL`, unit: 'x10³/µL', referenceRange: '200 - 500 x10³/µL' },
+            { parameter: 'SGPT / ALT', value: `${diagDraft.sgptValue} U/L`, unit: 'U/L', referenceRange: '10 - 100 U/L' }
+          ]
+        : undefined;
+
+    const newTest = addLabTest({
+      petId: selectedPet.id,
+      petName: selectedPet.name,
+      customerName: selectedPet.customerName,
+      testName: diagDraft.labType,
+      orderedBy: latestDoctor,
+      notes: diagDraft.labNotes
+    });
+    updateLabResult(newTest.id, results, diagDraft.labNotes);
+
+    addToast(`Hasil laboratorium (${diagDraft.labType}) untuk ${selectedPet.name} tersimpan ke EMR (${newTest.testNo}).`, 'success');
+  };
+
+  // Sebelumnya cuma toast — kalkulasi dosis racikan hilang begitu etiket
+  // "dicetak", tidak pernah masuk rekam medis. Sekarang dicatat sebagai
+  // MedicalRecord seperti resep Telehealth & hasil lab yang sudah diperbaiki.
+  const handlePrintCompoundLabel = () => {
+    if (!selectedPet) return;
+    const totalMg = diagDraft.compoundWeightKg * diagDraft.compoundDosePerKg * diagDraft.compoundTotalCapsules;
+    const perCapsuleMg = diagDraft.compoundWeightKg * diagDraft.compoundDosePerKg;
+    addMedicalRecord({
+      petId: selectedPet.id,
+      date: new Date().toISOString().substring(0, 10),
+      type: 'Tindakan',
+      title: `Obat Racikan - ${diagDraft.compoundName}`,
+      description: `${diagDraft.compoundTotalCapsules} bungkus, ${perCapsuleMg.toFixed(1)} mg/bungkus (total ${totalMg.toFixed(1)} mg) untuk BB ${diagDraft.compoundWeightKg} kg.`,
+      performedBy: petSoaps[0]?.doctorName || 'Tim Medis'
+    });
+    addToast(`Etiket obat racikan "${diagDraft.compoundName}" dicetak & tercatat ke rekam medis.`, 'success');
   };
 
   const handleAddPhoto = () => {
@@ -194,9 +281,7 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
   };
 
   const updatePrescriptionStatus = (id: string, newStatus: string) => {
-    setPrescriptionQueue((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, status: newStatus } : q))
-    );
+    setRxStatusMap((prev) => ({ ...prev, [id]: newStatus }));
     addToast(`Status resep obat diubah menjadi ${newStatus}.`, 'info');
   };
 
@@ -562,7 +647,7 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
               </div>
 
               <button
-                onClick={() => addToast(`Etiket obat racikan "${diagDraft.compoundName}" berhasil dicetak!`, 'success')}
+                onClick={handlePrintCompoundLabel}
                 className="w-full py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5"
               >
                 <Printer className="w-4 h-4" /> Cetak Etiket Racikan
@@ -582,9 +667,15 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
                 <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
                   <FileImage className="w-4 h-4 text-[#B8905A]" /> Citra Radiologi & Hasil Hematologi ({selectedPet?.name})
                 </h3>
-                <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                  Terverifikasi Dokter
-                </span>
+                {petLabs.length > 0 ? (
+                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                    {petLabs.length} Hasil Tersimpan
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded bg-[#F6F1E6] text-[#6B6656] font-bold text-[10px] border border-[#E1D6BE]">
+                    Belum Ada Hasil Tersimpan
+                  </span>
+                )}
               </div>
 
               {/* Sample X-Ray Image Viewer */}
@@ -605,7 +696,11 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
                 </div>
               </div>
 
-              {/* Blood Lab Parameter Table */}
+              {/* Blood Lab Parameter Table — hanya relevan kalau jenis
+                  pemeriksaan yang sedang dipilih adalah Darah Lengkap.
+                  Sebelumnya tabel hematologi ini selalu tampil apa pun jenis
+                  pemeriksaannya (Rontgen/USG/Urinalisis), menyesatkan. */}
+              {diagDraft.labType === 'Darah Lengkap' && (
               <div className="space-y-2 pt-2">
                 <h4 className="font-bold text-xs text-[#1B2A45]">Hasil Darah Lengkap (Hematologi)</h4>
                 <div className="overflow-x-auto">
@@ -621,31 +716,88 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
                     <tbody className="divide-y divide-[#E1D6BE]">
                       <tr>
                         <td className="p-2 font-semibold">Hemoglobin (Hb)</td>
-                        <td className="p-2 font-bold text-[#1B2A45]">13.5 g/dL</td>
+                        <td className="p-2">
+                          <input
+                            value={diagDraft.hbValue}
+                            onChange={(e) => updateDraft({ hbValue: e.target.value })}
+                            className="w-20 p-1 bg-[#F6F1E6] border border-[#E1D6BE] rounded font-bold text-[#1B2A45]"
+                          /> g/dL
+                        </td>
                         <td className="p-2 text-[#6B6656]">12.0 - 18.0 g/dL</td>
                         <td className="p-2"><span className="text-emerald-700 font-bold">Normal</span></td>
                       </tr>
                       <tr>
                         <td className="p-2 font-semibold">Leukosit (WBC)</td>
-                        <td className="p-2 font-bold text-amber-700">17.2 x10³/µL</td>
+                        <td className="p-2">
+                          <input
+                            value={diagDraft.wbcValue}
+                            onChange={(e) => updateDraft({ wbcValue: e.target.value })}
+                            className="w-20 p-1 bg-[#F6F1E6] border border-[#E1D6BE] rounded font-bold text-amber-700"
+                          /> x10³/µL
+                        </td>
                         <td className="p-2 text-[#6B6656]">5.5 - 16.5 x10³/µL</td>
                         <td className="p-2"><span className="text-amber-700 font-bold">Sedikit Tinggi</span></td>
                       </tr>
                       <tr>
                         <td className="p-2 font-semibold">Trombosit (PLT)</td>
-                        <td className="p-2 font-bold text-[#1B2A45]">280 x10³/µL</td>
+                        <td className="p-2">
+                          <input
+                            value={diagDraft.pltValue}
+                            onChange={(e) => updateDraft({ pltValue: e.target.value })}
+                            className="w-20 p-1 bg-[#F6F1E6] border border-[#E1D6BE] rounded font-bold text-[#1B2A45]"
+                          /> x10³/µL
+                        </td>
                         <td className="p-2 text-[#6B6656]">200 - 500 x10³/µL</td>
                         <td className="p-2"><span className="text-emerald-700 font-bold">Normal</span></td>
                       </tr>
                       <tr>
                         <td className="p-2 font-semibold">SGPT / ALT (Fungsi Hati)</td>
-                        <td className="p-2 font-bold text-[#1B2A45]">42 U/L</td>
+                        <td className="p-2">
+                          <input
+                            value={diagDraft.sgptValue}
+                            onChange={(e) => updateDraft({ sgptValue: e.target.value })}
+                            className="w-20 p-1 bg-[#F6F1E6] border border-[#E1D6BE] rounded font-bold text-[#1B2A45]"
+                          /> U/L
+                        </td>
                         <td className="p-2 text-[#6B6656]">10 - 100 U/L</td>
                         <td className="p-2"><span className="text-emerald-700 font-bold">Normal</span></td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
+              </div>
+              )}
+
+              {/* Riwayat hasil lab tersimpan — sebelumnya petLabs dihitung
+                  tapi tak pernah dirender di tab ini, jadi staf harus pindah
+                  ke tab Timeline untuk melihat hasil yang baru diunggah. */}
+              <div className="space-y-2 pt-2">
+                <h4 className="font-bold text-xs text-[#1B2A45]">Riwayat Hasil Lab & Radiologi Tersimpan</h4>
+                {petLabs.length > 0 ? (
+                  <div className="space-y-2">
+                    {petLabs.map((lab) => (
+                      <div key={lab.id} className="p-3 bg-[#F6F1E6]/60 border border-[#E1D6BE] rounded-lg text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[#1B2A45]">{lab.testName} • {lab.testNo}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            lab.status === 'Selesai' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {lab.status}
+                          </span>
+                        </div>
+                        <p className="text-[#6B6656]">Diminta oleh {lab.orderedBy} • {lab.orderedAt}</p>
+                        {lab.results && lab.results.length > 0 && (
+                          <p className="text-[#22242B]">
+                            {lab.results.map((r) => `${r.parameter}: ${r.value}`).join(' • ')}
+                          </p>
+                        )}
+                        {lab.notes && <p className="text-[#6B6656] italic">"{lab.notes}"</p>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#6B6656]">Belum ada hasil lab/radiologi tersimpan untuk pasien ini.</p>
+                )}
               </div>
             </div>
           </div>
@@ -688,7 +840,7 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
               </div>
 
               <button
-                onClick={handleSimulateUpload}
+                onClick={handleUploadLabResult}
                 className="w-full py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5"
               >
                 <Upload className="w-4 h-4 text-[#D9B98A]" /> Unggah Hasil Laboratorium

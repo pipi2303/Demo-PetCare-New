@@ -62,6 +62,7 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
     doctorBookings = [],
     customers = [],
     pets = [],
+    employees = [],
     addDoctorBooking,
     updateDoctorBooking,
     rescheduleDoctorBooking,
@@ -101,13 +102,27 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
 
   const [hoveredDropSlotKey, setHoveredDropSlotKey] = useState<string | null>(null); // e.g. "09:00_drh. Ananda Putri" or "09:00"
 
+  // Dokter jaga diambil dari staf aktif di Master Data (role Dokter Hewan),
+  // konsisten dengan pola eligibleProviders di ServicesModule.tsx — bukan
+  // roster hardcoded terpisah yang tidak ikut berubah saat Master Data diedit.
+  const eligibleDoctors = employees.filter((e) => e.role === 'Dokter Hewan' && e.status === 'Aktif');
+  const DOCTOR_AVATAR_COLORS = [
+    'from-amber-600 to-amber-800',
+    'from-rose-600 to-rose-800',
+    'from-indigo-600 to-indigo-800',
+    'from-teal-600 to-teal-800',
+    'from-emerald-600 to-emerald-800',
+    'from-sky-600 to-sky-800'
+  ];
+  const getDoctorAvatarColor = (idx: number) => DOCTOR_AVATAR_COLORS[idx % DOCTOR_AVATAR_COLORS.length];
+
   // Quick Action Modal states
   const [showAddBookingModal, setShowAddBookingModal] = useState<boolean>(false);
   const [newBookingData, setNewBookingData] = useState({
     customerId: customers[0]?.id || '',
     petId: pets[0]?.id || '',
-    doctorId: 'u2',
-    doctorName: 'drh. Ananda Putri',
+    doctorId: eligibleDoctors[0]?.id || '',
+    doctorName: eligibleDoctors[0]?.name || '',
     date: todayStr,
     timeSlot: '09:00',
     complaint: 'Pemeriksaan kesehatan rutin & vaksinasi',
@@ -123,14 +138,6 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
     targetDoctorId: string;
     occupiedBooking?: Types.DoctorBooking;
   } | null>(null);
-
-  // Doctor roster definition
-  const DOCTOR_ROSTER = [
-    { id: 'u2', name: 'drh. Ananda Putri', title: 'Poli Umum & Bedah Minor', avatarColor: 'from-amber-600 to-amber-800' },
-    { id: 'e6', name: 'drh. Citra Prasetyo', title: 'Poli Feline & Eksotik', avatarColor: 'from-rose-600 to-rose-800' },
-    { id: 'u1', name: 'drh. Hendrawan', title: 'Senior Vet & Ortopedi', avatarColor: 'from-indigo-600 to-indigo-800' },
-    { id: 'u3', name: 'drh. Budi Setiawan', title: 'Spesialis Gigi & Kulit', avatarColor: 'from-teal-600 to-teal-800' }
-  ];
 
   // Google Calendar Integration State
   const [showGCalModal, setShowGCalModal] = useState<boolean>(false);
@@ -226,7 +233,7 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
   const slotDoctorMap = useMemo(() => {
     const map: Record<string, Types.DoctorBooking[]> = {};
     scheduledBookingsForDate.forEach((b) => {
-      const docKey = b.doctorName || 'drh. Ananda Putri';
+      const docKey = b.doctorName || 'Belum Ditugaskan';
       const key = `${b.timeSlot}_${docKey}`;
       if (!map[key]) map[key] = [];
       map[key].push(b);
@@ -278,11 +285,14 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
     setHoveredDropSlotKey(null);
   };
 
-  // Drop into a specific Time Slot and Doctor column
+  // Drop into a specific Time Slot, optionally reassigning the Doctor column.
+  // `targetDoctor` is omitted from the chronological Timeline view (which has
+  // no doctor columns) — in that case the booking keeps its OWN doctor and
+  // only the time slot changes, instead of being silently reassigned.
   const handleDropToSlot = (
     e: React.DragEvent,
     targetSlot: string,
-    targetDoctor: { id: string; name: string }
+    targetDoctor?: { id: string; name: string }
   ) => {
     e.preventDefault();
     setHoveredDropSlotKey(null);
@@ -303,8 +313,10 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
     const existingBooking = doctorBookings.find((b) => b.id === sourceBookingId);
     if (!existingBooking) return;
 
+    const resolvedTargetDoctor = targetDoctor || { id: existingBooking.doctorId, name: existingBooking.doctorName };
+
     // Check if slot already has a booking with this doctor
-    const key = `${targetSlot}_${targetDoctor.name}`;
+    const key = `${targetSlot}_${resolvedTargetDoctor.name}`;
     const occupiedBookings = slotDoctorMap[key] || [];
 
     if (occupiedBookings.length > 0 && occupiedBookings[0].id !== sourceBookingId) {
@@ -312,15 +324,15 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
       setShowConflictModal({
         sourceBooking: existingBooking,
         targetSlot,
-        targetDoctorName: targetDoctor.name,
-        targetDoctorId: targetDoctor.id,
+        targetDoctorName: resolvedTargetDoctor.name,
+        targetDoctorId: resolvedTargetDoctor.id,
         occupiedBooking: occupiedBookings[0]
       });
       return;
     }
 
     // Execute scheduling
-    rescheduleDoctorBooking(sourceBookingId, selectedDate, targetSlot, targetDoctor.id, targetDoctor.name);
+    rescheduleDoctorBooking(sourceBookingId, selectedDate, targetSlot, resolvedTargetDoctor.id, resolvedTargetDoctor.name);
     
     // If was waiting/batal, ensure active status
     if (existingBooking.status === 'Batal' || existingBooking.status === 'Menunggu') {
@@ -335,8 +347,8 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
         ...existingBooking,
         date: selectedDate,
         timeSlot: targetSlot,
-        doctorId: targetDoctor.id,
-        doctorName: targetDoctor.name,
+        doctorId: resolvedTargetDoctor.id,
+        doctorName: resolvedTargetDoctor.name,
         status: 'Terkonfirmasi'
       };
       syncDoctorBookingToGoogleCalendar(updatedBooking, token).then((res) => {
@@ -352,7 +364,7 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
     }
 
     addToast(
-      `✅ Berhasil menjadwalkan ${existingBooking.petName} ke jam ${targetSlot} bersama ${targetDoctor.name}!`,
+      `✅ Berhasil menjadwalkan ${existingBooking.petName} ke jam ${targetSlot} bersama ${resolvedTargetDoctor.name}!`,
       'success'
     );
     setDraggedBooking(null);
@@ -393,8 +405,8 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
     if (occupiedBooking) {
       // Swap slots
       const sourceOldSlot = sourceBooking.timeSlot || '09:00';
-      const sourceOldDoctor = sourceBooking.doctorName || 'drh. Ananda Putri';
-      const sourceOldDocId = sourceBooking.doctorId || 'u2';
+      const sourceOldDoctor = sourceBooking.doctorName || eligibleDoctors[0]?.name || 'Belum Ditugaskan';
+      const sourceOldDocId = sourceBooking.doctorId || eligibleDoctors[0]?.id || '';
 
       rescheduleDoctorBooking(sourceBooking.id, selectedDate, targetSlot, targetDoctorId, targetDoctorName);
       rescheduleDoctorBooking(occupiedBooking.id, selectedDate, sourceOldSlot, sourceOldDocId, sourceOldDoctor);
@@ -437,7 +449,28 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
     e.preventDefault();
     const cust = customers.find((c) => c.id === newBookingData.customerId) || customers[0];
     const pet = pets.find((p) => p.id === newBookingData.petId) || pets[0];
-    const doc = DOCTOR_ROSTER.find((d) => d.id === newBookingData.doctorId) || DOCTOR_ROSTER[0];
+    const doc = eligibleDoctors.find((d) => d.id === newBookingData.doctorId) || eligibleDoctors[0];
+
+    if (!doc) {
+      addToast('Belum ada dokter aktif di Master Data. Tambahkan dulu di menu SDM / Master Data.', 'error');
+      return;
+    }
+
+    // Cek bentrok jadwal: dokter yang sama tidak boleh punya 2 janji temu di
+    // tanggal & jam yang sama (kecuali booking yang sudah Batal).
+    if (!newBookingData.isUnscheduled) {
+      const hasConflict = doctorBookings.some(
+        (b) =>
+          b.doctorId === doc.id &&
+          b.date === newBookingData.date &&
+          b.timeSlot === newBookingData.timeSlot &&
+          b.status !== 'Batal'
+      );
+      if (hasConflict) {
+        addToast(`${doc.name} sudah punya janji temu lain pada ${newBookingData.date} jam ${newBookingData.timeSlot}. Pilih jam lain.`, 'error');
+        return;
+      }
+    }
 
     const created = addDoctorBooking({
       customerId: cust.id,
@@ -626,8 +659,8 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                 setNewBookingData({
                   customerId: customers[0]?.id || '',
                   petId: pets[0]?.id || '',
-                  doctorId: 'u2',
-                  doctorName: 'drh. Ananda Putri',
+                  doctorId: eligibleDoctors[0]?.id || '',
+                  doctorName: eligibleDoctors[0]?.name || '',
                   date: selectedDate,
                   timeSlot: '09:00',
                   complaint: '',
@@ -675,8 +708,8 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                 onChange={(e) => setSelectedDoctorFilter(e.target.value)}
                 className="bg-[#F6F1E6] text-xs font-bold text-[#1B2A45] rounded-xl px-2.5 py-1.5 border border-[#E1D6BE] focus:outline-hidden focus:border-[#B8905A] cursor-pointer"
               >
-                <option value="all">Semua Dokter Jaga ({DOCTOR_ROSTER.length})</option>
-                {DOCTOR_ROSTER.map((doc) => (
+                <option value="all">Semua Dokter Jaga ({eligibleDoctors.length})</option>
+                {eligibleDoctors.map((doc) => (
                   <option key={doc.id} value={doc.name}>
                     {doc.name}
                   </option>
@@ -736,8 +769,8 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                     setNewBookingData({
                       customerId: customers[0]?.id || '',
                       petId: pets[0]?.id || '',
-                      doctorId: 'u2',
-                      doctorName: 'drh. Ananda Putri',
+                      doctorId: eligibleDoctors[0]?.id || '',
+                      doctorName: eligibleDoctors[0]?.name || '',
                       date: selectedDate,
                       timeSlot: '',
                       complaint: '',
@@ -830,7 +863,11 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                           type="button"
                           onClick={() => {
                             // Quick assign to first available slot
-                            rescheduleDoctorBooking(booking.id, selectedDate, '09:00', 'u2', 'drh. Ananda Putri');
+                            if (!eligibleDoctors[0]) {
+                              addToast('Belum ada dokter aktif di Master Data.', 'error');
+                              return;
+                            }
+                            rescheduleDoctorBooking(booking.id, selectedDate, '09:00', eligibleDoctors[0].id, eligibleDoctors[0].name);
                             updateDoctorBookingStatus(booking.id, 'Terkonfirmasi');
                             addToast(`✅ Pasien ${booking.petName} dijadwalkan pada jam 09:00!`, 'success');
                           }}
@@ -862,20 +899,20 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                         <Clock className="w-4 h-4 mx-auto text-[#B8905A] mb-0.5" />
                         <span>Jam Slot</span>
                       </th>
-                      {DOCTOR_ROSTER.filter(
+                      {eligibleDoctors.filter(
                         (d) => selectedDoctorFilter === 'all' || d.name.toLowerCase().includes(selectedDoctorFilter.toLowerCase())
-                      ).map((doctor) => (
+                      ).map((doctor, idx) => (
                         <th key={doctor.id} className="p-3 text-left border-r border-[#E1D6BE] last:border-r-0 min-w-[200px]">
                           <div className="flex items-center gap-2">
-                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${doctor.avatarColor} text-white flex items-center justify-center text-xs font-black shadow-2xs`}>
-                              {doctor.name.substring(5, 7).toUpperCase()}
+                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${getDoctorAvatarColor(idx)} text-white flex items-center justify-center text-xs font-black shadow-2xs`}>
+                              {doctor.name.replace(/^drh\.\s*/i, '').substring(0, 2).toUpperCase()}
                             </div>
                             <div className="leading-tight">
                               <span className="font-extrabold text-xs text-[#1B2A45] block font-display">
                                 {doctor.name}
                               </span>
                               <span className="text-[10px] text-[#6B6656] font-medium block">
-                                {doctor.title}
+                                {doctor.department}
                               </span>
                             </div>
                           </div>
@@ -888,7 +925,7 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                   <tbody className="divide-y divide-[#E1D6BE]/70">
                     {TIME_SLOTS.map((slot) => {
                       const isLunchBreak = slot === '12:00';
-                      const visibleDoctors = DOCTOR_ROSTER.filter(
+                      const visibleDoctors = eligibleDoctors.filter(
                         (d) => selectedDoctorFilter === 'all' || d.name.toLowerCase().includes(selectedDoctorFilter.toLowerCase())
                       );
 
@@ -1049,17 +1086,23 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                                               </button>
                                             )}
 
-                                            <a
-                                              href={`https://wa.me/6281234567890?text=${encodeURIComponent(
-                                                `Halo Kak ${booking.customerName}, mengingatkan jadwal periksa anabul ${booking.petName} pada ${booking.date} jam ${booking.timeSlot} bersama ${booking.doctorName} di Klinik PetCare. Terima kasih!`
-                                              )}`}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                              className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded text-[10px] transition-colors"
-                                              title="Kirim Reminder WhatsApp"
-                                            >
-                                              <Smartphone className="w-3 h-3" />
-                                            </a>
+                                            {(() => {
+                                              const bookingCustomerPhone = customers.find((c) => c.id === booking.customerId)?.phone;
+                                              if (!bookingCustomerPhone) return null;
+                                              return (
+                                                <a
+                                                  href={`https://wa.me/${bookingCustomerPhone.replace(/^0/, '62').replace(/\D/g, '')}?text=${encodeURIComponent(
+                                                    `Halo Kak ${booking.customerName}, mengingatkan jadwal periksa anabul ${booking.petName} pada ${booking.date} jam ${booking.timeSlot} bersama ${booking.doctorName} di Klinik PetCare. Terima kasih!`
+                                                  )}`}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded text-[10px] transition-colors"
+                                                  title="Kirim Reminder WhatsApp"
+                                                >
+                                                  <Smartphone className="w-3 h-3" />
+                                                </a>
+                                              );
+                                            })()}
                                           </div>
                                         </div>
                                       </div>
@@ -1100,7 +1143,7 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                       key={slot}
                       onDragOver={(e) => handleDragOver(e, slot)}
                       onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDropToSlot(e, slot, DOCTOR_ROSTER[0])}
+                      onDrop={(e) => handleDropToSlot(e, slot)}
                       className={`p-3 rounded-xl border transition-all ${
                         isHovered
                           ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-400'
@@ -1126,8 +1169,8 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                               setNewBookingData({
                                 customerId: customers[0]?.id || '',
                                 petId: pets[0]?.id || '',
-                                doctorId: 'u2',
-                                doctorName: 'drh. Ananda Putri',
+                                doctorId: eligibleDoctors[0]?.id || '',
+                                doctorName: eligibleDoctors[0]?.name || '',
                                 date: selectedDate,
                                 timeSlot: slot,
                                 complaint: '',
@@ -1163,7 +1206,7 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                                 </div>
                                 <p className="text-[11px] text-[#1B2A45] font-medium flex items-center gap-1.5">
                                   <Stethoscope className="w-3.5 h-3.5 text-[#B8905A]" />
-                                  {booking.doctorName || 'drh. Ananda Putri'}
+                                  {booking.doctorName || 'Belum Ditugaskan'}
                                 </p>
                                 {booking.complaint && (
                                   <p className="text-[10px] text-[#6B6656] bg-[#F6F1E6] rounded p-1">
@@ -1297,18 +1340,18 @@ export const BookingCalendarView: React.FC<BookingCalendarViewProps> = ({
                 <select
                   value={newBookingData.doctorId}
                   onChange={(e) => {
-                    const doc = DOCTOR_ROSTER.find((d) => d.id === e.target.value);
+                    const doc = eligibleDoctors.find((d) => d.id === e.target.value);
                     setNewBookingData({
                       ...newBookingData,
                       doctorId: e.target.value,
-                      doctorName: doc?.name || 'drh. Ananda Putri'
+                      doctorName: doc?.name || ''
                     });
                   }}
                   className="w-full bg-[#F6F1E6] text-[#1B2A45] text-xs font-medium rounded-xl p-2.5 border border-[#E1D6BE] focus:outline-hidden focus:border-[#B8905A]"
                 >
-                  {DOCTOR_ROSTER.map((doc) => (
+                  {eligibleDoctors.map((doc) => (
                     <option key={doc.id} value={doc.id}>
-                      {doc.name} — {doc.title}
+                      {doc.name} — {doc.department}
                     </option>
                   ))}
                 </select>

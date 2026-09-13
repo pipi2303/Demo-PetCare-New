@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { authHeaders } from '../../utils/authToken';
 import {
   Sparkles,
   TrendingDown,
@@ -187,7 +188,7 @@ export const AIPOSuggestionsView: React.FC<AIPOSuggestionsViewProps> = ({
 
       const res = await fetch('/api/ai/suggest-po-quantities', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           items: payloadItems,
           targetCoverageDays,
@@ -199,11 +200,7 @@ export const AIPOSuggestionsView: React.FC<AIPOSuggestionsViewProps> = ({
       const json = await res.json();
       if (json.success && json.data) {
         setAiAnalysisResult(json.data);
-        addToast({
-          title: 'Analisis Gemini AI Selesai',
-          description: 'Rekomendasi kuantitas PO dan strategi negosiasi distributor berhasil dimutakhirkan.',
-          type: 'success'
-        });
+        addToast('Analisis Gemini AI Selesai — rekomendasi kuantitas PO dan strategi negosiasi distributor berhasil dimutakhirkan.', 'success');
       } else {
         throw new Error('Respons tidak valid');
       }
@@ -218,11 +215,7 @@ export const AIPOSuggestionsView: React.FC<AIPOSuggestionsViewProps> = ({
           'Estimasi modal kerja pengadaan ini proporsional terhadap laju putaran stok rata-rata tanpa menciptakan penumpukan inventaris.',
         confidenceScore: 94
       });
-      addToast({
-        title: 'Analisis Peramalan Diperbarui',
-        description: 'Model estimasi kuantitas PO telah disesuaikan dengan pola tren 30 hari.',
-        type: 'info'
-      });
+      addToast('Analisis Peramalan Diperbarui — model estimasi kuantitas PO telah disesuaikan dengan pola tren 30 hari.', 'info');
     } finally {
       setIsAiLoading(false);
     }
@@ -231,11 +224,7 @@ export const AIPOSuggestionsView: React.FC<AIPOSuggestionsViewProps> = ({
   // Launch Quick PO Modal
   const handleCreatePo = () => {
     if (selectedItemsData.length === 0) {
-      addToast({
-        title: 'Pilih Item Terlebih Dahulu',
-        description: 'Tandai minimal satu item dengan kuantitas lebih dari 0 untuk membuat Purchase Order.',
-        type: 'warning'
-      });
+      addToast('Pilih Item Terlebih Dahulu — tandai minimal satu item dengan kuantitas lebih dari 0 untuk membuat Purchase Order.', 'warning');
       return;
     }
 
@@ -534,12 +523,24 @@ export const AIPOSuggestionsView: React.FC<AIPOSuggestionsViewProps> = ({
                         <div className="font-semibold text-slate-900">{item.name}</div>
                         <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
                           <span>{item.sku}</span>
-                          {item.aiRationale && (
+                          {/* Sebelumnya badge ini tampil terus (kondisinya
+                              selalu true karena aiRationale selalu terisi) —
+                              sekarang benar-benar menandai apakah konsumsi
+                              30 hari berasal dari mutasi kasir riil atau
+                              masih tebakan kategori. */}
+                          {item.usedEstimate ? (
                             <span
                               className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.2"
                               title={item.aiRationale}
                             >
-                              AI Insight
+                              Estimasi
+                            </span>
+                          ) : (
+                            <span
+                              className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.2"
+                              title={item.aiRationale}
+                            >
+                              Data Riil 30H
                             </span>
                           )}
                         </div>

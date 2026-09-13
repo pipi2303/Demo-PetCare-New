@@ -125,9 +125,9 @@ export const BarcodeCameraScanner: React.FC<BarcodeCameraScannerProps> = ({
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-black text-white font-display">
-                Scanner Barcode Kamera POS
+                Scanner Barcode POS
               </h3>
-              <p className="text-[11px] text-[#E1D6BE]/80">Arahkan barcode produk ke dalam kotak scanner</p>
+              <p className="text-[11px] text-[#E1D6BE]/80">Pratinjau kamera saja — pindai lewat Klik Cepat atau ketik kode manual di bawah</p>
             </div>
           </div>
 
@@ -170,21 +170,22 @@ export const BarcodeCameraScanner: React.FC<BarcodeCameraScannerProps> = ({
               <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-[#B8905A] -translate-x-0.5 translate-y-0.5" />
               <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-[#B8905A] translate-x-0.5 translate-y-0.5" />
 
-              {/* Animated Laser Scanning Line */}
-              <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-red-500 to-transparent shadow-[0_0_10px_#ef4444] animate-pulse" />
-
               <span className="text-[10px] font-mono font-bold text-white bg-black/60 px-2 py-0.5 rounded-full backdrop-blur-xs">
-                ALIGN BARCODE
+                PRATINJAU KAMERA
               </span>
             </div>
 
-            {/* Scan Status Badge */}
+            {/* Kejujuran fitur: kamera di sini hanya pratinjau visual — belum
+                ada decoding barcode otomatis dari frame video (tidak pakai
+                BarcodeDetector/library pemindai). Deteksi sungguhan terjadi
+                lewat tombol Klik Cepat di katalog atau input manual di
+                bawah, bukan dari overlay ini. */}
             <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-[11px] bg-black/60 backdrop-blur-xs px-3 py-1.5 rounded-xl">
               <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Optical Auto-Focus Aktif
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                Deteksi Otomatis Belum Tersedia
               </span>
-              <span className="font-mono text-emerald-400 font-bold">1D / 2D QR</span>
+              <span className="font-mono text-amber-300 font-bold">Gunakan Klik Cepat / Manual</span>
             </div>
           </div>
 

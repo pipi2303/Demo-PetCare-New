@@ -30,13 +30,14 @@ import { AppNotification } from '../../types';
 import { QuickPOModal, QuickPOLineItem } from '../common/QuickPOModal';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import { generateAllCriticalSuppliesForecast } from '../../utils/inventoryForecaster';
+import { sendWhatsAppNotification } from '../../utils/sendWhatsApp';
 
 interface NotificationsModuleProps {
   setActiveModule?: (module: string) => void;
 }
 
 export const NotificationsModule: React.FC<NotificationsModuleProps> = ({ setActiveModule }) => {
-  const { notifications = [], markNotificationRead, addNotification, branches = [], activeBranchId, stockItems = [] } = useData();
+  const { notifications = [], markNotificationRead, addNotification, branches = [], activeBranchId, stockItems = [], pets = [], customers = [] } = useData();
   const { addToast } = useToast();
 
   const [filterType, setFilterType] = useState<string>('all');
@@ -217,11 +218,34 @@ export const NotificationsModule: React.FC<NotificationsModuleProps> = ({ setAct
     addToast('Notifikasi siaran internal klinik berhasil dikirim!', 'success');
   };
 
-  const handleSendWhatsAppAlert = (n: AppNotification) => {
+  // AppNotification tidak menyimpan customerId/petId, hanya teks bebas (mis. "Milo (Andri
+  // Santoso) dijadwalkan..."), jadi nomor WA pemilik dicari dengan mencocokkan nama hewan
+  // yang disebut di judul/pesan notifikasi terhadap data pets & customers asli di Master Data.
+  const resolveNotificationContact = (n: AppNotification): { phone: string; ownerName: string; petName: string } | null => {
+    const haystack = `${n.title} ${n.message}`.toLowerCase();
+    const matchedPet = pets.find((p) => p.name && haystack.includes(p.name.toLowerCase()));
+    if (!matchedPet) return null;
+    const owner = customers.find((c) => c.id === matchedPet.customerId);
+    if (!owner?.phone) return null;
+    return { phone: owner.phone, ownerName: owner.name, petName: matchedPet.name };
+  };
+
+  const handleSendWhatsAppAlert = async (n: AppNotification) => {
+    const contact = resolveNotificationContact(n);
+    if (!contact) {
+      addToast('Tidak dapat menemukan nomor WA pemilik dari notifikasi ini. Cek data pelanggan & hewan di Master Data.', 'warning');
+      return;
+    }
+
     addToast(`Mengirim pesan WhatsApp pengingat untuk: "${n.title}"...`, 'info');
-    setTimeout(() => {
-      addToast('Pesan WhatsApp otomatis berhasil dikirim ke nomor pemilik!', 'success');
-    }, 1000);
+    const message = `Halo Kak ${contact.ownerName}, mengingatkan: ${n.message}`;
+    const outcome = await sendWhatsAppNotification(contact.phone, message);
+    addToast(
+      outcome.auto
+        ? `Pesan WhatsApp otomatis berhasil dikirim ke ${contact.ownerName} (pemilik ${contact.petName})!`
+        : `Tautan WhatsApp ke ${contact.ownerName} (pemilik ${contact.petName}) dibuka di tab baru.`,
+      'success'
+    );
   };
 
   const getTypeIcon = (type: AppNotification['type']) => {

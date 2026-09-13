@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
-import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import {
   calculateSupplyForecast,
   generateAllCriticalSuppliesForecast,
@@ -40,10 +40,10 @@ interface PredictiveInventoryWidgetProps {
 export const PredictiveInventoryWidget: React.FC<PredictiveInventoryWidgetProps> = ({ setActiveModule }) => {
   const { stockItems = [], suppliers = [], addPurchaseOrder } = useData();
   const { addToast } = useToast();
-  const { user } = useAuth();
-
-  const userRole = user?.role || 'owner_klinik';
-  const isPetshop = userRole === 'owner_petshop';
+  // Single source of truth for role/permission resolution (see usePermissions.ts) —
+  // replaces the ad-hoc `user.role === 'owner_petshop'` check that used to live here
+  // (which, unlike every other isPetshop check in the app, didn't treat 'kasir' as petshop too).
+  const { role: userRole, isPetshop } = usePermissions();
 
   const [selectedScenario, setSelectedScenario] = useState<SeasonScenario>('pancaroba_hujan');
   const [filterMode, setFilterMode] = useState<'critical7' | 'all' | 'watch' | 'healthy'>('critical7');

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { createQrisPayment, pollPaymentStatus, PaymentStatus } from '../../utils/payment';
 import {
   Receipt,
   QrCode,
@@ -17,7 +18,10 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
-  FileText
+  FileText,
+  Loader2,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 
 interface BillingFinanceModuleProps {
@@ -25,7 +29,7 @@ interface BillingFinanceModuleProps {
 }
 
 export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ activeModule = 'billing' }) => {
-  const { invoices = [], cashTransactions = [], addInvoice, processPayment, addCashTransaction } = useData();
+  const { invoices = [], cashTransactions = [], productCategories = [], addInvoice, processPayment, addCashTransaction } = useData();
   const { addToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'pos' | 'cashbook' | 'pl'>(
@@ -43,6 +47,15 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
   const [selectedInvId, setSelectedInvId] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<any>('QRIS');
 
+  // Real QRIS payment state (Midtrans). qrisPhase 'idle' means: not a QRIS
+  // payment in progress (either a different payment method is selected, or
+  // the modal isn't open) — in that case the old decorative QR + manual
+  // "Konfirmasi Lunas" flow is used unchanged for staff-confirmed methods.
+  const [qrisPhase, setQrisPhase] = useState<'idle' | 'loading' | 'waiting_real' | 'waiting_simulated' | 'failed'>('idle');
+  const [qrisImageUrl, setQrisImageUrl] = useState<string | null>(null);
+  const [qrisMessage, setQrisMessage] = useState<string>('');
+  const pollRef = React.useRef<{ stop: () => void } | null>(null);
+
   // Simple new invoice state
   const [custName, setCustName] = useState('Budi Santoso');
   const [petName, setPetName] = useState('Mimi');
@@ -51,7 +64,12 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
   const [itemPrice, setItemPrice] = useState(150000);
 
   // Cashbook entry form
-  const [cashType, setCashType] = useState<'In' | 'Out'>('Out');
+  // Nilai HARUS persis 'Masuk'/'Keluar' — sama dengan union CashTransaction['type']
+  // di types.ts. Sebelumnya di sini 'In'/'Out', jadi SETIAP pencatatan kas manual
+  // (sewa, listrik, maintenance, dst — sumber utama beban operasional) tersimpan
+  // dengan type yang tidak pernah cocok dengan filter type==='Keluar' di manapun
+  // (tab Laba/Rugi, Laporan Keuangan PDF) — beban itu senyap dari kedua laporan.
+  const [cashType, setCashType] = useState<'Masuk' | 'Keluar'>('Keluar');
   const [cashCategory, setCashCategory] = useState('Operasional');
   const [cashDescription, setCashDescription] = useState('Pembelian Alat Tulis & Pembersih Klinik');
   const [cashAmount, setCashAmount] = useState(250000);
@@ -86,17 +104,92 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
     addToast(`Invoice baru ${inv.invoiceNo} senilai Rp ${itemPrice.toLocaleString('id-ID')} dibuat.`, 'success');
   };
 
+  const stopQrisPolling = () => {
+    pollRef.current?.stop();
+    pollRef.current = null;
+  };
+
   const handleOpenPayment = (invId: string) => {
     setSelectedInvId(invId);
+    setPaymentMethod('QRIS');
     setShowQrisModal(true);
   };
 
-  const handleSimulateQRISPayment = () => {
-    if (!selectedInvId) return;
+  const handleCloseQrisModal = () => {
+    stopQrisPolling();
+    setQrisPhase('idle');
+    setQrisImageUrl(null);
+    setShowQrisModal(false);
+  };
+
+  // Metode selain QRIS tetap staff-confirmed langsung (Tunai/Debit/Kartu
+  // Kredit/Transfer Bank tidak lewat payment gateway — dicatat manual seperti
+  // sebelumnya, itu memang di luar skop integrasi Midtrans).
+  const isConfirmingPaymentRef = React.useRef(false);
+  const handleConfirmManualPayment = () => {
+    if (!selectedInvId || isConfirmingPaymentRef.current) return;
+    isConfirmingPaymentRef.current = true;
     processPayment(selectedInvId, paymentMethod);
     setShowQrisModal(false);
     addToast(`Pembayaran Rp ${selectedInvoice?.totalAmount.toLocaleString('id-ID')} via ${paymentMethod} LUNAS!`, 'success');
+    isConfirmingPaymentRef.current = false;
   };
+
+  // Membuat charge QRIS nyata via Midtrans (server/paymentService.ts). Kalau
+  // gateway belum dikonfigurasi (MIDTRANS_SERVER_KEY kosong), backend balas
+  // simulated:true dan modal fallback ke QR dekoratif + konfirmasi manual
+  // seperti perilaku sebelum integrasi ini ada — tidak pernah mematahkan fitur.
+  const handleStartQrisPayment = async () => {
+    if (!selectedInvoice) return;
+    stopQrisPolling();
+    setQrisPhase('loading');
+    setQrisImageUrl(null);
+    setQrisMessage('');
+
+    const result = await createQrisPayment(selectedInvoice.invoiceNo, selectedInvoice.totalAmount, selectedInvoice.customerName);
+
+    if (result.simulated) {
+      setQrisPhase('waiting_simulated');
+      return;
+    }
+    if (!result.success || !result.qrImageUrl) {
+      setQrisPhase('failed');
+      setQrisMessage(result.message || 'Gagal membuat kode QRIS. Coba lagi.');
+      return;
+    }
+
+    setQrisImageUrl(result.qrImageUrl);
+    setQrisPhase('waiting_real');
+
+    pollRef.current = pollPaymentStatus(selectedInvoice.invoiceNo, {
+      onSettled: (status: PaymentStatus) => {
+        if (status === 'settlement') {
+          processPayment(selectedInvoice.id, 'QRIS');
+          addToast(`Pembayaran QRIS Rp ${selectedInvoice.totalAmount.toLocaleString('id-ID')} untuk ${selectedInvoice.invoiceNo} berhasil dikonfirmasi!`, 'success');
+          handleCloseQrisModal();
+        } else {
+          setQrisPhase('failed');
+          setQrisMessage(
+            status === 'expire' ? 'Kode QRIS kedaluwarsa sebelum dibayar.' : 'Pembayaran dibatalkan atau ditolak.'
+          );
+        }
+      }
+    });
+  };
+
+  React.useEffect(() => {
+    if (showQrisModal && paymentMethod === 'QRIS' && qrisPhase === 'idle') {
+      handleStartQrisPayment();
+    }
+    if (showQrisModal && paymentMethod !== 'QRIS' && qrisPhase !== 'idle') {
+      stopQrisPolling();
+      setQrisPhase('idle');
+      setQrisImageUrl(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showQrisModal, paymentMethod]);
+
+  React.useEffect(() => () => stopQrisPolling(), []);
 
   const handleAddCashRecord = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,36 +199,48 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
     }
 
     addCashTransaction({
-      date: new Date().toISOString().substring(0, 10),
       type: cashType,
       category: cashCategory,
       description: cashDescription,
       amount: cashAmount,
-      recordedBy: 'Manager Keuangan'
+      operator: 'Manager Keuangan'
     });
 
-    addToast(`Pencatatan Kas ${cashType === 'In' ? 'Masuk' : 'Keluar'} senilai Rp ${cashAmount.toLocaleString('id-ID')} berhasil disimpan.`, 'success');
+    addToast(`Pencatatan Kas ${cashType} senilai Rp ${cashAmount.toLocaleString('id-ID')} berhasil disimpan.`, 'success');
     setCashDescription('');
     setCashAmount(100000);
   };
 
-  // Profit & Loss calculation by Business Unit
-  const unitRevenue = {
-    Klinik: 8500000,
-    Grooming: 3200000,
-    'Pet Hotel': 4100000,
-    'Pet Shop': 6800000
+  // Profit & Loss — dihitung dari invoice & buku kas sungguhan, bukan angka
+  // contoh. Pendapatan per unit bisnis dipetakan dari kategori tiap item
+  // invoice: 'Klinik'/'Grooming'/'Pet Hotel'/'Pet Shop' dipakai langsung oleh
+  // form billing manual di tab ini, 'Telehealth' (dari modul Layanan)
+  // dianggap bagian Klinik, dan kategori produk apa pun yang cocok dengan
+  // Master Data Kategori Produk (Makanan, Obat, dst — dipakai kasir Pet Shop)
+  // dianggap Pet Shop. Beban operasional TIDAK ditandai per unit di Buku Kas
+  // saat ini, jadi hanya ditampilkan sebagai total keseluruhan — memecahnya
+  // per unit tanpa data nyata hanya akan mengarang ulang angka yang sama
+  // seperti sebelumnya.
+  const productCategoryNames = new Set(productCategories.map((c) => c.name));
+  const BUSINESS_UNITS = ['Klinik', 'Grooming', 'Pet Hotel', 'Pet Shop'] as const;
+  const classifyUnit = (category: string): (typeof BUSINESS_UNITS)[number] | 'Lainnya' => {
+    if (category === 'Telehealth') return 'Klinik';
+    if ((BUSINESS_UNITS as readonly string[]).includes(category)) return category as (typeof BUSINESS_UNITS)[number];
+    if (productCategoryNames.has(category)) return 'Pet Shop';
+    return 'Lainnya';
   };
 
-  const unitExpense = {
-    Klinik: 3100000,
-    Grooming: 1100000,
-    'Pet Hotel': 1400000,
-    'Pet Shop': 4500000
-  };
+  const paidInvoices = invoices.filter((inv) => inv.status === 'Lunas');
+  const unitRevenue: Record<string, number> = { Klinik: 0, Grooming: 0, 'Pet Hotel': 0, 'Pet Shop': 0, Lainnya: 0 };
+  paidInvoices.forEach((inv) => {
+    inv.items.forEach((item) => {
+      const unit = classifyUnit(item.category);
+      unitRevenue[unit] += item.totalPrice;
+    });
+  });
 
   const totalRev = Object.values(unitRevenue).reduce((a, b) => a + b, 0);
-  const totalExp = Object.values(unitExpense).reduce((a, b) => a + b, 0);
+  const totalExp = cashTransactions.filter((ct) => ct.type === 'Keluar').reduce((sum, ct) => sum + ct.amount, 0);
   const netProfit = totalRev - totalExp;
 
   return (
@@ -340,21 +445,21 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
                         <td className="p-2.5">
                           <span
                             className={`px-2 py-0.5 rounded font-bold text-[10px] inline-flex items-center gap-1 ${
-                              tx.type === 'In' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                              tx.type === 'Masuk' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                             }`}
                           >
-                            {tx.type === 'In' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                            Kas {tx.type === 'In' ? 'Masuk' : 'Keluar'}
+                            {tx.type === 'Masuk' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                            Kas {tx.type === 'Masuk' ? 'Masuk' : 'Keluar'}
                           </span>
                         </td>
                         <td className="p-2.5 font-semibold">{tx.category}</td>
                         <td className="p-2.5">{tx.description}</td>
                         <td
                           className={`p-2.5 font-bold font-mono ${
-                            tx.type === 'In' ? 'text-emerald-700' : 'text-rose-700'
+                            tx.type === 'Masuk' ? 'text-emerald-700' : 'text-rose-700'
                           }`}
                         >
-                          {tx.type === 'In' ? '+' : '-'} Rp {tx.amount.toLocaleString('id-ID')}
+                          {tx.type === 'Masuk' ? '+' : '-'} Rp {tx.amount.toLocaleString('id-ID')}
                         </td>
                       </tr>
                     ))}
@@ -375,18 +480,18 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setCashType('Out')}
+                    onClick={() => setCashType('Keluar')}
                     className={`py-2 rounded font-bold border transition-all ${
-                      cashType === 'Out' ? 'bg-rose-800 text-white border-rose-800' : 'bg-[#F6F1E6] text-[#22242B]'
+                      cashType === 'Keluar' ? 'bg-rose-800 text-white border-rose-800' : 'bg-[#F6F1E6] text-[#22242B]'
                     }`}
                   >
                     Kas Keluar (Beban)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCashType('In')}
+                    onClick={() => setCashType('Masuk')}
                     className={`py-2 rounded font-bold border transition-all ${
-                      cashType === 'In' ? 'bg-emerald-800 text-white border-emerald-800' : 'bg-[#F6F1E6] text-[#22242B]'
+                      cashType === 'Masuk' ? 'bg-emerald-800 text-white border-emerald-800' : 'bg-[#F6F1E6] text-[#22242B]'
                     }`}
                   >
                     Kas Masuk (Injeksi)
@@ -464,14 +569,16 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
           {/* Business Unit Breakdown */}
           <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-2xs space-y-4">
             <h3 className="font-bold text-sm text-[#1B2A45] font-display border-b border-[#E1D6BE] pb-2 flex items-center gap-2">
-              <BarChart2 className="w-4 h-4 text-[#B8905A]" /> Breakdown Performa Laba Rugi Per Unit Bisnis
+              <BarChart2 className="w-4 h-4 text-[#B8905A]" /> Pendapatan Per Unit Bisnis (dari Invoice Lunas)
             </h3>
+            <p className="text-[11px] text-[#6B6656] -mt-2">
+              Beban operasional belum ditandai per unit di Buku Kas, jadi hanya ditampilkan sebagai total keseluruhan di atas — bukan dipecah per unit.
+            </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {Object.keys(unitRevenue).map((unit) => {
-                const rev = (unitRevenue as any)[unit];
-                const exp = (unitExpense as any)[unit];
-                const prof = rev - exp;
+              {BUSINESS_UNITS.map((unit) => {
+                const rev = unitRevenue[unit];
+                const share = totalRev > 0 ? (rev / totalRev) * 100 : 0;
 
                 return (
                   <div key={unit} className="p-4 rounded-xl bg-[#F6F1E6] border border-[#E1D6BE] space-y-2">
@@ -481,19 +588,20 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
                         <span className="text-[#6B6656]">Pendapatan:</span>
                         <span className="font-bold text-emerald-700">Rp {rev.toLocaleString('id-ID')}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-[#6B6656]">Pengeluaran:</span>
-                        <span className="font-semibold text-rose-700">Rp {exp.toLocaleString('id-ID')}</span>
-                      </div>
                       <div className="flex justify-between pt-2 border-t border-[#E1D6BE]">
-                        <span className="font-bold text-[#1B2A45]">Profit:</span>
-                        <span className="font-bold text-[#1B2A45]">Rp {prof.toLocaleString('id-ID')}</span>
+                        <span className="font-bold text-[#1B2A45]">Kontribusi Omzet:</span>
+                        <span className="font-bold text-[#1B2A45]">{share.toFixed(1)}%</span>
                       </div>
                     </div>
                   </div>
                 );
               })}
             </div>
+            {unitRevenue.Lainnya > 0 && (
+              <p className="text-[11px] text-[#6B6656]">
+                + Rp {unitRevenue.Lainnya.toLocaleString('id-ID')} dari kategori item invoice yang belum terpetakan ke unit manapun.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -516,21 +624,61 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
 
             {/* QR Code Container */}
             <div className="bg-[#101A2C] p-4 rounded-xl text-center space-y-3 border border-[#B8905A]/30">
-              <div className="w-48 h-48 mx-auto bg-white p-3 rounded-lg flex items-center justify-center border-2 border-[#B8905A]">
-                {/* Dynamic QR SVG */}
-                <svg className="w-full h-full text-slate-900" viewBox="0 0 100 100">
-                  <path d="M 10 10 H 30 V 30 H 10 Z M 70 10 H 90 V 30 H 70 Z M 10 70 H 30 V 90 H 10 Z" fill="currentColor" />
-                  <path d="M 15 15 H 25 V 25 H 15 Z M 75 15 H 85 V 25 H 75 Z M 15 75 H 25 V 85 H 15 Z" fill="#1B2A45" />
-                  <rect x="40" y="40" width="20" height="20" fill="#B8905A" />
-                  <rect x="10" y="45" width="20" height="10" fill="currentColor" />
-                  <rect x="45" y="10" width="10" height="20" fill="currentColor" />
-                  <rect x="70" y="45" width="20" height="20" fill="currentColor" />
-                  <rect x="45" y="70" width="20" height="20" fill="currentColor" />
-                </svg>
-              </div>
-              <p className="text-[11px] text-[#EDE6D6]/80 font-mono">
-                Scan QRIS via GoPay, OVO, Dana, BCA, atau Mobile Banking
-              </p>
+              {paymentMethod === 'QRIS' && qrisPhase === 'loading' && (
+                <div className="w-48 h-48 mx-auto flex flex-col items-center justify-center gap-2 text-[#EDE6D6]">
+                  <Loader2 className="w-8 h-8 animate-spin text-[#D9B98A]" />
+                  <span className="text-[11px]">Membuat kode QRIS...</span>
+                </div>
+              )}
+
+              {paymentMethod === 'QRIS' && qrisPhase === 'waiting_real' && qrisImageUrl && (
+                <>
+                  <div className="w-48 h-48 mx-auto bg-white p-3 rounded-lg flex items-center justify-center border-2 border-[#B8905A]">
+                    <img src={qrisImageUrl} alt="Kode QRIS pembayaran" className="w-full h-full object-contain" />
+                  </div>
+                  <p className="text-[11px] text-emerald-300 font-bold flex items-center justify-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Menunggu pembayaran...
+                  </p>
+                  <p className="text-[11px] text-[#EDE6D6]/80 font-mono">
+                    Scan QRIS via GoPay, OVO, Dana, BCA, atau Mobile Banking apapun
+                  </p>
+                </>
+              )}
+
+              {paymentMethod === 'QRIS' && qrisPhase === 'failed' && (
+                <div className="w-48 h-48 mx-auto flex flex-col items-center justify-center gap-2 text-rose-300">
+                  <AlertTriangle className="w-8 h-8" />
+                  <span className="text-[11px] px-2">{qrisMessage}</span>
+                  <button
+                    onClick={handleStartQrisPayment}
+                    className="mt-1 px-3 py-1.5 bg-[#B8905A] text-[#101A2C] font-bold text-[11px] rounded-lg flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Buat Ulang QRIS
+                  </button>
+                </div>
+              )}
+
+              {(paymentMethod !== 'QRIS' || qrisPhase === 'waiting_simulated' || qrisPhase === 'idle') && (
+                <>
+                  <div className="w-48 h-48 mx-auto bg-white p-3 rounded-lg flex items-center justify-center border-2 border-[#B8905A]">
+                    {/* QR dekoratif (mode simulasi — gateway pembayaran belum dikonfigurasi, atau metode non-QRIS) */}
+                    <svg className="w-full h-full text-slate-900" viewBox="0 0 100 100">
+                      <path d="M 10 10 H 30 V 30 H 10 Z M 70 10 H 90 V 30 H 70 Z M 10 70 H 30 V 90 H 10 Z" fill="currentColor" />
+                      <path d="M 15 15 H 25 V 25 H 15 Z M 75 15 H 85 V 25 H 75 Z M 15 75 H 25 V 85 H 15 Z" fill="#1B2A45" />
+                      <rect x="40" y="40" width="20" height="20" fill="#B8905A" />
+                      <rect x="10" y="45" width="20" height="10" fill="currentColor" />
+                      <rect x="45" y="10" width="10" height="20" fill="currentColor" />
+                      <rect x="70" y="45" width="20" height="20" fill="currentColor" />
+                      <rect x="45" y="70" width="20" height="20" fill="currentColor" />
+                    </svg>
+                  </div>
+                  <p className="text-[11px] text-[#EDE6D6]/80 font-mono">
+                    {paymentMethod === 'QRIS'
+                      ? 'Mode simulasi — payment gateway belum dikonfigurasi (MIDTRANS_SERVER_KEY)'
+                      : 'Scan QRIS via GoPay, OVO, Dana, BCA, atau Mobile Banking'}
+                  </p>
+                </>
+              )}
             </div>
 
             <div>
@@ -550,17 +698,27 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
 
             <div className="flex gap-2 pt-2">
               <button
-                onClick={() => setShowQrisModal(false)}
+                onClick={handleCloseQrisModal}
                 className="w-1/2 py-2.5 bg-[#F6F1E6] hover:bg-[#E1D6BE]/50 text-[#1B2A45] font-bold text-xs rounded-lg transition-all border border-[#E1D6BE]"
               >
                 Batal
               </button>
-              <button
-                onClick={handleSimulateQRISPayment}
-                className="w-1/2 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-md transition-all flex items-center justify-center gap-1.5"
-              >
-                <CheckCircle2 className="w-4 h-4 text-[#D9B98A]" /> Konfirmasi Lunas
-              </button>
+              {paymentMethod === 'QRIS' && qrisPhase === 'waiting_real' ? (
+                <button
+                  disabled
+                  className="w-1/2 py-2.5 bg-[#1B2A45]/50 text-[#FFFDF9]/70 font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 cursor-not-allowed"
+                >
+                  <Loader2 className="w-4 h-4 animate-spin" /> Menunggu Pelanggan Bayar
+                </button>
+              ) : (
+                <button
+                  onClick={handleConfirmManualPayment}
+                  disabled={paymentMethod === 'QRIS' && qrisPhase === 'loading'}
+                  className="w-1/2 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-[#D9B98A]" /> Konfirmasi Lunas
+                </button>
+              )}
             </div>
           </div>
         </div>

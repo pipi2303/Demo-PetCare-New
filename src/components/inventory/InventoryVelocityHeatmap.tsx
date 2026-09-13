@@ -47,6 +47,7 @@ export interface CalculatedItemVelocity {
   capitalTiedUp: number;
   reorderUrgency: 'CRITICAL' | 'WARNING' | 'HEALTHY' | 'OVERSTOCKED';
   recommendation: string;
+  usedEstimate: boolean;
 }
 
 export const InventoryVelocityHeatmap: React.FC<InventoryVelocityHeatmapProps> = ({
@@ -64,17 +65,29 @@ export const InventoryVelocityHeatmap: React.FC<InventoryVelocityHeatmapProps> =
   // Compute item velocity metrics
   const calculatedItems: CalculatedItemVelocity[] = useMemo(() => {
     return stockItems.map((item) => {
-      // Find historical stock movements (Keluar / Penjualan)
+      // Riwayat mutasi keluar (penjualan) 30 hari terakhir. Sebelumnya
+      // filter ini memakai m.stockItemId & m.notes — field yang tidak
+      // pernah ada di StockMovement (field asli: itemId, tanpa notes) —
+      // jadi cabang ini selalu kosong dan heatmap SELALU jatuh ke rumus
+      // tebakan di bawah, untuk SETIAP item, kapan pun. Sekarang memakai
+      // field yang benar & jendela 30 hari asli, bukan dikali 2.5 secara
+      // sembarangan.
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const outgoingMovements = stockMovements.filter(
-        (m) => m.stockItemId === item.id && (m.type === 'Keluar' || m.notes?.toLowerCase().includes('jual') || m.notes?.toLowerCase().includes('resep'))
+        (m) => m.itemId === item.id && m.type === 'Keluar' && new Date(m.date) >= thirtyDaysAgo
       );
 
       const totalOutgoingQty = outgoingMovements.reduce((sum, m) => sum + m.quantity, 0);
 
-      // Estimate monthly sales volume based on real movements or simulated item characteristics
-      let monthlySalesQty = totalOutgoingQty > 0 ? totalOutgoingQty * 2.5 : 0;
+      // Volume penjualan bulanan riil dari mutasi stok sungguhan.
+      let monthlySalesQty = totalOutgoingQty;
 
-      // Deterministic velocity estimation based on item type and stock level if movements are sparse
+      // Estimasi tebakan HANYA dipakai kalau memang belum ada riwayat mutasi
+      // sama sekali untuk item ini (mis. produk baru) — ditandai jelas di
+      // UI (lihat usedEstimate di bawah), bukan diam-diam menggantikan data
+      // asli.
+      const usedEstimate = monthlySalesQty === 0;
       if (monthlySalesQty === 0) {
         const nameLower = item.name.toLowerCase();
         const catLower = item.category.toLowerCase();
@@ -156,7 +169,8 @@ export const InventoryVelocityHeatmap: React.FC<InventoryVelocityHeatmapProps> =
         turnoverPerYear,
         capitalTiedUp,
         reorderUrgency,
-        recommendation
+        recommendation,
+        usedEstimate
       };
     });
   }, [stockItems, stockMovements]);
@@ -444,10 +458,10 @@ export const InventoryVelocityHeatmap: React.FC<InventoryVelocityHeatmapProps> =
         </span>
         <div className="flex items-center gap-3 flex-wrap">
           <span className="flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-300">
-            <span className="w-3 h-3 rounded-md bg-emerald-600 inline-block shadow-2xs" /> Ultra-Fast (&gt;80)
+            <span className="w-3 h-3 rounded-md bg-emerald-600 inline-block shadow-2xs" /> Ultra-Fast (&ge;75)
           </span>
           <span className="flex items-center gap-1 font-semibold text-teal-700 dark:text-teal-300">
-            <span className="w-3 h-3 rounded-md bg-teal-600 inline-block shadow-2xs" /> Fast (55-79)
+            <span className="w-3 h-3 rounded-md bg-teal-600 inline-block shadow-2xs" /> Fast (55-74)
           </span>
           <span className="flex items-center gap-1 font-semibold text-sky-700 dark:text-sky-300">
             <span className="w-3 h-3 rounded-md bg-sky-600 inline-block shadow-2xs" /> Steady (35-54)
@@ -777,9 +791,20 @@ export const InventoryVelocityHeatmap: React.FC<InventoryVelocityHeatmapProps> =
           <div className="bg-[#FFFDF9] dark:bg-[#15233B] w-full max-w-lg rounded-2xl shadow-2xl border border-[#E1D6BE] dark:border-[#B8905A]/30 overflow-hidden space-y-4 p-5">
             <div className="flex items-start justify-between">
               <div>
-                <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-[#F6F1E6] dark:bg-[#101A2C] text-[#6B6656] dark:text-[#EDE6D6]/70">
-                  {selectedItemDetail.item.sku} • {selectedItemDetail.item.warehouse}
-                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-[#F6F1E6] dark:bg-[#101A2C] text-[#6B6656] dark:text-[#EDE6D6]/70">
+                    {selectedItemDetail.item.sku} • {selectedItemDetail.item.warehouse}
+                  </span>
+                  {selectedItemDetail.usedEstimate ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                      Estimasi — belum ada riwayat penjualan tercatat
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      Dari data penjualan 30 hari riil
+                    </span>
+                  )}
+                </div>
                 <h3 className="text-base font-bold text-[#1B2A45] dark:text-[#FFFDF9] mt-1">
                   {selectedItemDetail.item.name}
                 </h3>

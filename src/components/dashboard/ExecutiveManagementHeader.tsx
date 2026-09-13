@@ -153,7 +153,7 @@ export const ExecutiveManagementHeader: React.FC<ExecutiveManagementHeaderProps>
         <div className="flex items-center gap-2 text-[11px]">
           <span className="bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/40 font-bold flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Cloud Sync Real-Time
+            Tersimpan Otomatis (Lokal)
           </span>
         </div>
       </div>

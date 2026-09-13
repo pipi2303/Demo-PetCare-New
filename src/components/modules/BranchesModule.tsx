@@ -25,21 +25,10 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { Branch } from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
-
-interface InterBranchTransfer {
-  id: string;
-  transferNo: string;
-  sourceBranchName: string;
-  destBranchName: string;
-  itemName: string;
-  qty: number;
-  unit: string;
-  status: 'Terkirim' | 'Diterima' | 'Dalam Pengiriman';
-  date: string;
-  requestedBy: string;
-}
+import { usePermissions } from '../../hooks/usePermissions';
 
 export const BranchesModule: React.FC = () => {
   const {
@@ -49,9 +38,18 @@ export const BranchesModule: React.FC = () => {
     stockItems = [],
     addBranch,
     updateBranch,
-    deleteBranch
+    deleteBranch,
+    interBranchTransfers = [],
+    addInterBranchTransfer,
+    markInterBranchTransferReceived,
+    invoices = [],
+    clinicVisits = [],
+    pets = []
   } = useData();
   const { addToast } = useToast();
+  const { user } = useAuth();
+  const { can } = usePermissions();
+  const canDeleteBranch = can('branches', 'delete');
 
   const [activeTab, setActiveTab] = useState<'branchesList' | 'stockTransfer' | 'analytics'>('branchesList');
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,39 +68,45 @@ export const BranchesModule: React.FC = () => {
   // Data cabang aktual dari DataContext - tersinkron dengan seluruh modul lain (filter cabang, dsb)
   const allBranches = branches;
 
-  // Sample Stock Transfers
-  const [transfers, setTransfers] = useState<InterBranchTransfer[]>([
-    {
-      id: 'tr-001',
-      transferNo: 'MUTASI-2026-0811',
-      sourceBranchName: 'Klinik Utama Kemang (Hospital Pusat)',
-      destBranchName: 'Klinik & Pet Care BSD City',
-      itemName: 'Vaksin Nobivac Tricat Trio (10 Vial)',
-      qty: 10,
-      unit: 'vial',
-      status: 'Diterima',
-      date: '2026-08-11',
-      requestedBy: 'Drh. Ratna Permata'
-    },
-    {
-      id: 'tr-002',
-      transferNo: 'MUTASI-2026-0813',
-      sourceBranchName: 'Klinik Utama Kemang (Hospital Pusat)',
-      destBranchName: 'VetCare Express & Grooming Kelapa Gading',
-      itemName: 'Shampoo Anti-Fungal Medicated 1L',
-      qty: 5,
-      unit: 'botol',
-      status: 'Dalam Pengiriman',
-      date: '2026-08-13',
-      requestedBy: 'Budi Santoso'
-    }
-  ]);
+  // Riwayat mutasi stok antar cabang — sekarang dari koleksi persisten
+  // DataContext (interBranchTransfers), bukan lagi useState lokal yang
+  // di-seed 2 catatan contoh dan hilang setiap reload halaman.
+  const transfers = interBranchTransfers;
 
-  // Transfer Form State
-  const [transferSource, setTransferSource] = useState(allBranches[0]?.name || '');
-  const [transferDest, setTransferDest] = useState(allBranches[1]?.name || '');
-  const [transferItem, setTransferItem] = useState(stockItems[0]?.name || 'Amoxicillin 250mg');
+  // Transfer Form State — pilih cabang & item stok SUNGGUHAN (bukan lagi
+  // teks bebas tanpa validasi kuantitas terhadap stok yang benar-benar ada).
+  const [transferSourceId, setTransferSourceId] = useState(allBranches[0]?.id || '');
+  const [transferDestId, setTransferDestId] = useState(allBranches[1]?.id || '');
+  const [transferStockItemId, setTransferStockItemId] = useState(stockItems[0]?.id || '');
   const [transferQty, setTransferQty] = useState<number>(5);
+  const selectedTransferStock = stockItems.find((s) => s.id === transferStockItemId);
+
+  // Analisis & Performa — dulu 3 kartu per-cabang dengan omset/pasien/growth
+  // hardcoded (nama cabangnya bahkan tidak cocok dengan data cabang asli).
+  // Invoice & CashTransaction tidak punya field branchId sama sekali di
+  // seluruh aplikasi, jadi omset TIDAK BISA dipecah per cabang secara jujur
+  // saat ini — diganti kartu konsolidasi seluruh jaringan dari data nyata,
+  // dengan catatan eksplisit soal keterbatasan ini (bukan angka karangan).
+  const todayStr = new Date().toISOString().substring(0, 10);
+  const thisMonthKey = todayStr.slice(0, 7);
+  const lastMonthDate = new Date();
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  const lastMonthKey = lastMonthDate.toISOString().slice(0, 7);
+
+  const revenueThisMonth = invoices
+    .filter((i) => i.status === 'Lunas' && i.date?.startsWith(thisMonthKey))
+    .reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+  const revenueLastMonth = invoices
+    .filter((i) => i.status === 'Lunas' && i.date?.startsWith(lastMonthKey))
+    .reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+  const revenueGrowthPercent =
+    revenueLastMonth > 0
+      ? Math.round(((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100)
+      : revenueThisMonth > 0
+      ? 100
+      : 0;
+  const paidInvoicesThisMonth = invoices.filter((i) => i.status === 'Lunas' && i.date?.startsWith(thisMonthKey)).length;
+  const activeClinicQueueToday = clinicVisits.filter((v) => v.status !== 'Selesai' && v.status !== 'Batal').length;
 
   const resetBranchForm = () => {
     setNewBranchName('');
@@ -166,6 +170,10 @@ export const BranchesModule: React.FC = () => {
       addToast('Kantor pusat tidak dapat dihapus.', 'error');
       return;
     }
+    if (!canDeleteBranch) {
+      addToast('Akun/grup Anda tidak memiliki hak "Hapus" untuk Manajemen Cabang. Hubungi Owner/Admin.', 'error');
+      return;
+    }
     if (!window.confirm(`Hapus cabang "${branch.name}"? Data terkait cabang ini tidak akan otomatis terhapus.`)) return;
     deleteBranch(branch.id);
     addToast(`Cabang "${branch.name}" berhasil dihapus.`, 'success');
@@ -173,25 +181,45 @@ export const BranchesModule: React.FC = () => {
 
   const handleCreateTransfer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (transferSource === transferDest) {
+    const sourceBranch = allBranches.find((b) => b.id === transferSourceId);
+    const destBranch = allBranches.find((b) => b.id === transferDestId);
+    if (!sourceBranch || !destBranch) {
+      addToast('Pilih cabang asal dan tujuan yang valid.', 'error');
+      return;
+    }
+    if (transferSourceId === transferDestId) {
       addToast('Cabang asal dan cabang tujuan tidak boleh sama!', 'error');
       return;
     }
+    if (!selectedTransferStock) {
+      addToast('Pilih produk/obat yang akan dimutasi.', 'error');
+      return;
+    }
+    if (transferQty <= 0) {
+      addToast('Jumlah mutasi harus lebih dari 0.', 'error');
+      return;
+    }
+    if (transferQty > selectedTransferStock.stock) {
+      addToast(`Stok ${selectedTransferStock.name} tidak mencukupi (tersedia ${selectedTransferStock.stock} ${selectedTransferStock.unit}).`, 'error');
+      return;
+    }
 
-    const created: InterBranchTransfer = {
-      id: `tr-${Date.now().toString().slice(-4)}`,
-      transferNo: `MUTASI-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${Math.floor(Math.random() * 900 + 100)}`,
-      sourceBranchName: transferSource,
-      destBranchName: transferDest,
-      itemName: transferItem,
+    // Catatan: stok itu satu pool bersama seluruh cabang (StockItem tidak
+    // punya branchId), jadi mutasi ini TIDAK mengurangi/menambah angka
+    // stock — hanya menerbitkan surat jalan + jejak audit StockMovement
+    // yang benar-benar tersimpan (lihat addInterBranchTransfer).
+    const created = addInterBranchTransfer({
+      sourceBranchId: sourceBranch.id,
+      sourceBranchName: sourceBranch.name,
+      destBranchId: destBranch.id,
+      destBranchName: destBranch.name,
+      stockItemId: selectedTransferStock.id,
+      itemName: selectedTransferStock.name,
       qty: transferQty,
-      unit: 'item',
-      status: 'Dalam Pengiriman',
-      date: new Date().toISOString().split('T')[0],
-      requestedBy: 'Manager Logistik'
-    };
+      unit: selectedTransferStock.unit,
+      requestedBy: user?.name || 'Staf Logistik'
+    });
 
-    setTransfers([created, ...transfers]);
     setShowTransferModal(false);
     addToast(`Surat Jalan Mutasi Stok ${created.transferNo} berhasil diterbitkan!`, 'success');
   };
@@ -353,6 +381,13 @@ export const BranchesModule: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E1D6BE] bg-white">
+                {transfers.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="p-4 text-center text-[#6B6656]">
+                      Belum ada mutasi stok antar cabang yang diterbitkan.
+                    </td>
+                  </tr>
+                )}
                 {transfers.map((tr) => (
                   <tr key={tr.id} className="hover:bg-[#F6F1E6]/40">
                     <td className="p-3 font-mono font-bold text-[#1B2A45]">{tr.transferNo}</td>
@@ -375,7 +410,7 @@ export const BranchesModule: React.FC = () => {
                       {tr.status === 'Dalam Pengiriman' && (
                         <button
                           onClick={() => {
-                            setTransfers(transfers.map((t) => t.id === tr.id ? { ...t, status: 'Diterima' } : t));
+                            markInterBranchTransferReceived(tr.id);
                             addToast(`Mutasi stok ${tr.transferNo} telah dikonfirmasi diterima di cabang tujuan!`, 'success');
                           }}
                           className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg cursor-pointer"
@@ -394,41 +429,58 @@ export const BranchesModule: React.FC = () => {
 
       {/* TAB 3: Performance Analytics */}
       {activeTab === 'analytics' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
-            <h4 className="font-bold text-xs text-[#1B2A45] uppercase tracking-wider">Klinik Utama Kemang</h4>
-            <div className="space-y-1">
-              <span className="text-2xl font-black text-[#1B2A45] font-display">Rp 48.500.000</span>
-              <p className="text-[11px] text-[#6B6656]">Omset Bulan Berjalan (124 Pasien)</p>
-            </div>
-            <div className="w-full bg-[#E1D6BE]/40 h-2 rounded-full overflow-hidden">
-              <div className="bg-[#B8905A] h-full rounded-full" style={{ width: '85%' }} />
-            </div>
-            <span className="text-[10px] text-emerald-700 font-bold block">↑ +14% vs bulan lalu</span>
+        <div className="space-y-4">
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs text-amber-900">
+            <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p>
+              <strong>Data konsolidasi seluruh jaringan, bukan per cabang.</strong> Invoice & transaksi kas belum
+              ditandai cabangnya di mana pun dalam sistem, sehingga omset tidak bisa dipecah secara jujur per cabang
+              saat ini. Angka di bawah dihitung langsung dari data invoice, antrean, dan pasien sungguhan.
+            </p>
           </div>
 
-          <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
-            <h4 className="font-bold text-xs text-[#1B2A45] uppercase tracking-wider">Klinik & Pet Care BSD</h4>
-            <div className="space-y-1">
-              <span className="text-2xl font-black text-[#1B2A45] font-display">Rp 31.200.000</span>
-              <p className="text-[11px] text-[#6B6656]">Omset Bulan Berjalan (78 Pasien)</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-[#6B6656]">
+                <span className="text-[11px] font-bold uppercase tracking-wider">Omset Bulan Berjalan</span>
+                <TrendingUp className="w-4 h-4 text-[#B8905A]" />
+              </div>
+              <span className="text-xl font-black text-[#1B2A45] font-display block">
+                Rp {revenueThisMonth.toLocaleString('id-ID')}
+              </span>
+              <span className={`text-[10px] font-bold block ${revenueGrowthPercent >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {revenueGrowthPercent >= 0 ? '↑' : '↓'} {Math.abs(revenueGrowthPercent)}% vs bulan lalu (Rp {revenueLastMonth.toLocaleString('id-ID')})
+              </span>
             </div>
-            <div className="w-full bg-[#E1D6BE]/40 h-2 rounded-full overflow-hidden">
-              <div className="bg-[#6BA3BE] h-full rounded-full" style={{ width: '62%' }} />
-            </div>
-            <span className="text-[10px] text-emerald-700 font-bold block">↑ +8% vs bulan lalu</span>
-          </div>
 
-          <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
-            <h4 className="font-bold text-xs text-[#1B2A45] uppercase tracking-wider">Express Kelapa Gading</h4>
-            <div className="space-y-1">
-              <span className="text-2xl font-black text-[#1B2A45] font-display">Rp 18.900.000</span>
-              <p className="text-[11px] text-[#6B6656]">Omset Bulan Berjalan (52 Pasien)</p>
+            <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-[#6B6656]">
+                <span className="text-[11px] font-bold uppercase tracking-wider">Invoice Lunas Bulan Ini</span>
+                <Package className="w-4 h-4 text-[#B8905A]" />
+              </div>
+              <span className="text-xl font-black text-[#1B2A45] font-display block">{paidInvoicesThisMonth} Transaksi</span>
+              <span className="text-[10px] text-[#6B6656] block">Seluruh unit bisnis (klinik, pet shop, grooming, hotel)</span>
             </div>
-            <div className="w-full bg-[#E1D6BE]/40 h-2 rounded-full overflow-hidden">
-              <div className="bg-[#D97757] h-full rounded-full" style={{ width: '45%' }} />
+
+            <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-[#6B6656]">
+                <span className="text-[11px] font-bold uppercase tracking-wider">Antrean Klinik Aktif</span>
+                <Calendar className="w-4 h-4 text-[#B8905A]" />
+              </div>
+              <span className="text-xl font-black text-[#1B2A45] font-display block">{activeClinicQueueToday} Pasien</span>
+              <span className="text-[10px] text-[#6B6656] block">Sedang menunggu / diperiksa saat ini</span>
             </div>
-            <span className="text-[10px] text-emerald-700 font-bold block">↑ +21% vs bulan lalu</span>
+
+            <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-[#6B6656]">
+                <span className="text-[11px] font-bold uppercase tracking-wider">Cabang Aktif</span>
+                <Store className="w-4 h-4 text-[#B8905A]" />
+              </div>
+              <span className="text-xl font-black text-[#1B2A45] font-display block">
+                {allBranches.filter((b) => b.isActive).length} / {allBranches.length}
+              </span>
+              <span className="text-[10px] text-[#6B6656] block">{pets.length} pasien hewan terdaftar di jaringan</span>
+            </div>
           </div>
         </div>
       )}
@@ -561,15 +613,19 @@ export const BranchesModule: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreateTransfer} className="space-y-3 text-xs">
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800">
+                Stok adalah satu pool bersama seluruh cabang — mutasi ini menerbitkan surat jalan &amp; jejak audit, angka stok tidak berubah.
+              </div>
+
               <div>
                 <label className="font-bold text-[#1B2A45] block mb-1">Cabang Asal (Pengirim)</label>
                 <select
-                  value={transferSource}
-                  onChange={(e) => setTransferSource(e.target.value)}
+                  value={transferSourceId}
+                  onChange={(e) => setTransferSourceId(e.target.value)}
                   className="w-full p-2.5 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] font-semibold text-[#1B2A45]"
                 >
                   {allBranches.map((b) => (
-                    <option key={b.id} value={b.name}>{b.name}</option>
+                    <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
               </div>
@@ -577,31 +633,38 @@ export const BranchesModule: React.FC = () => {
               <div>
                 <label className="font-bold text-[#1B2A45] block mb-1">Cabang Tujuan (Penerima)</label>
                 <select
-                  value={transferDest}
-                  onChange={(e) => setTransferDest(e.target.value)}
+                  value={transferDestId}
+                  onChange={(e) => setTransferDestId(e.target.value)}
                   className="w-full p-2.5 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] font-semibold text-[#1B2A45]"
                 >
                   {allBranches.map((b) => (
-                    <option key={b.id} value={b.name}>{b.name}</option>
+                    <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="font-bold text-[#1B2A45] block mb-1">Nama Produk / Obat</label>
-                <input
-                  type="text"
-                  value={transferItem}
-                  onChange={(e) => setTransferItem(e.target.value)}
+                <label className="font-bold text-[#1B2A45] block mb-1">Produk / Obat (dari Master Inventaris)</label>
+                <select
+                  value={transferStockItemId}
+                  onChange={(e) => setTransferStockItemId(e.target.value)}
                   className="w-full p-2.5 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] font-bold text-[#1B2A45]"
-                />
+                >
+                  {stockItems.length === 0 && <option value="">Belum ada item stok di Master Inventaris</option>}
+                  {stockItems.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.sku}) — tersedia {s.stock} {s.unit}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label className="font-bold text-[#1B2A45] block mb-1">Jumlah Mutasi</label>
+                <label className="font-bold text-[#1B2A45] block mb-1">
+                  Jumlah Mutasi {selectedTransferStock ? `(maks. ${selectedTransferStock.stock} ${selectedTransferStock.unit})` : ''}
+                </label>
                 <input
                   type="number"
                   min="1"
+                  max={selectedTransferStock?.stock}
                   value={transferQty}
                   onChange={(e) => setTransferQty(Number(e.target.value))}
                   className="w-full p-2.5 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] font-bold text-[#1B2A45]"

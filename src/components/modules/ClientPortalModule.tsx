@@ -26,7 +26,7 @@ interface ClientPortalModuleProps {
 }
 
 export const ClientPortalModule: React.FC<ClientPortalModuleProps> = ({ activeModule }) => {
-  const { pets = [], vacHistories = [], addVacHistory } = useData();
+  const { pets = [], vacHistories = [], addVacHistory, dewormingRecords = [], addDewormingRecord } = useData();
   const { addToast } = useToast();
 
   const [selectedPetId, setSelectedPetId] = useState(pets[0]?.id || '');
@@ -41,12 +41,37 @@ export const ClientPortalModule: React.FC<ClientPortalModuleProps> = ({ activeMo
   const [vacBatch, setVacBatch] = useState('BATCH-2026-X9');
   const [vacDoctor, setVacDoctor] = useState('Drh. Anisa');
   const [vacNextDue, setVacNextDue] = useState('2027-08-11');
+  // Tanggal kedaluwarsa vial (dari label vaksin) — sebelumnya hardcode
+  // '2028-05-30' untuk SETIAP sertifikat vaksin apa pun batch/tanggalnya.
+  const [vacExpiryDate, setVacExpiryDate] = useState(
+    new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10)
+  );
 
-  // Sample Deworming & Parasite records
-  const [dewormingLogs, setDewormingLogs] = useState([
-    { id: 'dw1', date: '2026-05-10', medicine: 'Drontal Cat (Praziquantel/Pyrantel)', dose: '1 tablet', givenBy: 'Drh. Anisa', nextDue: '2026-11-10' },
-    { id: 'dw2', date: '2026-02-15', medicine: 'Broadline Spot-On', dose: '1 tube', givenBy: 'Drh. Rian', nextDue: '2026-05-15' }
-  ]);
+  // Riwayat obat cacing & anti-parasit pasien yang sedang dipilih —
+  // sebelumnya array contoh lokal, sama untuk semua pasien, tanpa tombol
+  // tambah. Sekarang dari koleksi dewormingRecords sungguhan, difilter per
+  // pasien, dengan modal pencatatan baru (mirip pola "Catat Vaksinasi").
+  const petDewormingLogs = dewormingRecords.filter((d) => d.petId === selectedPet?.id);
+
+  const [showAddDewormingModal, setShowAddDewormingModal] = useState(false);
+  const [dwMedicine, setDwMedicine] = useState('Drontal Cat (Praziquantel/Pyrantel)');
+  const [dwDosage, setDwDosage] = useState('1 tablet');
+  const [dwGivenBy, setDwGivenBy] = useState('Drh. Anisa');
+  const [dwNextDue, setDwNextDue] = useState('2026-11-10');
+
+  const handleAddDeworming = () => {
+    if (!selectedPet) return;
+    addDewormingRecord({
+      petId: selectedPet.id,
+      date: new Date().toISOString().substring(0, 10),
+      medicineName: dwMedicine,
+      dosage: dwDosage,
+      givenBy: dwGivenBy,
+      nextDueDate: dwNextDue
+    });
+    setShowAddDewormingModal(false);
+    addToast(`Catatan pemberian ${dwMedicine} untuk ${selectedPet.name} berhasil disimpan!`, 'success');
+  };
 
   const handleSharePassport = () => {
     navigator.clipboard.writeText(`https://petcare.id/passport/${selectedPet?.id}`);
@@ -65,7 +90,7 @@ export const ClientPortalModule: React.FC<ClientPortalModuleProps> = ({ activeMo
       nextDueDate: vacNextDue,
       doctorName: vacDoctor,
       batchNumber: vacBatch,
-      expiryDate: '2028-05-30',
+      expiryDate: vacExpiryDate,
       certificateNo: certNo
     });
     setShowAddVacModal(false);
@@ -112,12 +137,21 @@ export const ClientPortalModule: React.FC<ClientPortalModuleProps> = ({ activeMo
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowAddVacModal(true)}
-            className="px-3.5 py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1.5 transition-all"
-          >
-            <Plus className="w-3.5 h-3.5" /> Catat Vaksinasi Baru
-          </button>
+          {activeTab === 'deworming' ? (
+            <button
+              onClick={() => setShowAddDewormingModal(true)}
+              className="px-3.5 py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1.5 transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" /> Catat Obat Cacing/Kutu
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowAddVacModal(true)}
+              className="px-3.5 py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1.5 transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" /> Catat Vaksinasi Baru
+            </button>
+          )}
           {activeTab === 'passport' && (
             <button
               onClick={handleSharePassport}
@@ -235,17 +269,21 @@ export const ClientPortalModule: React.FC<ClientPortalModuleProps> = ({ activeMo
           </h3>
 
           <div className="space-y-3">
-            {dewormingLogs.map((log) => (
-              <div key={log.id} className="p-3.5 rounded-xl bg-[#F6F1E6] border border-[#E1D6BE] text-xs flex justify-between items-center">
-                <div>
-                  <p className="font-bold text-[#1B2A45] text-sm">{log.medicine}</p>
-                  <p className="text-[11px] text-[#6B6656]">Diberikan: {log.date} oleh {log.givenBy} | Dosis: {log.dose}</p>
+            {petDewormingLogs.length > 0 ? (
+              petDewormingLogs.map((log) => (
+                <div key={log.id} className="p-3.5 rounded-xl bg-[#F6F1E6] border border-[#E1D6BE] text-xs flex justify-between items-center">
+                  <div>
+                    <p className="font-bold text-[#1B2A45] text-sm">{log.medicineName}</p>
+                    <p className="text-[11px] text-[#6B6656]">Diberikan: {log.date} oleh {log.givenBy} | Dosis: {log.dosage}</p>
+                  </div>
+                  <span className="px-2.5 py-1 bg-[#1B2A45] text-[#D9B98A] font-bold rounded text-[10px]">
+                    Pemberian Berikutnya: {log.nextDueDate}
+                  </span>
                 </div>
-                <span className="px-2.5 py-1 bg-[#1B2A45] text-[#D9B98A] font-bold rounded text-[10px]">
-                  Pemberian Berikutnya: {log.nextDue}
-                </span>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-xs text-[#6B6656]">Belum ada catatan pemberian obat cacing/anti-parasit untuk pasien ini.</p>
+            )}
           </div>
         </div>
       )}
@@ -322,12 +360,92 @@ export const ClientPortalModule: React.FC<ClientPortalModuleProps> = ({ activeMo
                 />
               </div>
 
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Kedaluwarsa Vial (dari label vaksin)</label>
+                <input
+                  type="date"
+                  value={vacExpiryDate}
+                  onChange={(e) => setVacExpiryDate(e.target.value)}
+                  className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                />
+              </div>
+
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={handleAddVaccine}
                   className="px-5 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold rounded-lg shadow-md transition-all flex items-center gap-2"
                 >
                   <CheckCircle2 className="w-4 h-4 text-[#D9B98A]" /> Terbitkan Sertifikat Vaksin
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Deworming Modal */}
+      {showAddDewormingModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-3">
+              <h3 className="font-bold text-base text-[#1B2A45] font-display flex items-center gap-2">
+                <Bug className="w-5 h-5 text-[#B8905A]" /> Catat Obat Cacing & Anti-Kutu
+              </h3>
+              <button
+                onClick={() => setShowAddDewormingModal(false)}
+                className="text-xs font-bold text-rose-700 hover:bg-rose-50 px-2.5 py-1 rounded-lg"
+              >
+                Tutup
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Nama Obat / Spot-on</label>
+                <input
+                  type="text"
+                  value={dwMedicine}
+                  onChange={(e) => setDwMedicine(e.target.value)}
+                  className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE] font-bold text-[#1B2A45]"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Dosis</label>
+                <input
+                  type="text"
+                  value={dwDosage}
+                  onChange={(e) => setDwDosage(e.target.value)}
+                  className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Diberikan Oleh</label>
+                <input
+                  type="text"
+                  value={dwGivenBy}
+                  onChange={(e) => setDwGivenBy(e.target.value)}
+                  className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-[#1B2A45] block mb-1">Jadwal Pemberian Berikutnya</label>
+                <input
+                  type="date"
+                  value={dwNextDue}
+                  onChange={(e) => setDwNextDue(e.target.value)}
+                  className="w-full p-2.5 bg-[#F6F1E6] rounded-lg border border-[#E1D6BE]"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={handleAddDeworming}
+                  className="px-5 py-2.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold rounded-lg shadow-md transition-all flex items-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-[#D9B98A]" /> Simpan Catatan
                 </button>
               </div>
             </div>

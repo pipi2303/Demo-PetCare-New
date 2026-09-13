@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Camera,
   Eye,
-  AlertTriangle,
   Maximize2,
   ZoomIn,
   ZoomOut,
@@ -10,8 +9,6 @@ import {
   Volume2,
   Moon,
   Sun,
-  Thermometer,
-  Droplets,
   Activity,
   Download,
   Sparkles
@@ -24,8 +21,6 @@ export interface CctvFeedProps {
   petSpecies?: string;
   ownerName?: string;
   roomType?: string;
-  temperature?: number;
-  humidity?: number;
   statusNotes?: string;
   onOpenFullscreen?: () => void;
 }
@@ -36,14 +31,11 @@ export const CctvFeed: React.FC<CctvFeedProps> = ({
   petSpecies = 'Anjing',
   ownerName = 'Andri Santoso',
   roomType = 'VIP CCTV',
-  temperature = 23.8,
-  humidity = 54,
   statusNotes = 'Tenang & sedang beristirahat',
   onOpenFullscreen,
 }) => {
   const { addToast } = useToast();
   const [timestamp, setTimestamp] = useState(new Date().toLocaleTimeString('id-ID'));
-  const [motionDetected, setMotionDetected] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<1 | 1.5 | 2>(1);
   const [isMuted, setIsMuted] = useState(true);
   const [nightVision, setNightVision] = useState(false);
@@ -65,14 +57,7 @@ export const CctvFeed: React.FC<CctvFeedProps> = ({
       setTimestamp(new Date().toLocaleTimeString('id-ID'));
     }, 1000);
 
-    const motionTimer = setInterval(() => {
-      setMotionDetected(Math.random() < 0.2);
-    }, 5000);
-
-    return () => {
-      clearInterval(timer);
-      clearInterval(motionTimer);
-    };
+    return () => clearInterval(timer);
   }, []);
 
   const handleTakeSnapshot = (e: React.MouseEvent) => {
@@ -106,14 +91,13 @@ export const CctvFeed: React.FC<CctvFeedProps> = ({
           <div className="absolute inset-0 bg-[linear-gradient(rgba(18,255,0,0)_50%,rgba(0,0,0,0.4)_50%)] bg-[length:100%_4px] pointer-events-none opacity-30" />
         )}
 
-        {/* Live Status Overlay - Top Left */}
+        {/* Demo Status Overlay - Top Left */}
         <div className="absolute top-3 left-3 flex items-center gap-2 flex-wrap">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-600/90 backdrop-blur-md text-white text-[10px] font-black tracking-wider uppercase shadow-md">
-            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-            REC • LIVE
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-600/90 backdrop-blur-md text-white text-[10px] font-black tracking-wider uppercase shadow-md">
+            Pratinjau Demo
           </span>
           <span className="px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md text-slate-200 text-[10px] font-mono font-bold border border-white/10">
-            {roomNo} • 1080p 60FPS
+            {roomNo}
           </span>
           {nightVision && (
             <span className="px-2 py-1 rounded-lg bg-emerald-950/80 text-emerald-400 text-[10px] font-bold border border-emerald-500/30 flex items-center gap-1">
@@ -122,30 +106,12 @@ export const CctvFeed: React.FC<CctvFeedProps> = ({
           )}
         </div>
 
-        {/* Environmental Telemetry - Top Right */}
+        {/* Clock - Top Right (waktu asli perangkat, bukan sensor kamera) */}
         <div className="absolute top-3 right-3 flex items-center gap-2">
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-mono text-white">
-            <span className="flex items-center gap-1 text-amber-300">
-              <Thermometer className="w-3 h-3" /> {temperature}°C
-            </span>
-            <span className="text-white/30">|</span>
-            <span className="flex items-center gap-1 text-sky-300">
-              <Droplets className="w-3 h-3" /> {humidity}%
-            </span>
-          </div>
-
           <div className="px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md text-emerald-400 text-[10px] font-mono font-bold border border-white/10">
             {timestamp}
           </div>
         </div>
-
-        {/* Motion Sensor Alert Badge */}
-        {motionDetected && (
-          <div className="absolute top-12 left-3 px-2.5 py-1 rounded-lg bg-amber-500 text-black text-[10px] font-black flex items-center gap-1.5 shadow-lg animate-pulse border border-amber-300">
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span>SENSOR: GERAKAN AKTIF</span>
-          </div>
-        )}
 
         {/* Quick Stream Controls Overlay (Hover / Bottom Right) */}
         <div className="absolute top-12 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md p-1 rounded-xl border border-white/15">

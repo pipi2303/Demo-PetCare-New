@@ -142,6 +142,11 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
   const [selectedStockId, setSelectedStockId] = useState(stockItems[0]?.id || '');
   const [fromWh, setFromWh] = useState('Gudang Utama');
   const [toWh, setToWh] = useState('Apotek');
+  // Guard klik-ganda — form Transfer & Opname tetap tampil (bukan modal
+  // yang tertutup) setelah eksekusi, jadi tanpa ini klik ganda bisa
+  // menggandakan mutasi stok/entri StockMovement untuk satu niat yang sama.
+  const [isExecutingTransfer, setIsExecutingTransfer] = useState(false);
+  const [isExecutingOpname, setIsExecutingOpname] = useState(false);
   const [transferQty, setTransferQty] = useState(5);
   const [showStockMutationModal, setShowStockMutationModal] = useState(false);
 
@@ -234,8 +239,10 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
 
   // Execute Stock Opname Adjustment
   const handleExecuteOpname = () => {
+    if (isExecutingOpname) return;
     const targetItem = stockItems.find((s) => s.id === opnameStockId);
     if (!targetItem) return;
+    setIsExecutingOpname(true);
 
     const diff = actualPhysicalQty - targetItem.stock;
 
@@ -258,20 +265,52 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
       `Stock Opname ${targetItem.name} disesuaikan ke ${actualPhysicalQty} ${targetItem.unit} (Selisih: ${diff > 0 ? '+' : ''}${diff}).`,
       'success'
     );
+    setIsExecutingOpname(false);
   };
 
   // Execute Stock Transfer
   const handleExecuteTransfer = () => {
+    if (isExecutingTransfer) return;
     const stock = stockItems.find((s) => s.id === selectedStockId);
     if (!stock) return;
+
+    if (fromWh === toWh) {
+      addToast('Gudang asal dan gudang tujuan tidak boleh sama.', 'error');
+      return;
+    }
 
     if (stock.stock < transferQty) {
       addToast(`Stok ${stock.name} tidak mencukupi untuk ditransfer (${stock.stock} ${stock.unit}).`, 'error');
       return;
     }
+    setIsExecutingTransfer(true);
 
     // Deduct stock from source warehouse
     updateStockItem(stock.id, { stock: stock.stock - transferQty });
+
+    // Add stock to destination warehouse: kalau SKU yang sama sudah punya
+    // kartu stok di gudang tujuan, tambahkan ke sana; kalau belum ada, buka
+    // kartu stok baru di gudang tujuan dengan SKU yang sama supaya jumlah
+    // yang ditransfer tidak hilang begitu saja.
+    const destStock = stockItems.find((s) => s.sku === stock.sku && s.warehouse === toWh);
+    if (destStock) {
+      updateStockItem(destStock.id, { stock: destStock.stock + transferQty });
+    } else {
+      addStockItem({
+        sku: stock.sku,
+        name: stock.name,
+        category: stock.category,
+        warehouse: toWh,
+        stock: transferQty,
+        minStock: stock.minStock,
+        unit: stock.unit,
+        purchasePrice: stock.purchasePrice,
+        sellingPrice: stock.sellingPrice,
+        supplierName: stock.supplierName,
+        expiryDate: stock.expiryDate,
+        batchNumber: stock.batchNumber
+      });
+    }
 
     // Record movement
     addStockMovement({
@@ -286,6 +325,7 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
     });
 
     addToast(`Transfer ${transferQty} ${stock.unit} ${stock.name} dari ${fromWh} ke ${toWh} berhasil.`, 'success');
+    setIsExecutingTransfer(false);
   };
 
   // Add New Stock Item
@@ -1019,7 +1059,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
           <div className="pt-2 flex justify-end">
             <button
               onClick={handleExecuteTransfer}
-              className="px-5 py-2.5 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
+              disabled={isExecutingTransfer}
+              className="px-5 py-2.5 bg-[#B8905A] hover:bg-[#9E7848] disabled:opacity-50 disabled:cursor-not-allowed text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
             >
               <ArrowRightLeft className="w-4 h-4" /> Proses Transfer Stok
             </button>
@@ -1086,7 +1127,8 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
 
               <button
                 onClick={handleExecuteOpname}
-                className="w-full py-3 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                disabled={isExecutingOpname}
+                className="w-full py-3 bg-[#1B2A45] hover:bg-[#101A2C] disabled:opacity-50 disabled:cursor-not-allowed text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4 text-[#D9B98A]" /> Simpan Penyesuaian Opname
               </button>

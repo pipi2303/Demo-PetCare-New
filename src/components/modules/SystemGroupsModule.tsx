@@ -40,6 +40,8 @@ import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { UserRole, SystemGroup, CustomerTierGroup, GroupModulePermission } from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { MODULE_PERMISSIONS, NavModule } from '../../constants/modulePermissions';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export const SystemGroupsModule: React.FC = () => {
   const { user, users = [] } = useAuth();
@@ -61,6 +63,8 @@ export const SystemGroupsModule: React.FC = () => {
   } = useData();
   const customerTiers = customerTierGroups;
   const { addToast } = useToast();
+  const { can } = usePermissions();
+  const canDeleteSystemGroups = can('systemGroups', 'delete');
 
   const [activeTab, setActiveTab] = useState<'userGroups' | 'customerTiers' | 'matrixRBAC' | 'departmentHierarchy'>('userGroups');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('grp-medis');
@@ -144,6 +148,10 @@ export const SystemGroupsModule: React.FC = () => {
   };
 
   const handleDeleteTier = (tier: CustomerTierGroup) => {
+    if (!canDeleteSystemGroups) {
+      addToast('Akun/grup Anda tidak memiliki hak "Hapus" untuk Grup Sistem & Tier Klien. Hubungi Owner/Admin.', 'error');
+      return;
+    }
     if (!window.confirm(`Hapus tier membership "${tier.tierName}"?`)) return;
     deleteCustomerTierGroup(tier.id);
     addToast(`Tier membership "${tier.tierName}" dihapus.`, 'success');
@@ -572,7 +580,7 @@ export const SystemGroupsModule: React.FC = () => {
                 Matriks Hak Akses Lintas Peran Sistem (Role-Based Access Control)
               </h3>
               <p className="text-xs text-[#6B6656] mt-0.5">
-                Pemetaan hak akses modul aplikasi berdasarkan profil peran pengguna yang sedang aktif.
+                Dihitung langsung dari konfigurasi akses modul sungguhan (MODULE_PERMISSIONS) — bukan tabel contoh statis.
               </p>
             </div>
           </div>
@@ -584,30 +592,49 @@ export const SystemGroupsModule: React.FC = () => {
                   <th className="p-3">Modul Sistem</th>
                   <th className="p-3 text-center">Owner / Superadmin</th>
                   <th className="p-3 text-center">Dokter Hewan</th>
-                  <th className="p-3 text-center">Apoteker / Lab</th>
+                  <th className="p-3 text-center">Admin / Farmasi</th>
                   <th className="p-3 text-center">Kasir / Front Office</th>
                   <th className="p-3 text-center">Groomer & Care</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E1D6BE] bg-white">
-                {[
-                  { name: 'Dashboard Utama & Laporan Eksekutif', owner: true, doc: true, pharm: false, cashier: false, care: false },
-                  { name: 'Pemeriksaan Klinik & EMR Medis', owner: true, doc: true, pharm: false, cashier: false, care: false },
-                  { name: 'Apotek, Dispensing & Laboratorium', owner: true, doc: true, pharm: true, cashier: false, care: false },
-                  { name: 'Pet Shop Retail & Kasir POS', owner: true, doc: false, pharm: false, cashier: true, care: false },
-                  { name: 'Grooming Salon, Pet Hotel & Ambulans', owner: true, doc: true, pharm: false, cashier: true, care: true },
-                  { name: 'Buku Kas & Keuangan Bisnis', owner: true, doc: false, pharm: false, cashier: false, care: false },
-                  { name: 'Audit Log, Cadangan Cloud & Pengaturan', owner: true, doc: false, pharm: false, cashier: false, care: false }
-                ].map((row, idx) => (
-                  <tr key={idx} className="hover:bg-[#F6F1E6]/40">
-                    <td className="p-3 font-semibold text-[#1B2A45]">{row.name}</td>
-                    <td className="p-3 text-center">{row.owner ? <Check className="w-4 h-4 text-emerald-600 mx-auto" /> : <X className="w-4 h-4 text-rose-400 mx-auto" />}</td>
-                    <td className="p-3 text-center">{row.doc ? <Check className="w-4 h-4 text-emerald-600 mx-auto" /> : <X className="w-4 h-4 text-rose-400 mx-auto" />}</td>
-                    <td className="p-3 text-center">{row.pharm ? <Check className="w-4 h-4 text-emerald-600 mx-auto" /> : <X className="w-4 h-4 text-rose-400 mx-auto" />}</td>
-                    <td className="p-3 text-center">{row.cashier ? <Check className="w-4 h-4 text-emerald-600 mx-auto" /> : <X className="w-4 h-4 text-rose-400 mx-auto" />}</td>
-                    <td className="p-3 text-center">{row.care ? <Check className="w-4 h-4 text-emerald-600 mx-auto" /> : <X className="w-4 h-4 text-rose-400 mx-auto" />}</td>
-                  </tr>
-                ))}
+                {(() => {
+                  // Setiap baris di sini mewakili sekelompok modul nyata dari
+                  // MODULE_PERMISSIONS (src/constants/modulePermissions.ts) —
+                  // dicentang hanya kalau peran itu punya akses ke SEMUA
+                  // modul dalam kelompok tersebut (tidak dilonggarkan).
+                  const ROWS: { name: string; modules: NavModule[] }[] = [
+                    { name: 'Dashboard Utama & Laporan Eksekutif', modules: ['dashboard', 'reports'] },
+                    { name: 'Pemeriksaan Klinik & EMR Medis', modules: ['clinic', 'emr'] },
+                    { name: 'Apotek, Dispensing & Laboratorium', modules: ['pharmacy'] },
+                    { name: 'Pet Shop Retail & Kasir POS', modules: ['petShop', 'billing'] },
+                    { name: 'Grooming Salon, Pet Hotel & Ambulans', modules: ['grooming', 'petHotel', 'ambulance'] },
+                    { name: 'Buku Kas & Keuangan Bisnis', modules: ['finance'] },
+                    { name: 'Audit Log, Cadangan Cloud & Pengaturan', modules: ['auditLog', 'settings'] }
+                  ];
+                  const roleHasAccess = (roles: NavModule[], role: UserRole) =>
+                    roles.every((m) => {
+                      const allowed = MODULE_PERMISSIONS[m];
+                      return allowed.includes('*') || allowed.includes(role);
+                    });
+                  return ROWS.map((row, idx) => {
+                    const owner = roleHasAccess(row.modules, 'owner_petcare') || roleHasAccess(row.modules, 'superadmin');
+                    const doc = roleHasAccess(row.modules, 'dokter');
+                    const admin = roleHasAccess(row.modules, 'admin');
+                    const cashier = roleHasAccess(row.modules, 'kasir');
+                    const care = roleHasAccess(row.modules, 'groomer');
+                    return (
+                      <tr key={idx} className="hover:bg-[#F6F1E6]/40">
+                        <td className="p-3 font-semibold text-[#1B2A45]">{row.name}</td>
+                        <td className="p-3 text-center">{owner ? <Check className="w-4 h-4 text-emerald-600 mx-auto" /> : <X className="w-4 h-4 text-rose-400 mx-auto" />}</td>
+                        <td className="p-3 text-center">{doc ? <Check className="w-4 h-4 text-emerald-600 mx-auto" /> : <X className="w-4 h-4 text-rose-400 mx-auto" />}</td>
+                        <td className="p-3 text-center">{admin ? <Check className="w-4 h-4 text-emerald-600 mx-auto" /> : <X className="w-4 h-4 text-rose-400 mx-auto" />}</td>
+                        <td className="p-3 text-center">{cashier ? <Check className="w-4 h-4 text-emerald-600 mx-auto" /> : <X className="w-4 h-4 text-rose-400 mx-auto" />}</td>
+                        <td className="p-3 text-center">{care ? <Check className="w-4 h-4 text-emerald-600 mx-auto" /> : <X className="w-4 h-4 text-rose-400 mx-auto" />}</td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>

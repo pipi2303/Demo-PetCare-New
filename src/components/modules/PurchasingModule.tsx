@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import {
   Truck,
@@ -34,6 +35,8 @@ export const PurchasingModule: React.FC = () => {
   } = useData();
 
   const { addToast } = useToast();
+  const { can } = usePermissions();
+  const canDeleteSupplier = can('purchasing', 'delete');
 
   const [activeTab, setActiveTab] = useState<'po' | 'suppliers'>('po');
   const [searchQuery, setSearchQuery] = useState('');
@@ -127,8 +130,13 @@ export const PurchasingModule: React.FC = () => {
     addToast(`Purchase Order baru ke ${supplier.name} berhasil diterbitkan!`, 'success');
   };
 
-  // Receive Goods (GRN)
+  // Receive Goods (GRN) — guard klik-ganda: `po.status` berubah lewat
+  // state React yang async, jadi klik ganda sebelum re-render bisa memicu
+  // receivePurchaseOrder dua kali & menambah stok dobel untuk PO yang sama.
+  const [receivingPoIds, setReceivingPoIds] = useState<Set<string>>(new Set());
   const handleReceivePO = (poId: string, poNo: string) => {
+    if (receivingPoIds.has(poId)) return;
+    setReceivingPoIds((prev) => new Set(prev).add(poId));
     receivePurchaseOrder(poId);
     addToast(`Barang untuk PO #${poNo} berhasil diterima! Stok otomatis bertambah di gudang.`, 'success');
   };
@@ -302,7 +310,8 @@ export const PurchasingModule: React.FC = () => {
                     <div className="pt-2 border-t border-[#E1D6BE]/60 flex justify-end">
                       <button
                         onClick={() => handleReceivePO(po.id, po.poNo)}
-                        className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs flex items-center gap-1.5 transition-all"
+                        disabled={receivingPoIds.has(po.id)}
+                        className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs flex items-center gap-1.5 transition-all"
                       >
                         <CheckCircle2 className="w-4 h-4 text-emerald-300" /> Konfirmasi Penerimaan Barang (GRN)
                       </button>
@@ -368,6 +377,11 @@ export const PurchasingModule: React.FC = () => {
                   <span className="text-[10px] text-[#6B6656] font-medium">Syarat Pembayaran: TOP 30 Hari</span>
                   <button
                     onClick={() => {
+                      if (!canDeleteSupplier) {
+                        addToast('Akun/grup Anda tidak memiliki hak "Hapus" untuk Purchasing. Hubungi Owner/Admin.', 'error');
+                        return;
+                      }
+                      if (!window.confirm(`Hapus supplier "${sup.name}"? PO yang sudah tercatat dari supplier ini tidak akan otomatis terhapus.`)) return;
                       deleteSupplier(sup.id);
                       addToast(`Supplier ${sup.name} berhasil dihapus.`, 'info');
                     }}

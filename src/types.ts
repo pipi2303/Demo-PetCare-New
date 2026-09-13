@@ -31,7 +31,9 @@ export interface User {
   groupId?: string;
   groupName?: string;
   ownershipType?: 'owner_klinik' | 'owner_petshop' | 'owner_petcare' | 'superadmin' | 'pemilik' | string;
-  pin?: string;
+  // Note: shift PINs are intentionally NOT modeled here — they live only in
+  // the server-side hashed PIN store (server/authService.ts) and must never
+  // be shipped to the client bundle.
 }
 
 export interface Tenant {
@@ -56,6 +58,44 @@ export interface Branch {
   email: string;
   isActive: boolean;
   isMainBranch?: boolean;
+}
+
+// Konfigurasi sistem dari SettingsModule — dulu semua tombol "Simpan" di
+// sini cuma addToast tanpa persist apa pun. Sekarang nilai-nilai ini
+// disimpan permanen DAN benar-benar dipakai modul lain: invoicePrefix &
+// taxRate/enableTax dibaca saat membuat invoice/checkout kasir, dan profil
+// klinik dipakai sebagai identitas kop surat di laporan PDF resmi.
+export interface AppSettings {
+  clinicName: string;
+  slogan: string;
+  sipNumber: string;
+  taxId: string;
+  clinicPhone: string;
+  clinicEmail: string;
+  clinicAddress: string;
+  operationalHours: string;
+
+  invoicePrefix: string;
+  invoiceHeader: string;
+  invoiceFooter: string;
+  taxRate: number;
+  enableTax: boolean;
+  serviceFeePercent: number;
+  roundingMode: 'round' | 'floor' | 'ceil';
+  cashierAutoPrint: boolean;
+
+  waSessionName: string;
+  waPhoneConnected: string;
+  waApiKey: string;
+  autoReminderHMinus1: boolean;
+  autoVaccineAlert: boolean;
+  autoSendInvoicePdf: boolean;
+
+  paperWidth: '58mm' | '80mm';
+  printerConnection: 'bluetooth' | 'usb' | 'network';
+  printerDeviceName: string;
+  printerIpAddress: string;
+  cutPaperAfterPrint: boolean;
 }
 
 export type MembershipTier = 'Silver' | 'Gold' | 'Platinum';
@@ -317,6 +357,17 @@ export interface DewormingRecord {
   nextDueDate: string;
 }
 
+// Catatan interaksi CRM per pelanggan — sebelumnya Record<customerId, string>
+// di useState lokal CRMModule.tsx (di-seed 2 catatan contoh, hilang saat
+// reload). Sekarang array persisten seperti koleksi lain di aplikasi ini.
+export interface CustomerNote {
+  id: string;
+  customerId: string;
+  date: string;
+  note: string;
+  authorName: string;
+}
+
 export interface EctoRecord {
   id: string;
   petId: string;
@@ -469,6 +520,26 @@ export interface StockMovement {
   referenceNo: string;
   date: string;
   operator: string;
+}
+
+// Surat jalan mutasi stok antar cabang. Stok itu sendiri tetap satu pool
+// bersama seluruh cabang (StockItem tidak punya branchId) — catatan ini
+// adalah dokumen serah-terima fisik & jejak audit (lewat StockMovement
+// type 'Transfer' terkait), BUKAN pemindahan angka stok per cabang.
+export interface InterBranchTransfer {
+  id: string;
+  transferNo: string;
+  sourceBranchId: string;
+  sourceBranchName: string;
+  destBranchId: string;
+  destBranchName: string;
+  stockItemId: string;
+  itemName: string;
+  qty: number;
+  unit: string;
+  status: 'Dalam Pengiriman' | 'Diterima';
+  date: string;
+  requestedBy: string;
 }
 
 export interface Supplier {
@@ -646,6 +717,11 @@ export interface TelehealthSession {
   fee: number;
   status: 'Menunggu' | 'Berlangsung' | 'Selesai' | 'Dibatalkan';
   meetingUrl: string;
+  notes?: string;
+  diagnosis?: string;
+  prescription?: string;
+  operationId?: string;
+  consentAcceptedAt?: string;
 }
 
 export interface EFormTemplate {
@@ -677,6 +753,7 @@ export interface AmbulanceUnit {
   currentDriver: string;
   currentParamedic: string;
   equipmentStatus: string;
+  operationId?: string;
 }
 
 export interface AmbulanceRequest {
@@ -693,6 +770,7 @@ export interface AmbulanceRequest {
   status: 'Menunggu' | 'Menuju Lokasi' | 'Penjemputan' | 'Perjalanan' | 'Completed' | 'Cancelled';
   requestedAt: string;
   notes?: string;
+  operationId?: string;
 }
 
 export interface PatientPhoto {

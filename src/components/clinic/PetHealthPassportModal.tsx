@@ -34,12 +34,21 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
   onClose,
   defaultPetId
 }) => {
-  const { pets = [], customers = [], vacHistories = [], dewormingRecords = [], medicalRecords = [] } = useData();
+  const { pets = [], customers = [], vacHistories = [], dewormingRecords = [], addDewormingRecord, medicalRecords = [] } = useData();
   const { addToast } = useToast();
 
   const [selectedPetId, setSelectedPetId] = useState<string>(defaultPetId || pets[0]?.id || '');
   const [activeTab, setActiveTab] = useState<'passport' | 'vaccines' | 'parasites' | 'medical'>('passport');
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+
+  // Sebelumnya tab ini hanya menampilkan (read-only) — tombol tambah hanya
+  // ada di ClientPortalModule, padahal modal ini yang paling sering dibuka
+  // staf klinik dari ClinicModule. Sekarang bisa mencatat langsung di sini.
+  const [showAddDewormingModal, setShowAddDewormingModal] = useState(false);
+  const [dwMedicine, setDwMedicine] = useState('Drontal Cat (Praziquantel/Pyrantel)');
+  const [dwDosage, setDwDosage] = useState('1 tablet');
+  const [dwGivenBy, setDwGivenBy] = useState('Drh. Anisa');
+  const [dwNextDue, setDwNextDue] = useState('');
 
   const currentPet = pets.find((p) => p.id === selectedPetId) || pets[0];
   const currentOwner = customers.find((c) => c.id === currentPet?.customerId) || customers[0];
@@ -104,6 +113,20 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleAddDeworming = () => {
+    if (!currentPet) return;
+    addDewormingRecord({
+      petId: currentPet.id,
+      date: new Date().toISOString().substring(0, 10),
+      medicineName: dwMedicine,
+      dosage: dwDosage,
+      givenBy: dwGivenBy,
+      nextDueDate: dwNextDue || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10)
+    });
+    setShowAddDewormingModal(false);
+    addToast(`Catatan pemberian ${dwMedicine} untuk ${currentPet.name} berhasil disimpan!`, 'success');
   };
 
   return (
@@ -347,32 +370,11 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
                         </tr>
                       ))
                     ) : (
-                      <>
-                        <tr className="hover:bg-slate-50">
-                          <td className="p-3 font-bold text-slate-900">Vaksin Feline Tricat (FVRCP)</td>
-                          <td className="p-3 text-slate-700">2026-01-15</td>
-                          <td className="p-3 font-bold text-indigo-600">2027-01-15</td>
-                          <td className="p-3 text-slate-600 font-mono text-[11px]">B-9982 (Exp: 2027-10)</td>
-                          <td className="p-3 text-slate-700">drh. Ananda Putri (SIP: 503/VET/2024)</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                              Valid & Aktif
-                            </span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-slate-50">
-                          <td className="p-3 font-bold text-slate-900">Vaksin Rabies Imunisasi</td>
-                          <td className="p-3 text-slate-700">2026-01-15</td>
-                          <td className="p-3 font-bold text-indigo-600">2027-01-15</td>
-                          <td className="p-3 text-slate-600 font-mono text-[11px]">RB-4410 (Exp: 2027-12)</td>
-                          <td className="p-3 text-slate-700">drh. Ananda Putri (SIP: 503/VET/2024)</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                              Valid & Aktif
-                            </span>
-                          </td>
-                        </tr>
-                      </>
+                      <tr>
+                        <td className="p-3 text-slate-500" colSpan={6}>
+                          Belum ada riwayat vaksinasi tercatat untuk pasien ini.
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
@@ -382,10 +384,19 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
 
           {activeTab === 'parasites' && (
             <div className="space-y-4">
-              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                <Pill className="w-4 h-4 text-[#B8905A]" />
-                Riwayat Pengobatan Cacing & Ectoparasite (Kutu/Tungau)
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  <Pill className="w-4 h-4 text-[#B8905A]" />
+                  Riwayat Pengobatan Cacing & Ectoparasite (Kutu/Tungau)
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowAddDewormingModal(true)}
+                  className="px-3 py-1.5 bg-[#B8905A] hover:bg-[#9E7848] text-white font-bold text-[11px] rounded-lg shadow-2xs transition-all cursor-pointer"
+                >
+                  + Catat Pemberian Obat
+                </button>
+              </div>
 
               <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
                 <table className="w-full text-left text-xs">
@@ -399,20 +410,23 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-3 font-bold text-slate-900">Drontal Cat Dewormer</td>
-                      <td className="p-3 text-slate-700">2026-02-01</td>
-                      <td className="p-3 text-slate-700">1 Tablet (Sesuai BB 4kg)</td>
-                      <td className="p-3 text-slate-700">drh. Ananda Putri</td>
-                      <td className="p-3 font-bold text-indigo-600">2026-05-01</td>
-                    </tr>
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-3 font-bold text-slate-900">Revolution Plus Spot-On</td>
-                      <td className="p-3 text-slate-700">2026-02-15</td>
-                      <td className="p-3 text-slate-700">1 Pipet Tetes Tengkuk</td>
-                      <td className="p-3 text-slate-700">Ns. Siti Rahma</td>
-                      <td className="p-3 font-bold text-indigo-600">2026-03-15</td>
-                    </tr>
+                    {petDewormings.length > 0 ? (
+                      petDewormings.map((d) => (
+                        <tr key={d.id} className="hover:bg-slate-50">
+                          <td className="p-3 font-bold text-slate-900">{d.medicineName}</td>
+                          <td className="p-3 text-slate-700">{d.date}</td>
+                          <td className="p-3 text-slate-700">{d.dosage}</td>
+                          <td className="p-3 text-slate-700">{d.givenBy}</td>
+                          <td className="p-3 font-bold text-indigo-600">{d.nextDueDate}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td className="p-3 text-slate-500" colSpan={5}>
+                          Belum ada riwayat pemberian obat cacing/anti-parasit untuk pasien ini.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -438,9 +452,8 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
                     </div>
                   ))
                 ) : (
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-2">
-                    <p className="font-semibold text-slate-800">Pemeriksaan Fisik Terakhir (General Check-up):</p>
-                    <p>• Suhu: 38.5°C (Normal) • Denyut Jantung: 140 bpm • Kondisi Bulu & Kulit: Bersih & Bebas Jamur • Gigi & Gusi: Sedikit Tartar Grade 1.</p>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600">
+                    Belum ada rekam medis tercatat untuk pasien ini.
                   </div>
                 )}
               </div>
@@ -476,6 +489,92 @@ export const PetHealthPassportModal: React.FC<PetHealthPassportModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal Catat Obat Cacing / Anti-Parasit */}
+      {showAddDewormingModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4 cursor-pointer"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddDewormingModal(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl border border-slate-200 p-6 max-w-md w-full shadow-2xl space-y-4 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                <Pill className="w-5 h-5 text-[#B8905A]" />
+                Catat Pemberian Obat Cacing / Anti-Parasit
+              </h3>
+              <button
+                onClick={() => setShowAddDewormingModal(false)}
+                className="text-xs font-bold text-rose-700 hover:bg-rose-50 px-2 py-1 rounded cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-900 block mb-1">Nama Obat / Spot-on</label>
+                <input
+                  type="text"
+                  value={dwMedicine}
+                  onChange={(e) => setDwMedicine(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-900"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-900 block mb-1">Dosis</label>
+                  <input
+                    type="text"
+                    value={dwDosage}
+                    onChange={(e) => setDwDosage(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-900 block mb-1">Pemberi Obat</label>
+                  <input
+                    type="text"
+                    value={dwGivenBy}
+                    onChange={(e) => setDwGivenBy(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-900"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="font-bold text-slate-900 block mb-1">Jadwal Ulang Berikutnya</label>
+                <input
+                  type="date"
+                  value={dwNextDue}
+                  onChange={(e) => setDwNextDue(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-900"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddDewormingModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-800 font-bold rounded-xl hover:bg-slate-200"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddDeworming}
+                  className="px-5 py-2.5 bg-[#B8905A] hover:bg-[#9E7848] text-white font-extrabold rounded-xl shadow-md"
+                >
+                  Simpan Catatan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

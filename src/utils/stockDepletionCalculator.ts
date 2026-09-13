@@ -34,6 +34,7 @@ export interface StockDepletionAnalysisItem {
   targetCoverageDays: number;
   aiRationale: string;
   clinicalPriority: 'Gawat Darurat' | 'Tinggi' | 'Rutin Operasional' | 'Stok Aman';
+  usedEstimate: boolean; // true kalau belum ada mutasi 'Keluar' tercatat untuk item ini, jadi konsumsi 30 hari masih tebakan berbasis kategori
 }
 
 export interface InventoryDepletionSummary {
@@ -102,9 +103,17 @@ export function calculateInventoryDepletionAndPoSuggestions(
     return matchCat && matchWh;
   });
 
+  // Jendela 30 hari asli — tanpa ini, seluruh riwayat 'Keluar' sepanjang
+  // masa dijumlah dan disebut "30 hari", sehingga avgDailyBurn/reorderPoint
+  // terus membengkak seiring waktu alih-alih mencerminkan laju jual terkini.
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
   const analyzedItems: StockDepletionAnalysisItem[] = filteredStock.map((item) => {
     // 1. Gather historical 30-day movement logs
-    const itemMoves = stockMovements.filter((m) => m.itemId === item.id);
+    const itemMoves = stockMovements.filter(
+      (m) => m.itemId === item.id && new Date(m.date) >= thirtyDaysAgo
+    );
     const outgoingMoves = itemMoves.filter((m) => m.type === 'Keluar');
     const recordedOutgoingQty = outgoingMoves.reduce((acc, m) => acc + m.quantity, 0);
 
@@ -112,6 +121,7 @@ export function calculateInventoryDepletionAndPoSuggestions(
     let monthlyDemand = recordedOutgoingQty;
     const nameLower = item.name.toLowerCase();
     const catLower = item.category.toLowerCase();
+    const usedEstimate = monthlyDemand === 0;
 
     if (monthlyDemand === 0) {
       if (catLower.includes('makanan') || nameLower.includes('royal') || nameLower.includes('food') || nameLower.includes('pro plan')) {
@@ -267,7 +277,8 @@ export function calculateInventoryDepletionAndPoSuggestions(
       suggestedPoCost,
       targetCoverageDays,
       aiRationale,
-      clinicalPriority
+      clinicalPriority,
+      usedEstimate
     };
   });
 

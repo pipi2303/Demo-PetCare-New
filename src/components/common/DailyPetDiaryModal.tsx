@@ -58,6 +58,11 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
   const [selectedPhoto, setSelectedPhoto] = useState<string>(
     'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600&auto=format&fit=crop&q=80'
   );
+  // Guard klik-ganda — handler async (menunggu sendWhatsAppNotification)
+  // tapi addMedicalRecord/addAuditLog jalan sinkron sebelum await, jadi
+  // klik ganda tanpa ini bisa menduplikasi rekam medis & audit log untuk
+  // jurnal harian yang sama, termasuk flag "PERLU PERHATIAN DOKTER".
+  const [isSendingDiary, setIsSendingDiary] = useState(false);
 
   const photoOptions = [
     { label: 'Kucing Bermain Ceria', url: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600&auto=format&fit=crop&q=80' },
@@ -67,6 +72,8 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
   ];
 
   const handleSendWhatsApp = async () => {
+    if (isSendingDiary) return;
+    setIsSendingDiary(true);
     const dateStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
     const message =
@@ -86,17 +93,40 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `💖 _Anabul Anda kami rawat dengan penuh kasih sayang seperti keluarga sendiri!_`;
 
+    // Sebelumnya jurnal harian ini hanya dikirim sebagai teks WhatsApp lalu
+    // hilang — addMedicalRecord sudah di-destructure dari context tapi tak
+    // pernah dipanggil. Tanda bahaya (mis. diare, tidak mau makan, lemas)
+    // yang dicatat staf boarding tidak pernah terlihat dokter di EMR pasien
+    // nanti. Sekarang disimpan permanen ke rekam medis pasien juga.
+    const warningFlags: string[] = [];
+    if (defecation === 'Diare') warningFlags.push('BAB diare/cair');
+    if (appetite === 'Tidak Mau Makan') warningFlags.push('tidak mau makan');
+    if (mood === 'Lemas') warningFlags.push('lemas');
+    if (urination === 'Keruh / Tidak Lancar') warningFlags.push('urin keruh/tidak lancar');
+    const warningPrefix = warningFlags.length > 0 ? `⚠️ PERLU PERHATIAN DOKTER (${warningFlags.join(', ')}). ` : '';
+
+    if (addMedicalRecord && currentPet) {
+      addMedicalRecord({
+        petId: currentPet.id,
+        date: new Date().toISOString().substring(0, 10),
+        type: serviceType === 'Grooming' ? 'Grooming' : serviceType === 'Rawat Inap' ? 'Rawat Inap' : 'Kunjungan',
+        title: `Jurnal Harian ${serviceType} - ${currentPet.name}`,
+        description: `${warningPrefix}Nafsu makan: ${appetite}. BAK: ${urination}. BAB: ${defecation}. Mood: ${mood}. Suhu: ${temperatureC}°C. ${medicationGiven ? `Obat/vitamin: ${medicationGiven}. ` : ''}Catatan caretaker: ${staffNotes}`,
+        performedBy: staffName,
+        attachments: [selectedPhoto]
+      });
+    }
+
     const outcome = await sendWhatsAppNotification(customPhone, message);
 
     if (addAuditLog) {
-      addAuditLog({
-        userName: staffName,
-        userRole: 'perawat',
-        action: 'Tambah',
-        module: 'Pet Hotel / CRM',
-        target: `Jurnal Harian ${currentPet?.name}`,
-        details: `Jurnal harian foto ${serviceType} untuk ${currentPet?.name} berhasil dikirimkan ke WhatsApp pemilik (${customPhone}).`
-      });
+      addAuditLog(
+        'Tambah',
+        'Pet Hotel / CRM',
+        `Jurnal Harian ${currentPet?.name}`,
+        `Jurnal harian foto ${serviceType} untuk ${currentPet?.name} disimpan ke EMR & dikirimkan ke WhatsApp pemilik (${customPhone}).`,
+        { userName: staffName, userRole: 'perawat', severity: warningFlags.length > 0 ? 'Warning' : 'Info' }
+      );
     }
 
     addToast(
@@ -105,6 +135,7 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
         : `Membuka WhatsApp untuk mengirimkan Jurnal Harian ${currentPet?.name}...`,
       outcome.auto ? 'success' : 'info'
     );
+    setIsSendingDiary(false);
   };
 
   return (
@@ -357,10 +388,11 @@ export const DailyPetDiaryModal: React.FC<DailyPetDiaryModalProps> = ({
             <button
               type="button"
               onClick={handleSendWhatsApp}
-              className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+              disabled={isSendingDiary}
+              className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black rounded-xl text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
             >
               <Share2 className="w-4 h-4" />
-              <span>Kirim Jurnal Foto ke WhatsApp</span>
+              <span>{isSendingDiary ? 'Mengirim...' : 'Kirim Jurnal Foto ke WhatsApp'}</span>
             </button>
           </div>
         </div>

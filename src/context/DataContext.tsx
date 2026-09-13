@@ -12,7 +12,13 @@ interface DataContextType {
   updateBranch: (id: string, b: Partial<Types.Branch>) => void;
   deleteBranch: (id: string) => void;
   tenants: Types.Tenant[];
-  addTenant: (tenant: Omit<Types.Tenant, 'id' | 'createdAt'>) => void;
+  addTenant: (tenant: Omit<Types.Tenant, 'id' | 'createdAt'>) => Types.Tenant;
+
+  // App Settings (SettingsModule) — persisten & dipakai lintas modul
+  // (invoicePrefix/taxRate untuk faktur & kasir, profil klinik untuk kop
+  // surat PDF resmi).
+  appSettings: Types.AppSettings;
+  updateAppSettings: (patch: Partial<Types.AppSettings>) => void;
 
   // Master Data
   customers: Types.Customer[];
@@ -81,6 +87,17 @@ interface DataContextType {
   addVacSchedule: (vs: Omit<Types.VacSchedule, 'id'>) => void;
   vacHistories: Types.VacHistory[];
   addVacHistory: (vh: Omit<Types.VacHistory, 'id'>) => void;
+  dewormingRecords: Types.DewormingRecord[];
+  addDewormingRecord: (dr: Omit<Types.DewormingRecord, 'id'>) => Types.DewormingRecord;
+
+  customerNotes: Types.CustomerNote[];
+  addCustomerNote: (customerId: string, note: string) => Types.CustomerNote;
+
+  // Inter-branch stock transfer (surat jalan, bukan pemindahan angka stok —
+  // lihat catatan di Types.InterBranchTransfer)
+  interBranchTransfers: Types.InterBranchTransfer[];
+  addInterBranchTransfer: (t: Omit<Types.InterBranchTransfer, 'id' | 'transferNo' | 'date' | 'status'>) => Types.InterBranchTransfer;
+  markInterBranchTransferReceived: (id: string) => void;
 
   // Surgeries
   surgicalProcedures: Types.SurgicalProcedure[];
@@ -94,7 +111,7 @@ interface DataContextType {
   dispenseDrug: (drugId: string, qty: number) => void;
 
   labTests: Types.LabTest[];
-  addLabTest: (lt: Omit<Types.LabTest, 'id' | 'testNo' | 'status' | 'orderedAt'>) => void;
+  addLabTest: (lt: Omit<Types.LabTest, 'id' | 'testNo' | 'status' | 'orderedAt'>) => Types.LabTest;
   updateLabResult: (id: string, results: Types.LabTest['results'], notes?: string) => void;
 
   // Grooming & Hotel Ops
@@ -129,7 +146,7 @@ interface DataContextType {
   deleteWarehouse: (id: string) => void;
 
   stockItems: Types.StockItem[];
-  addStockItem: (si: Omit<Types.StockItem, 'id' | 'sku'>) => void;
+  addStockItem: (si: Omit<Types.StockItem, 'id' | 'sku'> & { sku?: string }) => Types.StockItem;
   updateStockItem: (id: string, si: Partial<Types.StockItem>) => void;
   stockMovements: Types.StockMovement[];
   addStockMovement: (sm: Omit<Types.StockMovement, 'id' | 'date'>) => void;
@@ -175,6 +192,7 @@ interface DataContextType {
   telehealthSessions: Types.TelehealthSession[];
   addTelehealthSession: (th: Omit<Types.TelehealthSession, 'id' | 'sessionNo' | 'meetingUrl'>) => Types.TelehealthSession;
   updateTelehealthStatus: (id: string, status: Types.TelehealthSession['status']) => void;
+  updateTelehealthSession: (id: string, updates: Partial<Types.TelehealthSession>) => void;
 
   eFormTemplates: Types.EFormTemplate[];
   addEFormTemplate: (t: Omit<Types.EFormTemplate, 'id'>) => void;
@@ -182,6 +200,8 @@ interface DataContextType {
   deleteEFormTemplate: (id: string) => void;
   eFormSubmissions: Types.EFormSubmission[];
   addEFormSubmission: (efs: Omit<Types.EFormSubmission, 'id' | 'date'>) => Types.EFormSubmission;
+  informedConsents: Types.InformedConsentRecord[];
+  addInformedConsent: (ic: Omit<Types.InformedConsentRecord, 'id'>) => Types.InformedConsentRecord;
 
   ambulanceUnits: Types.AmbulanceUnit[];
   addAmbulanceUnit: (u: Omit<Types.AmbulanceUnit, 'id'>) => void;
@@ -260,6 +280,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeBranchId, setActiveBranchId] = useState<string>('all');
   const [tenants, setTenants] = useLocalState<Types.Tenant[]>('tenants', Seed.INITIAL_TENANTS);
   const [branches, setBranches] = useLocalState<Types.Branch[]>('branches', Seed.INITIAL_BRANCHES);
+  const [appSettings, setAppSettings] = useLocalState<Types.AppSettings>('app_settings', Seed.DEFAULT_APP_SETTINGS);
 
   // Entities
   const [customers, setCustomers] = useLocalState<Types.Customer[]>('customers', Seed.INITIAL_CUSTOMERS);
@@ -279,6 +300,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [vacSchedules, setVacSchedules] = useLocalState<Types.VacSchedule[]>('vac_schedules', Seed.INITIAL_VAC_SCHEDULES);
   const [vacHistories, setVacHistories] = useLocalState<Types.VacHistory[]>('vac_histories', Seed.INITIAL_VAC_HISTORIES);
+  const [dewormingRecords, setDewormingRecords] = useLocalState<Types.DewormingRecord[]>('deworming_records', []);
+  const [customerNotes, setCustomerNotes] = useLocalState<Types.CustomerNote[]>('customer_notes', []);
+  const [interBranchTransfers, setInterBranchTransfers] = useLocalState<Types.InterBranchTransfer[]>('inter_branch_transfers', []);
   const [surgicalProcedures, setSurgicalProcedures] = useLocalState<Types.SurgicalProcedure[]>('surgical_procedures', Seed.INITIAL_SURGICAL_PROCEDURES);
 
   const [drugs, setDrugs] = useLocalState<Types.Drug[]>('drugs', Seed.INITIAL_DRUGS);
@@ -311,6 +335,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [telehealthSessions, setTelehealthSessions] = useLocalState<Types.TelehealthSession[]>('telehealth_sessions', Seed.INITIAL_TELEHEALTH_SESSIONS);
   const [eFormTemplates, setEFormTemplates] = useLocalState<Types.EFormTemplate[]>('eform_templates', Seed.INITIAL_EFORM_TEMPLATES);
   const [eFormSubmissions, setEFormSubmissions] = useLocalState<Types.EFormSubmission[]>('eform_submissions', Seed.INITIAL_EFORM_SUBMISSIONS);
+  const [informedConsents, setInformedConsents] = useLocalState<Types.InformedConsentRecord[]>('informed_consents', []);
 
   const [ambulanceUnits, setAmbulanceUnits] = useLocalState<Types.AmbulanceUnit[]>('ambulance_units', Seed.INITIAL_AMBULANCE_UNITS);
   const [ambulanceRequests, setAmbulanceRequests] = useLocalState<Types.AmbulanceRequest[]>('ambulance_requests', Seed.INITIAL_AMBULANCE_REQUESTS);
@@ -321,6 +346,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [patientPhotos, setPatientPhotos] = useLocalState<Types.PatientPhoto[]>('patient_photos', Seed.INITIAL_PATIENT_PHOTOS);
   const [auditLogs, setAuditLogs] = useLocalState<Types.AuditLog[]>('audit_logs', Seed.INITIAL_AUDIT_LOGS);
   const [notifications, setNotifications] = useLocalState<Types.AppNotification[]>('notifications', Seed.INITIAL_NOTIFICATIONS);
+
+  // Generate a random 3-digit entity code that doesn't collide with existing codes
+  const generateUniqueCode = (prefix: string, existingCodes: string[]): string => {
+    let code: string;
+    do {
+      code = `${prefix}-${Math.floor(100 + Math.random() * 900)}`;
+    } while (existingCodes.includes(code));
+    return code;
+  };
 
   // Audit logger helper with user, branch, and severity awareness
   const addAuditLog = (
@@ -396,7 +430,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Hapus', 'Cabang & Multi-Lokasi', current?.name || id, `Penghapusan cabang: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
-  const addTenant = (tenantData: Omit<Types.Tenant, 'id' | 'createdAt'>) => {
+  const addTenant = (tenantData: Omit<Types.Tenant, 'id' | 'createdAt'>): Types.Tenant => {
     const newTenant: Types.Tenant = {
       ...tenantData,
       id: 't_' + Date.now(),
@@ -404,6 +438,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setTenants((prev) => [newTenant, ...prev]);
     addAuditLog('Tambah', 'SaaS Multi-Tenant', newTenant.name, `Tenant organisasi baru '${newTenant.name}' didaftarkan (Paket: ${newTenant.plan})`, { severity: 'Kritis' });
+    return newTenant;
+  };
+
+  const updateAppSettings = (patch: Partial<Types.AppSettings>) => {
+    setAppSettings((prev) => ({ ...prev, ...patch }));
+    addAuditLog('Edit', 'Pengaturan Sistem', 'Konfigurasi Aplikasi', `Pengaturan sistem diperbarui: ${Object.keys(patch).join(', ')}`, { severity: 'Info' });
   };
 
   const addCustomer = (custData: Omit<Types.Customer, 'id' | 'createdAt' | 'loyaltyPoints' | 'totalSpent' | 'petCount'>): Types.Customer => {
@@ -439,6 +479,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteCustomer = (id: string) => {
     const current = customers.find((c) => c.id === id);
     setCustomers((prev) => prev.filter((c) => c.id !== id));
+    setPets((prev) => prev.filter((p) => p.customerId !== id));
     addAuditLog(
       'Hapus',
       'Master Data & CRM',
@@ -466,6 +507,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updatePet = (id: string, petData: Partial<Types.Pet>) => {
     const current = pets.find((p) => p.id === id);
     setPets((prev) => prev.map((p) => (p.id === id ? { ...p, ...petData } : p)));
+    if (current && petData.customerId && petData.customerId !== current.customerId) {
+      const oldCustomerId = current.customerId;
+      const newCustomerId = petData.customerId;
+      setCustomers((prev) =>
+        prev.map((c) => {
+          if (c.id === oldCustomerId) return { ...c, petCount: Math.max(0, c.petCount - 1) };
+          if (c.id === newCustomerId) return { ...c, petCount: c.petCount + 1 };
+          return c;
+        })
+      );
+    }
     addAuditLog(
       'Edit',
       'Master Pasien Hewan',
@@ -482,6 +534,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deletePet = (id: string) => {
     const current = pets.find((p) => p.id === id);
     setPets((prev) => prev.filter((p) => p.id !== id));
+    if (current) {
+      setCustomers((prev) =>
+        prev.map((c) => (c.id === current.customerId ? { ...c, petCount: Math.max(0, c.petCount - 1) } : c))
+      );
+    }
     addAuditLog('Hapus', 'Master Pasien Hewan', current?.name || id, `Penghapusan data pasien hewan peliharaan: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
@@ -518,7 +575,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newSrv: Types.ServiceItem = {
       ...srvData,
       id: 'srv_' + Date.now(),
-      code: 'SRV-' + Math.floor(100 + Math.random() * 900)
+      code: generateUniqueCode('SRV', services.map((s) => s.code))
     };
     setServices((prev) => [...prev, newSrv]);
     addAuditLog('Tambah', 'Katalog Tarif & Layanan', newSrv.name, `Penambahan tarif layanan: ${newSrv.name} (${newSrv.category}) - Rp ${newSrv.price.toLocaleString('id-ID')}`, { severity: 'Info' });
@@ -706,7 +763,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addClinicVisit = (v: Omit<Types.ClinicVisit, 'id' | 'visitNo' | 'queueNo' | 'status' | 'queuedAt'>): Types.ClinicVisit => {
-    const nextQueue = clinicVisits.length + 1;
+    const nextQueue = clinicVisits.filter((cv) => cv.status !== 'Selesai' && cv.status !== 'Batal').length + 1;
     const newVisit: Types.ClinicVisit = {
       ...v,
       id: 'v_' + Date.now(),
@@ -885,6 +942,66 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Tambah', 'Vaksinasi & Paspor', vh.vaccineName, `Pemberian vaksin ${vh.vaccineName} (Batch: ${vh.batchNumber}) & penerbitan sertifikat ${vh.certificateNo}`, { severity: 'Warning' });
   };
 
+  const addDewormingRecord = (dr: Omit<Types.DewormingRecord, 'id'>): Types.DewormingRecord => {
+    const newRecord: Types.DewormingRecord = { ...dr, id: 'dw_' + Date.now() };
+    setDewormingRecords((prev) => [newRecord, ...prev]);
+    addAuditLog('Tambah', 'Vaksinasi & Paspor', dr.medicineName, `Pemberian obat cacing/anti-parasit ${dr.medicineName} untuk pasien, jadwal ulang berikutnya ${dr.nextDueDate}`, { severity: 'Info' });
+    return newRecord;
+  };
+
+  const addCustomerNote = (customerId: string, note: string): Types.CustomerNote => {
+    const newNote: Types.CustomerNote = {
+      id: 'cn_' + Date.now(),
+      customerId,
+      date: new Date().toISOString().substring(0, 10),
+      note,
+      authorName: user?.name || 'Staf CRM'
+    };
+    setCustomerNotes((prev) => [...prev, newNote]);
+    addAuditLog('Tambah', 'CRM & Loyalty', customerId, `Catatan interaksi baru ditambahkan untuk pelanggan.`, { severity: 'Info' });
+    return newNote;
+  };
+
+  // Mutasi stok antar cabang: stok itu satu pool bersama (StockItem tidak
+  // punya branchId), jadi ini TIDAK memanggil updateStockItem — hanya
+  // menerbitkan surat jalan persisten + StockMovement type 'Transfer' asli
+  // sebagai jejak audit fisik barang berpindah lokasi cabang. Sebelumnya
+  // ini cuma useState lokal di BranchesModule.tsx yang hilang saat reload
+  // dan tidak pernah memanggil addStockMovement sama sekali.
+  const addInterBranchTransfer = (
+    t: Omit<Types.InterBranchTransfer, 'id' | 'transferNo' | 'date' | 'status'>
+  ): Types.InterBranchTransfer => {
+    const newTransfer: Types.InterBranchTransfer = {
+      ...t,
+      id: 'ibt_' + Date.now(),
+      transferNo: 'MUTASI-' + new Date().toISOString().split('T')[0].replace(/-/g, '') + '-' + Math.floor(100 + Math.random() * 900),
+      date: new Date().toISOString().substring(0, 10),
+      status: 'Dalam Pengiriman'
+    };
+    setInterBranchTransfers((prev) => [newTransfer, ...prev]);
+
+    addStockMovement({
+      itemId: t.stockItemId,
+      itemName: t.itemName,
+      type: 'Transfer',
+      quantity: t.qty,
+      fromWarehouse: t.sourceBranchName,
+      toWarehouse: t.destBranchName,
+      referenceNo: newTransfer.transferNo,
+      operator: t.requestedBy
+    });
+
+    return newTransfer;
+  };
+
+  const markInterBranchTransferReceived = (id: string) => {
+    const t = interBranchTransfers.find((x) => x.id === id);
+    setInterBranchTransfers((prev) => prev.map((x) => (x.id === id ? { ...x, status: 'Diterima' } : x)));
+    if (t) {
+      addAuditLog('Edit', 'Manajemen Multi-Cabang', t.transferNo, `Mutasi stok ${t.transferNo} (${t.itemName} x${t.qty}) dikonfirmasi diterima di ${t.destBranchName}.`, { severity: 'Info' });
+    }
+  };
+
   const addSurgicalProcedure = (sp: Omit<Types.SurgicalProcedure, 'id' | 'procedureNo'>) => {
     const procedureNo = 'SURG-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(10 + Math.random() * 90);
     const newSurg: Types.SurgicalProcedure = {
@@ -911,7 +1028,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newDrug: Types.Drug = {
       ...d,
       id: 'd_' + Date.now(),
-      code: 'DRG-' + Math.floor(100 + Math.random() * 900)
+      code: generateUniqueCode('DRG', drugs.map((dr) => dr.code))
     };
     setDrugs((prev) => [...prev, newDrug]);
     addAuditLog('Tambah', 'Apotek & Farmasi', newDrug.name, `Penambahan item obat baru: ${newDrug.name} (${newDrug.unit}) - Stok: ${newDrug.stock}`, { severity: 'Info' });
@@ -963,6 +1080,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setLabTests((prev) => [newTest, ...prev]);
     addAuditLog('Tambah', 'Laboratorium & Diagnostik', newTest.testNo, `Order pemeriksaan laboratorium: ${newTest.testName} untuk pasien ${newTest.petName}`);
+    return newTest;
   };
 
   const updateLabResult = (id: string, results: Types.LabTest['results'], notes?: string) => {
@@ -1082,14 +1200,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Hapus', 'Master Data', current?.name || id, `Gudang/lokasi dihapus: ${current?.name || id}`, { severity: 'Warning' });
   };
 
-  const addStockItem = (si: Omit<Types.StockItem, 'id' | 'sku'>) => {
+  const addStockItem = (si: Omit<Types.StockItem, 'id' | 'sku'> & { sku?: string }) => {
     const newItem: Types.StockItem = {
       ...si,
       id: 'si_' + Date.now(),
-      sku: 'SKU-' + Math.floor(1000 + Math.random() * 9000)
+      sku: si.sku || 'SKU-' + Math.floor(1000 + Math.random() * 9000)
     };
     setStockItems((prev) => [...prev, newItem]);
     addAuditLog('Tambah', 'Inventaris & Gudang', newItem.name, `Penambahan item stok gudang baru: ${newItem.name} (SKU: ${newItem.sku})`, { severity: 'Info' });
+    return newItem;
   };
 
   const updateStockItem = (id: string, siData: Partial<Types.StockItem>) => {
@@ -1122,7 +1241,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newSup: Types.Supplier = {
       ...sup,
       id: 'sup_' + Date.now(),
-      code: 'SUP-' + Math.floor(100 + Math.random() * 900)
+      code: generateUniqueCode('SUP', suppliers.map((s) => s.code))
     };
     setSuppliers((prev) => [...prev, newSup]);
     addAuditLog('Tambah', 'Purchasing & Vendor', newSup.name, `Vendor supplier baru didaftarkan: ${newSup.name} (${newSup.phone})`);
@@ -1158,9 +1277,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setPurchaseOrders((prev) => prev.map((p) => (p.id === poId ? { ...p, status: 'Diterima' } : p)));
 
-    // Update stock items
+    // Update stock items. Quick PO (reorder cepat) menulis itemName sebagai
+    // "Nama Barang [SKU]", sedangkan PO manual menulis nama polos apa adanya
+    // — cocokkan dengan SKU di dalam kurung dulu, baru fallback ke nama
+    // persis, supaya kedua sumber PO tetap menambah stok saat diterima.
     po.items.forEach((item) => {
-      const stock = stockItems.find((s) => s.name === item.itemName);
+      const skuMatch = item.itemName.match(/\[([^\]]+)\]\s*$/);
+      const sku = skuMatch ? skuMatch[1].trim() : null;
+      const nameWithoutSku = item.itemName.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
+      const stock = stockItems.find(
+        (s) => (sku && s.sku === sku) || s.name === item.itemName || s.name === nameWithoutSku
+      );
       if (stock) {
         updateStockItem(stock.id, { stock: stock.stock + item.quantity });
         addStockMovement({
@@ -1182,7 +1309,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newInv: Types.Invoice = {
       ...invData,
       id: 'inv_' + Date.now(),
-      invoiceNo: 'INV-' + Date.now().toString().slice(-6),
+      invoiceNo: (appSettings.invoicePrefix || 'INV') + '-' + Date.now().toString().slice(-6),
       date: new Date().toISOString().substring(0, 10)
     };
     setInvoices((prev) => [newInv, ...prev]);
@@ -1193,6 +1320,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const processPayment = (invId: string, method: Types.Invoice['paymentMethod'], pointsRedeemed: number = 0) => {
     const inv = invoices.find((i) => i.id === invId);
     if (!inv) return;
+    // Idempotency guard: tanpa ini, klik ganda pada "Konfirmasi Pembayaran"
+    // (atau race lain yang memanggil processPayment untuk invoice yang sama)
+    // menghitung ulang kas masuk & poin loyalti dobel untuk satu invoice.
+    if (inv.status === 'Lunas') return;
 
     const pointsEarned = Math.floor(inv.totalAmount / 10000);
 
@@ -1257,7 +1388,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newEmp: Types.Employee = {
       ...emp,
       id: 'e_' + Date.now(),
-      nik: 'EMP-' + Math.floor(100 + Math.random() * 900)
+      nik: generateUniqueCode('EMP', employees.map((e) => e.nik))
     };
     setEmployees((prev) => [...prev, newEmp]);
     addAuditLog('Tambah', 'SDM & Akses Karyawan', newEmp.name, `Pendaftaran akun karyawan baru: ${newEmp.name} (Peran: ${newEmp.role}, NIK: ${newEmp.nik})`, { severity: 'Kritis' });
@@ -1352,6 +1483,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Edit', 'Telehealth & Konsultasi', id, `Status telekonsultasi diubah menjadi: ${status}`);
   };
 
+  const updateTelehealthSession = (id: string, updates: Partial<Types.TelehealthSession>) => {
+    setTelehealthSessions((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    addAuditLog('Edit', 'Telehealth & Konsultasi', id, `Pembaruan data telekonsultasi: ${id}`);
+  };
+
   const addEFormTemplate = (t: Omit<Types.EFormTemplate, 'id'>) => {
     const newTpl: Types.EFormTemplate = { ...t, id: 'eft_' + Date.now() };
     setEFormTemplates((prev) => [...prev, newTpl]);
@@ -1379,6 +1515,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setEFormSubmissions((prev) => [newSub, ...prev]);
     addAuditLog('Tambah', 'E-Form & Persetujuan Medis', newSub.templateTitle, `Penyerahan formulir digital ${newSub.templateTitle} untuk pasien ${newSub.petName} (Oleh: ${newSub.customerName})`, { severity: 'Warning' });
     return newSub;
+  };
+
+  const addInformedConsent = (ic: Omit<Types.InformedConsentRecord, 'id'>): Types.InformedConsentRecord => {
+    const newConsent: Types.InformedConsentRecord = { ...ic, id: 'ic_' + Date.now() };
+    setInformedConsents((prev) => [newConsent, ...prev]);
+    addAuditLog('Tambah', 'E-Form & Persetujuan Medis', newConsent.consentNo, `Persetujuan tindakan medis (${newConsent.procedureType}) untuk pasien ${newConsent.petName} ditandatangani oleh ${newConsent.customerName}. Hash: ${newConsent.securityHash}`, { severity: 'Kritis' });
+    return newConsent;
   };
 
   const addAmbulanceUnit = (u: Omit<Types.AmbulanceUnit, 'id'>) => {
@@ -1481,6 +1624,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteBranch,
         tenants,
         addTenant,
+        appSettings,
+        updateAppSettings,
         customers,
         addCustomer,
         updateCustomer,
@@ -1530,6 +1675,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addVacSchedule,
         vacHistories,
         addVacHistory,
+        dewormingRecords,
+        addDewormingRecord,
+        customerNotes,
+        addCustomerNote,
+        interBranchTransfers,
+        addInterBranchTransfer,
+        markInterBranchTransferReceived,
         surgicalProcedures,
         addSurgicalProcedure,
         drugs,
@@ -1597,12 +1749,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         telehealthSessions,
         addTelehealthSession,
         updateTelehealthStatus,
+        updateTelehealthSession,
         eFormTemplates,
         addEFormTemplate,
         updateEFormTemplate,
         deleteEFormTemplate,
         eFormSubmissions,
         addEFormSubmission,
+        informedConsents,
+        addInformedConsent,
         ambulanceUnits,
         addAmbulanceUnit,
         updateAmbulanceUnit,

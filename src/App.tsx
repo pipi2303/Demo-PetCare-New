@@ -4,7 +4,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider, useData } from './context/DataContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider, useToast } from './context/ToastContext';
-import { Sidebar, NavModule, MODULE_PERMISSIONS } from './components/layout/Sidebar';
+import { Sidebar, NavModule } from './components/layout/Sidebar';
+import { usePermissions } from './hooks/usePermissions';
 import { Header } from './components/layout/Header';
 import { GlobalSearchModal } from './components/layout/GlobalSearchModal';
 import { WAStatusBanner } from './components/layout/WAStatusBanner';
@@ -35,7 +36,6 @@ import { TenantAdminModule } from './components/modules/TenantAdminModule';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ResetPasswordScreen } from './components/auth/ResetPasswordScreen';
 import { getRoleInfo } from './utils/roleUtils';
-import { UserRole } from './types';
 import {
   CalendarCheck,
   Stethoscope,
@@ -114,26 +114,16 @@ const MainAppContent: React.FC = () => {
     () => new URLSearchParams(window.location.search).get('resetToken')
   );
 
-  const { user, isLoginScreenOpen, closeLoginScreen, activeOwnership } = useAuth();
+  const { user, isLoginScreenOpen, closeLoginScreen } = useAuth();
   const { addToast } = useToast();
 
-  // Derive effective role from user role or active ownership
-  let userRole: UserRole = 'owner_klinik';
-  if (user?.role && user.role !== 'owner') {
-    userRole = user.role;
-  }
-  if (user?.ownershipType && (user.ownershipType === 'owner_klinik' || user.ownershipType === 'owner_petshop' || user.ownershipType === 'owner_petcare')) {
-    userRole = user.ownershipType as UserRole;
-  } else if (activeOwnership && (activeOwnership === 'owner_klinik' || activeOwnership === 'owner_petshop' || activeOwnership === 'owner_petcare') && (user?.role?.startsWith('owner') || user?.role === 'owner' || !user)) {
-    userRole = activeOwnership as UserRole;
-  }
-
+  // Single source of truth for role/permission resolution (see usePermissions.ts) —
+  // replaces the divergent effectiveRole logic that used to live separately here.
+  const { role: userRole, canAccessModule } = usePermissions();
   const roleInfo = getRoleInfo(userRole);
 
   // Check if current user is allowed to access the active module
-  const isModuleAllowed =
-    MODULE_PERMISSIONS[activeModule]?.includes('*') ||
-    MODULE_PERMISSIONS[activeModule]?.includes(userRole);
+  const isModuleAllowed = canAccessModule(activeModule);
 
   // Auto-redirect if active module is not permitted for current role
   useEffect(() => {

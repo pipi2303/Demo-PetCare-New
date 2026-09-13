@@ -3,6 +3,7 @@ import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Customer, Pet, Employee, Supplier, ServiceItem, MembershipTier, Drug, HotelRoom, GroomingPackage, AmbulanceUnit, EFormTemplate } from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { usePermissions } from '../../hooks/usePermissions';
 import { TriageUrgencyBadge } from '../clinic/TriageUrgencyBadge';
 import { TriageUrgencyModal } from '../clinic/TriageUrgencyModal';
 import { computeClientTriageUrgency } from '../../utils/aiTriageUrgency';
@@ -41,6 +42,16 @@ import {
 } from 'lucide-react';
 
 export const MasterDataModule: React.FC = () => {
+  const { can } = usePermissions();
+  // Only owner/admin-level roles may set or change a staff member's salary
+  // & commission rate — everyone else can still manage the rest of the
+  // staff record, but these two fields are locked.
+  const canEditStaffCompensation = can('hrm', 'edit');
+  // Modul terbesar aplikasi ini tidak punya satu pun pengecekan izin pada
+  // aksi hapus (hanya window.confirm) — grup tanpa hak "Delete" tetap bisa
+  // menghapus pelanggan, pasien, layanan, staf, dst. confirmAndDelete di
+  // bawah dipakai di semua 12 titik hapus di modul ini.
+  const canDeleteMasterData = can('masterData', 'delete');
   const {
     customers = [],
     addCustomer,
@@ -93,6 +104,18 @@ export const MasterDataModule: React.FC = () => {
     branches = []
   } = useData();
   const { addToast } = useToast();
+
+  // Satu titik gerbang untuk semua aksi hapus di Master Data: cek izin grup
+  // dulu (bukan cuma window.confirm) sebelum benar-benar menjalankan hapus.
+  const confirmAndDelete = (message: string, action: () => void) => {
+    if (!canDeleteMasterData) {
+      addToast('Akun/grup Anda tidak memiliki hak "Hapus" untuk Master Data. Hubungi Owner/Admin.', 'error');
+      return;
+    }
+    if (window.confirm(message)) {
+      action();
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'customers' | 'pets' | 'services' | 'staff' | 'suppliers' | 'drugs' | 'hotelRooms' | 'groomingPackages' | 'ambulanceUnits' | 'eFormTemplates' | 'categoriesWarehouses'>('customers');
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -322,10 +345,10 @@ export const MasterDataModule: React.FC = () => {
   };
 
   const handleDeleteCustomer = (c: Customer) => {
-    if (window.confirm(`Apakah Anda yakin ingin menghapus pelanggan ${c.name}? Data hewan peliharaan terkait juga akan terpengaruh.`)) {
+    confirmAndDelete(`Apakah Anda yakin ingin menghapus pelanggan ${c.name}? Data hewan peliharaan terkait juga akan terpengaruh.`, () => {
       deleteCustomer(c.id);
       addToast(`Pelanggan ${c.name} telah dihapus!`, 'success');
-    }
+    });
   };
 
   // Pet submit
@@ -404,10 +427,10 @@ export const MasterDataModule: React.FC = () => {
   };
 
   const handleDeletePet = (p: Pet) => {
-    if (window.confirm(`Hapus pasien hewan ${p.name}?`)) {
+    confirmAndDelete(`Hapus pasien hewan ${p.name}?`, () => {
       deletePet(p.id);
       addToast(`Pasien hewan ${p.name} dihapus!`, 'success');
-    }
+    });
   };
 
   // Service submit
@@ -461,6 +484,13 @@ export const MasterDataModule: React.FC = () => {
       return;
     }
     const staffPayload = { ...staffForm, branchId: staffForm.branchId || undefined, shift: staffForm.shift || undefined };
+    if (!canEditStaffCompensation) {
+      // Defense in depth: even if the disabled inputs were bypassed
+      // client-side, the save itself refuses to change compensation for
+      // roles that aren't allowed to set it.
+      staffPayload.baseSalary = editingStaff?.baseSalary ?? staffPayload.baseSalary;
+      staffPayload.commissionRatePercent = editingStaff?.commissionRatePercent ?? staffPayload.commissionRatePercent;
+    }
     if (editingStaff) {
       updateEmployee(editingStaff.id, staffPayload);
       addToast(`Data staff ${staffForm.name} berhasil diperbarui!`, 'success');
@@ -1386,7 +1416,7 @@ export const MasterDataModule: React.FC = () => {
                       </div>
 
                       {/* Triage Triggers / Symptom severity box if available */}
-                      {triage.triggers && triage.triggers.length > 0 && (
+                      {triage.symptomTriggers && triage.symptomTriggers.length > 0 && (
                         <div className="mt-2.5 p-2 rounded-lg bg-[#F6F1E6]/70 border border-[#E1D6BE]/70 text-[11px] space-y-1">
                           <div className="flex items-center justify-between text-[#1B2A45] font-semibold">
                             <span className="flex items-center gap-1 text-[10px] text-[#B8905A] uppercase tracking-wider font-extrabold">
@@ -1407,10 +1437,10 @@ export const MasterDataModule: React.FC = () => {
                             </button>
                           </div>
                           <p className="text-[#1B2A45]/80 text-[11px] font-medium line-clamp-2">
-                            {triage.reasoning}
+                            {triage.summary}
                           </p>
                           <div className="flex flex-wrap gap-1 pt-1">
-                            {triage.triggers.slice(0, 3).map((trig, idx) => (
+                            {triage.symptomTriggers.slice(0, 3).map((trig, idx) => (
                               <span
                                 key={idx}
                                 className="px-1.5 py-0.2 rounded bg-white text-[#1B2A45] border border-[#E1D6BE] text-[9px] font-bold"
@@ -1549,10 +1579,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus layanan ${s.name}?`)) {
+                              confirmAndDelete(`Hapus layanan ${s.name}?`, () => {
                                 deleteService(s.id);
                                 addToast(`Layanan ${s.name} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -1627,10 +1657,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus staff ${emp.name}?`)) {
+                              confirmAndDelete(`Hapus staff ${emp.name}?`, () => {
                                 deleteEmployee(emp.id);
                                 addToast(`Staff ${emp.name} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -1701,10 +1731,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus supplier ${sup.name}?`)) {
+                              confirmAndDelete(`Hapus supplier ${sup.name}?`, () => {
                                 deleteSupplier(sup.id);
                                 addToast(`Supplier ${sup.name} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -1778,10 +1808,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus data obat ${d.name} dari master?`)) {
+                              confirmAndDelete(`Hapus data obat ${d.name} dari master?`, () => {
                                 deleteDrug(d.id);
                                 addToast(`Obat ${d.name} dihapus dari master!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -1855,10 +1885,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus kamar/kandang ${r.roomNo}?`)) {
+                              confirmAndDelete(`Hapus kamar/kandang ${r.roomNo}?`, () => {
                                 deleteHotelRoom(r.id);
                                 addToast(`Kamar/kandang ${r.roomNo} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -1934,10 +1964,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus paket grooming ${p.name}?`)) {
+                              confirmAndDelete(`Hapus paket grooming ${p.name}?`, () => {
                                 deleteGroomingPackage(p.id);
                                 addToast(`Paket grooming ${p.name} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -2012,10 +2042,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus armada ${u.vehicleName}?`)) {
+                              confirmAndDelete(`Hapus armada ${u.vehicleName}?`, () => {
                                 deleteAmbulanceUnit(u.id);
                                 addToast(`Armada ${u.vehicleName} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -2074,10 +2104,10 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Hapus template e-form ${t.title}?`)) {
+                              confirmAndDelete(`Hapus template e-form ${t.title}?`, () => {
                                 deleteEFormTemplate(t.id);
                                 addToast(`Template ${t.title} dihapus!`, 'success');
-                              }
+                              });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
                           >
@@ -2107,7 +2137,10 @@ export const MasterDataModule: React.FC = () => {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!newCategoryName.trim()) return;
+                if (!newCategoryName.trim()) {
+                  addToast('Nama kategori tidak boleh kosong.', 'error');
+                  return;
+                }
                 addProductCategory(newCategoryName.trim());
                 setNewCategoryName('');
               }}
@@ -2136,7 +2169,7 @@ export const MasterDataModule: React.FC = () => {
                     <span className="font-semibold text-[#1B2A45]">{c.name}</span>
                     <button
                       onClick={() => {
-                        if (window.confirm(`Hapus kategori "${c.name}"?`)) deleteProductCategory(c.id);
+                        confirmAndDelete(`Hapus kategori "${c.name}"?`, () => deleteProductCategory(c.id));
                       }}
                       className="p-1 hover:bg-rose-50 text-rose-600 rounded"
                     >
@@ -2158,7 +2191,10 @@ export const MasterDataModule: React.FC = () => {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!newWarehouseName.trim()) return;
+                if (!newWarehouseName.trim()) {
+                  addToast('Nama gudang tidak boleh kosong.', 'error');
+                  return;
+                }
                 addWarehouse(newWarehouseName.trim());
                 setNewWarehouseName('');
               }}
@@ -2187,7 +2223,7 @@ export const MasterDataModule: React.FC = () => {
                     <span className="font-semibold text-[#1B2A45]">{w.name}</span>
                     <button
                       onClick={() => {
-                        if (window.confirm(`Hapus gudang/lokasi "${w.name}"?`)) deleteWarehouse(w.id);
+                        confirmAndDelete(`Hapus gudang/lokasi "${w.name}"?`, () => deleteWarehouse(w.id));
                       }}
                       className="p-1 hover:bg-rose-50 text-rose-600 rounded"
                     >
@@ -2638,22 +2674,28 @@ export const MasterDataModule: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-bold mb-1">Gaji Pokok (Rp)</label>
+                  <label className="block font-bold mb-1">
+                    Gaji Pokok (Rp) {!canEditStaffCompensation && <span className="font-normal text-[10px] text-[#6B6656]">(Owner/Admin saja)</span>}
+                  </label>
                   <input
                     type="number"
                     value={staffForm.baseSalary}
                     onChange={(e) => setStaffForm({ ...staffForm, baseSalary: Number(e.target.value) })}
-                    className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45]"
+                    disabled={!canEditStaffCompensation}
+                    className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45] disabled:bg-[#F6F1E6] disabled:text-[#6B6656] disabled:cursor-not-allowed"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold mb-1">Komisi %</label>
+                  <label className="block font-bold mb-1">
+                    Komisi % {!canEditStaffCompensation && <span className="font-normal text-[10px] text-[#6B6656]">(Owner/Admin saja)</span>}
+                  </label>
                   <input
                     type="number"
                     value={staffForm.commissionRatePercent}
                     onChange={(e) => setStaffForm({ ...staffForm, commissionRatePercent: Number(e.target.value) })}
-                    className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45]"
+                    disabled={!canEditStaffCompensation}
+                    className="w-full bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-[#1B2A45] focus:outline-none focus:border-[#1B2A45] disabled:bg-[#F6F1E6] disabled:text-[#6B6656] disabled:cursor-not-allowed"
                   />
                 </div>
               </div>

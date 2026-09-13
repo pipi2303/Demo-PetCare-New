@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { authHeaders } from '../../utils/authToken';
 import {
   Cloud,
   HardDrive,
@@ -111,8 +112,8 @@ export const CloudBackupModule: React.FC = () => {
     setIsLoading(true);
     try {
       const [resStatus, resList] = await Promise.all([
-        fetch('/api/backup/status').then((r) => r.json()),
-        fetch('/api/backup/list').then((r) => r.json())
+        fetch('/api/backup/status', { headers: authHeaders() }).then((r) => r.json()),
+        fetch('/api/backup/list', { headers: authHeaders() }).then((r) => r.json())
       ]);
 
       if (resStatus && !resStatus.error) {
@@ -166,7 +167,7 @@ export const CloudBackupModule: React.FC = () => {
 
       const res = await fetch('/api/backup/trigger', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ payload })
       });
       const data = await res.json();
@@ -175,9 +176,14 @@ export const CloudBackupModule: React.FC = () => {
       await new Promise((r) => setTimeout(r, 400));
 
       if (data.success) {
+        // Payload yang dikirim hanya ringkasan JUMLAH record (pets.length,
+        // customers.length, dst), bukan isi data sungguhan — jadi ini catat
+        // metadata snapshot, bukan cadangan penuh yang bisa dipulihkan.
+        // Pesan sebelumnya ("Integritas data diverifikasi") membuatnya
+        // terdengar seperti cadangan lengkap yang aman direstore.
         addToast(
-          `Backup database berhasil diunggah ke ${data.snapshot.cloudBucket}! Integritas data diverifikasi (SHA-256).`,
-          'success'
+          `Snapshot metadata (jumlah record) berhasil dicatat ke ${data.snapshot.cloudBucket}. Catatan: ini belum mencadangkan isi data sungguhan — lihat catatan Mode Demo di dialog Restore.`,
+          'info'
         );
         fetchBackupData();
       } else {
@@ -193,7 +199,7 @@ export const CloudBackupModule: React.FC = () => {
 
   const handleVerifyChecksum = async (snapshot: BackupSnapshot) => {
     try {
-      const res = await fetch(`/api/backup/verify/${snapshot.id}`, { method: 'POST' });
+      const res = await fetch(`/api/backup/verify/${snapshot.id}`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (data.success && data.result.isValid) {
         addToast(
@@ -214,7 +220,7 @@ export const CloudBackupModule: React.FC = () => {
     try {
       const res = await fetch('/api/backup/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           endOfBusinessDayHour: Number(endHour),
           autoBackupEnabled: autoEnabled,
@@ -236,17 +242,46 @@ export const CloudBackupModule: React.FC = () => {
     }
   };
 
+  const handleDownloadSnapshot = async (snapshot: BackupSnapshot) => {
+    try {
+      const res = await fetch(`/api/backup/download/${snapshot.id}`, { headers: authHeaders() });
+      if (!res.ok) {
+        addToast('Anda tidak memiliki hak akses untuk mengunduh berkas backup ini.', 'error');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = snapshot.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      addToast(`Gagal mengunduh berkas backup: ${err.message}`, 'error');
+    }
+  };
+
   const handleRestoreSnapshot = async () => {
     if (!selectedSnapshotForRestore) return;
     setIsRestoring(true);
     try {
       await new Promise((r) => setTimeout(r, 900));
-      const res = await fetch(`/api/backup/restore/${selectedSnapshotForRestore.id}`, { method: 'POST' });
+      const res = await fetch(`/api/backup/restore/${selectedSnapshotForRestore.id}`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (data.success) {
+        // Sebelumnya toast ini mengklaim "Database berhasil dipulihkan...
+        // Integritas data terjaga sempurna" — padahal endpoint backend hanya
+        // membalas metadata snapshot, tidak pernah benar-benar menulis apa
+        // pun ke localStorage aplikasi ini (tempat seluruh data bisnis
+        // sungguhan tersimpan). Kalau staf mengira restore sungguhan
+        // terjadi saat insiden kehilangan data nyata, tidak ada yang benar
+        // pulih. Sampai backup/restore sungguhan dibangun (lihat Fase 01
+        // Fondasi Data), pesan ini jujur menyatakan ini simulasi demo.
         addToast(
-          `Database berhasil dipulihkan dari snapshot ${selectedSnapshotForRestore.filename}! Integritas data terjaga sempurna.`,
-          'success'
+          `Simulasi restore untuk snapshot ${selectedSnapshotForRestore.filename} selesai. Ini DEMO — belum ada pemulihan data sungguhan ke aplikasi (lihat catatan di atas modal).`,
+          'info'
         );
         setSelectedSnapshotForRestore(null);
       }
@@ -495,14 +530,13 @@ export const CloudBackupModule: React.FC = () => {
                     >
                       <ShieldCheck className="w-3 h-3 text-[#B8905A]" /> Verifikasi
                     </button>
-                    <a
-                      href={`/api/backup/download/${b.id}`}
-                      download
+                    <button
+                      onClick={() => handleDownloadSnapshot(b)}
                       className="px-2.5 py-1 bg-[#F6F1E6] hover:bg-[#E1D6BE]/60 text-[#1B2A45] font-bold text-[11px] rounded border border-[#E1D6BE] transition-all inline-flex items-center gap-1"
                       title="Unduh Berkas Arsip (.enc.json)"
                     >
                       <Download className="w-3 h-3 text-[#1B2A45]" /> Unduh
-                    </a>
+                    </button>
                     <button
                       onClick={() => setSelectedSnapshotForRestore(b)}
                       className="px-2.5 py-1 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-[11px] rounded transition-all inline-flex items-center gap-1"
@@ -684,9 +718,12 @@ export const CloudBackupModule: React.FC = () => {
               </div>
             </div>
 
-            <p className="text-[11px] text-[#6B6656]">
-              Proses restore akan memverifikasi integritas bit, merekonstruksi data EMR, transaksi dan master data, lalu menyinkronkannya kembali secara aman.
-            </p>
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-[11px] text-amber-900 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <span>
+                <strong>Mode Demo:</strong> tombol ini mensimulasikan alur restore untuk keperluan pratinjau produk. Belum ada pemulihan data sungguhan ke aplikasi ini — jangan andalkan sebagai prosedur pemulihan bencana (disaster recovery) yang sesungguhnya sampai fitur backup/restore nyata dibangun.
+              </span>
+            </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button

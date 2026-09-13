@@ -68,10 +68,28 @@ export const ReportsExportModule: React.FC = () => {
     pets = [],
     inpatients = [],
     labTests = [],
+    surgicalProcedures = [],
+    vacHistories = [],
+    cashTransactions = [],
     branches = [],
-    activeBranchId
+    activeBranchId,
+    appSettings
   } = useData();
   const { addToast } = useToast();
+
+  // Identitas kop surat resmi sekarang dari Pengaturan Sistem (Profil
+  // Klinik) — sebelumnya laporan resmi selalu memakai DEFAULT_COMPANY_INFO
+  // hardcoded apa pun yang Owner isi di Settings. branchName tetap diisi
+  // terpisah oleh pemanggil (selectedBranchName, bisa diganti di form).
+  const reportCompanyInfoBase: Omit<typeof DEFAULT_COMPANY_INFO, 'branchName'> = {
+    clinicName: appSettings.clinicName,
+    subTitle: appSettings.slogan,
+    address: appSettings.clinicAddress,
+    phone: appSettings.clinicPhone,
+    email: appSettings.clinicEmail,
+    npwp: appSettings.taxId,
+    licenseNo: appSettings.sipNumber
+  };
 
   const [activeMainTab, setActiveMainTab] = useState<'financialPdf' | 'medicalPdf' | 'csvExport'>('financialPdf');
   const [selectedMonth, setSelectedMonth] = useState<string>('Agustus');
@@ -94,26 +112,6 @@ export const ReportsExportModule: React.FC = () => {
   const [previewMode, setPreviewMode] = useState<'financial' | 'medical'>('financial');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
 
-  // Financial Chart Data
-  const monthlyFinancialData = [
-    { month: 'Jan', revenue: 18500000, expense: 9200000, profit: 9300000 },
-    { month: 'Feb', revenue: 21000000, expense: 10100000, profit: 10900000 },
-    { month: 'Mar', revenue: 19800000, expense: 8900000, profit: 10900000 },
-    { month: 'Apr', revenue: 24500000, expense: 11200000, profit: 13300000 },
-    { month: 'Mei', revenue: 23000000, expense: 10500000, profit: 12500000 },
-    { month: 'Jun', revenue: 26800000, expense: 12000000, profit: 14800000 },
-    { month: 'Jul', revenue: 28400000, expense: 12800000, profit: 15600000 },
-    { month: 'Agt', revenue: 31200000, expense: 13500000, profit: 17700000 }
-  ];
-
-  // Revenue By Department Data
-  const departmentRevenueData = [
-    { name: 'Klinik & Rawat Medis', value: 14200000, color: '#1B2A45', share: '44%' },
-    { name: 'Pet Shop Retail POS', value: 8500000, color: '#B8905A', share: '28%' },
-    { name: 'Grooming Salon & Spa', value: 4800000, color: '#3A5A8C', share: '16%' },
-    { name: 'Pet Hotel Boarding', value: 3700000, color: '#D9B98A', share: '12%' }
-  ];
-
   // Medical Morbidity Chart Data
   const medicalMorbidityData = [
     { name: 'Gastritis Akut', count: 28, share: '18.2%' },
@@ -124,21 +122,83 @@ export const ReportsExportModule: React.FC = () => {
     { name: 'Scalling & Dental', count: 12, share: '7.8%' }
   ];
 
-  // Computed Financial Totals
-  const baseInvoiceTotal = invoices.reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
-  const totalMonthlyRevenue = baseInvoiceTotal + 31200000;
-  const totalMonthlyExpense = 13500000;
-  const netProfit = totalMonthlyRevenue - totalMonthlyExpense;
-  const estimatedTax = includeTaxCalculation ? Math.round((totalMonthlyRevenue * taxRatePercent) / 100) : 0;
-  const netProfitAfterTax = netProfit - estimatedTax;
-  const profitMargin = ((netProfit / totalMonthlyRevenue) * 100).toFixed(1);
+  // Periode terpilih (YYYY-MM) — dipakai untuk memfilter invoice & kas keluar
+  // supaya laporan "Agustus 2026" benar-benar hanya berisi transaksi Agustus
+  // 2026, bukan akumulasi seluruh riwayat aplikasi.
+  const MONTH_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const periodKey = `${selectedYear}-${String(MONTH_NAMES.indexOf(selectedMonth) + 1).padStart(2, '0')}`;
+  const periodInvoices = invoices.filter((inv) => inv.status === 'Lunas' && inv.date?.startsWith(periodKey));
+  const periodCashOut = cashTransactions.filter((ct) => ct.type === 'Keluar' && ct.date?.startsWith(periodKey));
 
-  // Computed Medical Stats
-  const totalPatientEncounters = clinicVisits.length + 118;
-  const totalInpatientAdmissions = inpatients.length + 12;
-  const totalLabDiagnostics = labTests.length + 38;
-  const totalSurgeriesCount = 14;
-  const totalVaccinesCount = 42;
+  // Computed Financial Totals — murni dari invoice & buku kas sungguhan untuk
+  // periode terpilih, tanpa angka tambahan/contoh di manapun.
+  const totalMonthlyRevenue = periodInvoices.reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
+  const totalMonthlyExpense = periodCashOut.reduce((acc, ct) => acc + ct.amount, 0);
+  const netProfit = totalMonthlyRevenue - totalMonthlyExpense;
+  const estimatedTax = includeTaxCalculation && totalMonthlyRevenue > 0 ? Math.round((totalMonthlyRevenue * taxRatePercent) / 100) : 0;
+  const netProfitAfterTax = netProfit - estimatedTax;
+  const profitMargin = totalMonthlyRevenue > 0 ? ((netProfit / totalMonthlyRevenue) * 100).toFixed(1) : '0.0';
+
+  // Tren 8 bulan terakhir (berakhir di periode terpilih) — dihitung dari
+  // invoice & buku kas sungguhan per bulan, bukan deret angka contoh tetap.
+  const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
+  const selectedMonthIndex = MONTH_NAMES.indexOf(selectedMonth);
+  const monthlyFinancialData = Array.from({ length: 8 }, (_, i) => {
+    const offset = 7 - i;
+    const d = new Date(selectedYear, selectedMonthIndex - offset, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const rev = invoices.filter((inv) => inv.status === 'Lunas' && inv.date?.startsWith(key)).reduce((s, inv) => s + inv.totalAmount, 0);
+    const exp = cashTransactions.filter((ct) => ct.type === 'Keluar' && ct.date?.startsWith(key)).reduce((s, ct) => s + ct.amount, 0);
+    return { month: MONTH_SHORT[d.getMonth()], revenue: rev, expense: exp, profit: rev - exp };
+  });
+
+  // Pendapatan per unit bisnis untuk periode terpilih — dipetakan dari
+  // kategori tiap item invoice (sama seperti tab Laba/Rugi di Billing &
+  // Kasir), bukan persentase tetap 44/28/16/12% yang dikarang.
+  const productCategoryNames = new Set(stockItems.map((s) => s.category));
+  const REVENUE_UNITS = ['Klinik', 'Grooming', 'Pet Hotel', 'Pet Shop'] as const;
+  const classifyRevenueUnit = (category: string): (typeof REVENUE_UNITS)[number] | 'Lainnya' => {
+    if (category === 'Telehealth') return 'Klinik';
+    if ((REVENUE_UNITS as readonly string[]).includes(category)) return category as (typeof REVENUE_UNITS)[number];
+    if (productCategoryNames.has(category)) return 'Pet Shop';
+    return 'Lainnya';
+  };
+  const unitRevenueMap: Record<string, number> = { Klinik: 0, Grooming: 0, 'Pet Hotel': 0, 'Pet Shop': 0, Lainnya: 0 };
+  periodInvoices.forEach((inv) => {
+    inv.items.forEach((item) => {
+      unitRevenueMap[classifyRevenueUnit(item.category)] += item.totalPrice;
+    });
+  });
+  const UNIT_LABELS: Record<string, string> = {
+    Klinik: 'Klinik & Rawat Medis',
+    'Pet Shop': 'Pet Shop Retail POS',
+    Grooming: 'Grooming Salon & Spa',
+    'Pet Hotel': 'Pet Hotel Boarding',
+    Lainnya: 'Lainnya (Belum Terpetakan)'
+  };
+  const UNIT_COLORS: Record<string, string> = {
+    Klinik: '#1B2A45',
+    'Pet Shop': '#B8905A',
+    Grooming: '#3A5A8C',
+    'Pet Hotel': '#D9B98A',
+    Lainnya: '#8C93A0'
+  };
+  const departmentRevenueData = Object.keys(unitRevenueMap)
+    .filter((k) => unitRevenueMap[k] > 0)
+    .map((k) => ({
+      name: UNIT_LABELS[k],
+      value: unitRevenueMap[k],
+      color: UNIT_COLORS[k],
+      share: totalMonthlyRevenue > 0 ? `${Math.round((unitRevenueMap[k] / totalMonthlyRevenue) * 100)}%` : '0%'
+    }));
+
+  // Computed Medical Stats — jumlah asli dari koleksi rekam medis, tanpa
+  // angka tambahan fiktif (sebelumnya clinicVisits.length + 118, dst).
+  const totalPatientEncounters = clinicVisits.length;
+  const totalInpatientAdmissions = inpatients.length;
+  const totalLabDiagnostics = labTests.length;
+  const totalSurgeriesCount = surgicalProcedures.length;
+  const totalVaccinesCount = vacHistories.length;
   const felineShareCount = Math.round(totalPatientEncounters * 0.53);
   const canineShareCount = Math.round(totalPatientEncounters * 0.42);
 
@@ -153,7 +213,7 @@ export const ReportsExportModule: React.FC = () => {
         periodMonth: selectedMonth,
         periodYear: selectedYear,
         company: {
-          ...DEFAULT_COMPANY_INFO,
+          ...reportCompanyInfoBase,
           branchName: selectedBranchName
         },
         includeTaxCalculation,
@@ -164,7 +224,7 @@ export const ReportsExportModule: React.FC = () => {
         notes: managementNotes
       };
 
-      const pdfDoc = generateFinancialReportPDF(invoices, stockItems, options);
+      const pdfDoc = generateFinancialReportPDF(periodInvoices, periodCashOut, stockItems, options);
       const filename = `Laporan_Keuangan_${selectedMonth}_${selectedYear}_PetCare_ERP.pdf`;
       downloadPDFDocument(pdfDoc, filename);
 
@@ -185,7 +245,7 @@ export const ReportsExportModule: React.FC = () => {
         periodMonth: selectedMonth,
         periodYear: selectedYear,
         company: {
-          ...DEFAULT_COMPANY_INFO,
+          ...reportCompanyInfoBase,
           branchName: selectedBranchName
         },
         includeEpidemiology: true,
@@ -197,7 +257,7 @@ export const ReportsExportModule: React.FC = () => {
         notes: managementNotes
       };
 
-      const pdfDoc = generateMedicalReportPDF(clinicVisits, pets, inpatients, labTests, options);
+      const pdfDoc = generateMedicalReportPDF(clinicVisits, pets, inpatients, labTests, surgicalProcedures, vacHistories, options);
       const filename = `Rekapitulasi_Medis_${selectedMonth}_${selectedYear}_PetCare_ERP.pdf`;
       downloadPDFDocument(pdfDoc, filename);
 
@@ -214,7 +274,7 @@ export const ReportsExportModule: React.FC = () => {
   const handleExportCSV = () => {
     let csvData = 'ID,Nama/Ref,Kategori/Status,Nilai/Jumlah\n';
     if (csvReportType === 'Financial') {
-      csvData += invoices.map((i) => `${i.invoiceNo},${i.customerName},${i.status},${i.totalAmount}`).join('\n');
+      csvData += periodInvoices.map((i) => `${i.invoiceNo},${i.customerName},${i.status},${i.totalAmount}`).join('\n');
     } else if (csvReportType === 'Inventory') {
       csvData += stockItems.map((s) => `${s.sku},${s.name},${s.category},${s.stock}`).join('\n');
     } else if (csvReportType === 'Medical') {
@@ -916,14 +976,14 @@ export const ReportsExportModule: React.FC = () => {
                   </div>
                   <div>
                     <h2 className="text-base md:text-lg font-extrabold text-[#1B2A45] font-display">
-                      {DEFAULT_COMPANY_INFO.clinicName}
+                      {reportCompanyInfoBase.clinicName}
                     </h2>
-                    <p className="text-xs text-[#6B6656]">{DEFAULT_COMPANY_INFO.subTitle}</p>
+                    <p className="text-xs text-[#6B6656]">{reportCompanyInfoBase.subTitle}</p>
                     <p className="text-[11px] text-[#6B6656] mt-0.5">
-                      {DEFAULT_COMPANY_INFO.address} | Telp: {DEFAULT_COMPANY_INFO.phone}
+                      {reportCompanyInfoBase.address} | Telp: {reportCompanyInfoBase.phone}
                     </p>
                     <p className="text-[10px] text-[#B8905A] font-bold mt-0.5">
-                      NPWP: {DEFAULT_COMPANY_INFO.npwp} | Izin: {DEFAULT_COMPANY_INFO.licenseNo}
+                      NPWP: {reportCompanyInfoBase.npwp} | Izin: {reportCompanyInfoBase.licenseNo}
                     </p>
                   </div>
                 </div>
@@ -983,25 +1043,28 @@ export const ReportsExportModule: React.FC = () => {
                           <th className="p-2">Unit Usaha / Departemen</th>
                           <th className="p-2">Realisasi Pendapatan</th>
                           <th className="p-2">Kontribusi</th>
-                          <th className="p-2">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E1D6BE]">
-                        {departmentRevenueData.map((d) => (
-                          <tr key={d.name} className="hover:bg-[#F6F1E6]/40">
-                            <td className="p-2 font-medium">{d.name}</td>
-                            <td className="p-2 font-bold">Rp {d.value.toLocaleString('id-ID')}</td>
-                            <td className="p-2">{d.share}</td>
-                            <td className="p-2 text-emerald-700 font-bold">Mencapai Target</td>
+                        {departmentRevenueData.length > 0 ? (
+                          departmentRevenueData.map((d) => (
+                            <tr key={d.name} className="hover:bg-[#F6F1E6]/40">
+                              <td className="p-2 font-medium">{d.name}</td>
+                              <td className="p-2 font-bold">Rp {d.value.toLocaleString('id-ID')}</td>
+                              <td className="p-2">{d.share}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td className="p-2 text-[#6B6656]" colSpan={3}>Tidak ada invoice lunas pada periode ini.</td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                       <tfoot className="bg-[#F6F1E6] font-bold text-[#1B2A45] border-t border-[#E1D6BE]">
                         <tr>
                           <td className="p-2">TOTAL PENDAPATAN BULANAN</td>
                           <td className="p-2 text-emerald-800">Rp {totalMonthlyRevenue.toLocaleString('id-ID')}</td>
                           <td className="p-2">100%</td>
-                          <td className="p-2 text-emerald-700">+6.4% vs Target</td>
                         </tr>
                       </tfoot>
                     </table>

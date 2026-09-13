@@ -42,7 +42,6 @@ export interface AuditDiscrepancyItem {
   discrepancyValue: number; // discrepancyQty * purchasePrice
   unitPrice: number;
   sellingPrice: number;
-  confidenceScore: number; // AI confidence percentage
   probableCause: string;
   aiRecommendation: string;
   urgency: 'Kritis' | 'Tinggi' | 'Moderat' | 'Cocok';
@@ -71,23 +70,22 @@ export const InventoryAuditAssistant: React.FC = () => {
   const [customPhysicalInput, setCustomPhysicalInput] = useState<number>(0);
   const [operatorName, setOperatorName] = useState('Kepala Logistik & Audit');
 
-  // Interactive physical audit log map state: stockId -> recorded physical count
-  const [physicalCounts, setPhysicalCounts] = useState<Record<string, number>>(() => {
-    // Initial mock physical count variance for realistic audit detection
-    return {
-      'stock-1': 18, // Royal Canin: Sys 24 -> Phys 18 (Selisih -6)
-      'stock-2': 12, // Me-O: Sys 15 -> Phys 12 (Selisih -3)
-      'stock-3': 45, // Whiskas: Sys 50 -> Phys 45 (Selisih -5)
-      'stock-4': 8,  // Bravecto: Sys 8 -> Phys 8 (Cocok)
-      'stock-5': 3,  // Nexgard: Sys 4 -> Phys 3 (Selisih -1)
-      'stock-6': 10, // Cat Litter: Sys 10 -> Phys 10 (Cocok)
-      'stock-7': 28, // Amoxicillin: Sys 35 -> Phys 28 (Selisih -7)
-      'stock-8': 14, // Shampoo: Sys 14 -> Phys 14 (Cocok)
-    };
-  });
+  // Interactive physical audit log map state: stockId -> recorded physical count.
+  // Sebelumnya di-seed dengan ID palsu ('stock-1'..'stock-8') yang TIDAK
+  // PERNAH cocok dengan stockItems.id asli (format si_<timestamp>) — jadi
+  // setiap item nyata otomatis dianggap "Cocok" (selisih 0) sampai staf
+  // mengetik ulang hitungan fisik secara manual, padahal "AI Audit Engine"
+  // ini diklaim otomatis mendeteksi penyusutan stok. Kosong di awal = jujur:
+  // belum ada opname fisik yang dicatat, bukan "semua pasti cocok".
+  const [physicalCounts, setPhysicalCounts] = useState<Record<string, number>>({});
 
   // Reconciled IDs tracker
   const [reconciledIds, setReconciledIds] = useState<string[]>([]);
+  // Guard klik-ganda — kedua handler rekonsiliasi (single & bulk) memanggil
+  // updateStockItem/addStockMovement secara sinkron; dua klik cepat sebelum
+  // re-render bisa menjalankan handler dua kali dengan data auditAnalysis
+  // yang masih basi, menggandakan entri StockMovement 'Opname'.
+  const [isReconciling, setIsReconciling] = useState(false);
 
   // Compute calculated sales from invoices for each item
   const salesMap = useMemo(() => {
@@ -124,24 +122,20 @@ export const InventoryAuditAssistant: React.FC = () => {
       let urgency: AuditDiscrepancyItem['urgency'] = 'Cocok';
       let probableCause = 'Jumlah fisik di rak gudang tepat dan sinkron dengan sistem.';
       let recommendation = 'Tidak diperlukan tindakan penyesuaian. Teruskan pemantauan stok berkala.';
-      let confidence = 98;
 
       if (diff < 0) {
         const absDiff = Math.abs(diff);
         if (absDiff >= 5 || diffVal > 300000) {
           urgency = 'Kritis';
-          confidence = 94;
           probableCause = `Terdeteksi ${absDiff} ${item.unit} fisik hilang / belum tercatat pada POS kasir atau terdapat kerusakan barang di rak (${item.warehouse}).`;
           recommendation = `Segera lakukan rekonsiliasi stok sistem ke ${recordedPhysical} ${item.unit} dan audit mutasi transaksi kasir shift terakhir.`;
         } else {
           urgency = 'Tinggi';
-          confidence = 89;
           probableCause = `Selisih minor ${absDiff} ${item.unit}. Kemungkinan sampel tester, kemasan robek, atau jeda input kasir offline.`;
           recommendation = `Lakukan 'Reconcile Now' untuk menyelaraskan nilai buku inventaris dengan hitungan fisik riil.`;
         }
       } else if (diff > 0) {
         urgency = 'Moderat';
-        confidence = 91;
         probableCause = `Stok fisik berlebih +${diff} ${item.unit}. Kemungkinan barang retur pelanggan belum diinput atau bonus supplier belum terdaftar.`;
         recommendation = `Verifikasi bukti tanda terima PO dan update saldo buku agar sesuai dengan stok rak fisik.`;
       }
@@ -162,7 +156,6 @@ export const InventoryAuditAssistant: React.FC = () => {
         discrepancyValue: diffVal,
         unitPrice: item.purchasePrice,
         sellingPrice: item.sellingPrice,
-        confidenceScore: confidence,
         probableCause,
         aiRecommendation: recommendation,
         urgency,
@@ -216,10 +209,11 @@ export const InventoryAuditAssistant: React.FC = () => {
 
   // Reconcile Single Item
   const handleExecuteReconciliation = () => {
-    if (!selectedAuditItem) return;
+    if (!selectedAuditItem || isReconciling) return;
 
     const targetStock = stockItems.find((s) => s.id === selectedAuditItem.stockItemId);
     if (!targetStock) return;
+    setIsReconciling(true);
 
     const newStockQty = customPhysicalInput;
     const diff = newStockQty - targetStock.stock;
@@ -249,15 +243,18 @@ export const InventoryAuditAssistant: React.FC = () => {
       `✅ Berhasil Rekonsiliasi: Stok "${targetStock.name}" disesuaikan ke ${newStockQty} ${targetStock.unit} (${diff >= 0 ? '+' : ''}${diff}).`,
       'success'
     );
+    setIsReconciling(false);
   };
 
   // Bulk Reconcile All Discrepancies
   const handleBulkReconcileAll = () => {
+    if (isReconciling) return;
     const unadjusted = auditAnalysis.filter((a) => a.discrepancyQty !== 0 && a.status === 'Perlu Rekonsiliasi');
     if (unadjusted.length === 0) {
       addToast('Semua item telah sesuai dan tidak ada selisih stok.', 'info');
       return;
     }
+    setIsReconciling(true);
 
     unadjusted.forEach((item) => {
       const diff = item.physicalCount - item.systemStock;
@@ -276,6 +273,7 @@ export const InventoryAuditAssistant: React.FC = () => {
 
     setReconciledIds((prev) => [...prev, ...unadjusted.map((u) => u.stockItemId)]);
     addToast(`⚡ Berhasil rekonsiliasi massal ${unadjusted.length} item barang ke hitungan fisik rak!`, 'success');
+    setIsReconciling(false);
   };
 
   // Quick Update Physical Count for an item
@@ -323,7 +321,7 @@ export const InventoryAuditAssistant: React.FC = () => {
 
             <button
               onClick={handleBulkReconcileAll}
-              disabled={totalDiscrepancies === 0}
+              disabled={totalDiscrepancies === 0 || isReconciling}
               className="px-4 py-2.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:from-[#c79e65] hover:to-[#ae8652] text-[#101A2C] font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Zap className="w-4 h-4 fill-current" />
@@ -553,9 +551,6 @@ export const InventoryAuditAssistant: React.FC = () => {
                               Nilai Selisih: Rp {item.discrepancyValue.toLocaleString('id-ID')}
                             </p>
                           )}
-                          <div className="flex items-center gap-2 text-[10px] text-[#6B6656]">
-                            <span className="text-[#B8905A] font-semibold">AI Confidence: {item.confidenceScore}%</span>
-                          </div>
                         </div>
                       </td>
 
@@ -690,7 +685,8 @@ export const InventoryAuditAssistant: React.FC = () => {
               <div className="pt-2 flex items-center gap-2">
                 <button
                   onClick={handleExecuteReconciliation}
-                  className="flex-1 py-3 bg-[#B8905A] hover:bg-[#9E7848] text-[#101A2C] font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={isReconciling}
+                  className="flex-1 py-3 bg-[#B8905A] hover:bg-[#9E7848] text-[#101A2C] font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Setujui & Rekonsiliasi Sekarang</span>

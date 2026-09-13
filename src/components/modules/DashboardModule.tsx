@@ -42,12 +42,13 @@ import {
   Package,
   Receipt,
   Boxes,
-  HeartPulse,
   QrCode
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend } from 'recharts';
-import { DoseCalculator } from '../common/DoseCalculator';
-import { CctvMonitor } from '../common/CctvMonitor';
+import { DoseCalculator, DRUG_PROTOCOLS } from '../common/DoseCalculator';
+import { PinConfirmModal } from '../auth/PinConfirmModal';
+import { usePermissions } from '../../hooks/usePermissions';
+import { CctvMonitor, deriveCctvRooms } from '../common/CctvMonitor';
 import { QueueDisplay } from '../common/QueueDisplay';
 import { PredictiveInventoryWidget } from '../common/PredictiveInventoryWidget';
 import { PredictiveTrafficGrowthWidget } from '../common/PredictiveTrafficGrowthWidget';
@@ -91,35 +92,28 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
   const [doctorCategoryFilter, setDoctorCategoryFilter] = React.useState<'all' | 'dokter' | 'paramedik'>('all');
   const [hideOffDuty, setHideOffDuty] = React.useState<boolean>(false);
 
-  const { user, switchRole, activeOwnership, setActiveOwnership } = useAuth();
-  
-  // Dynamic role resolution from activeOwnership or user role
-  let effectiveRole: UserRole = 'owner_petcare';
-  if (activeOwnership === 'owner_petshop' || user?.ownershipType === 'owner_petshop' || user?.role === 'owner_petshop' || user?.role === 'kasir') {
-    effectiveRole = 'owner_petshop';
-  } else if (activeOwnership === 'owner_klinik' || user?.ownershipType === 'owner_klinik' || user?.role === 'owner_klinik' || user?.role === 'dokter' || user?.role === 'perawat') {
-    effectiveRole = 'owner_klinik';
-  } else if (activeOwnership === 'owner_petcare' || user?.ownershipType === 'owner_petcare' || user?.role === 'owner_petcare' || user?.role === 'superadmin' || user?.role === 'admin' || user?.role === 'owner') {
-    effectiveRole = 'owner_petcare';
-  } else if (user?.role) {
-    effectiveRole = user.role;
-  }
+  const { setActiveOwnership, findAccountEmailByRole } = useAuth();
+  const [pinTarget, setPinTarget] = React.useState<{ role: UserRole; email: string } | null>(null);
 
-  const isPetshop = effectiveRole === 'owner_petshop' || effectiveRole === 'kasir';
-  const isClinic = effectiveRole === 'owner_klinik' || effectiveRole === 'dokter' || effectiveRole === 'perawat';
-  const isPetcare = !isPetshop && !isClinic;
+  // Single source of truth for role/permission resolution (see usePermissions.ts) —
+  // replaces the divergent effectiveRole logic that used to live separately here.
+  const { role: effectiveRole, isPetshop, isClinic, isPetcare } = usePermissions();
 
+  const OWNERSHIP_LABELS: Record<string, string> = {
+    owner_petcare: 'Owner PetCare (Konsolidasi Multi-Unit)',
+    owner_petshop: 'Owner PetShop (Retail & POS)',
+    owner_klinik: 'Owner Klinik (Praktik Medis Vet)'
+  };
+
+  // Opens a PIN prompt instead of switching instantly — the target
+  // account's PIN is verified server-side via AuthContext.switchAccount.
   const handleSwitchOwnership = (targetRole: UserRole) => {
-    switchRole(targetRole);
-    if (setActiveOwnership) {
-      setActiveOwnership(targetRole);
+    const email = findAccountEmailByRole(targetRole);
+    if (!email) {
+      addToast(`Tidak ada akun demo terdaftar untuk peran: ${targetRole.replace('_', ' ')}`, 'error');
+      return;
     }
-    const roleLabels: Record<string, string> = {
-      owner_petcare: 'Owner PetCare (Konsolidasi Multi-Unit)',
-      owner_petshop: 'Owner PetShop (Retail & POS)',
-      owner_klinik: 'Owner Klinik (Praktik Medis Vet)'
-    };
-    addToast(`Perspektif Manajemen aktif: ${roleLabels[targetRole] || targetRole}`, 'success');
+    setPinTarget({ role: targetRole, email });
   };
 
   // Redesigned Clinical / Retail Utilities & Surveillance State
@@ -303,6 +297,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
     pets,
     clinicVisits,
     hotelReservations,
+    inpatients,
     groomingSessions,
     telehealthSessions,
     invoices,
@@ -310,7 +305,6 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
     vacSchedules,
     carePlans,
     stockItems,
-    inpatients,
     purchaseOrders
   } = useData();
 
@@ -324,24 +318,57 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
   const activeBoarding = (hotelReservations || []).filter((h) => h?.status === 'Aktif').length;
   const activeGrooming = (groomingSessions || []).filter((g) => g?.stage !== 'Selesai').length;
   const activeTelehealth = (telehealthSessions || []).filter((t) => t?.status === 'Berlangsung' || t?.status === 'Menunggu').length;
-  const activeInpatients = (inpatients || []).filter((i) => i?.status === 'Dirawat').length;
 
   const todayStr = new Date().toISOString().substring(0, 10);
   const revenueToday = (invoices || [])
     .filter((i) => i?.status === 'Lunas' && i?.date === todayStr)
     .reduce((sum, i) => sum + (i?.totalAmount || 0), 0);
 
+  const currentMonthStr = todayStr.slice(0, 7); // 'YYYY-MM'
   const revenueMonth = (invoices || [])
-    .filter((i) => i?.status === 'Lunas')
+    .filter((i) => i?.status === 'Lunas' && i?.date?.startsWith(currentMonthStr))
     .reduce((sum, i) => sum + (i?.totalAmount || 0), 0);
 
   // Retail / Petshop specific metrics
   const totalStockUnits = (stockItems || []).reduce((sum, s) => sum + (s?.stock || 0), 0);
-  const totalStockAssetValue = (stockItems || []).reduce((sum, s) => sum + ((s?.stock || 0) * (s?.unitPrice || 65000)), 0);
+  const totalStockAssetValue = (stockItems || []).reduce((sum, s) => sum + ((s?.stock || 0) * (s?.purchasePrice || 0)), 0);
   const lowStockRetailItems = (stockItems || []).filter((s) => (s?.stock || 0) <= (s?.minStock || 10));
-  const posSalesTodayCount = Math.max(3, (invoices || []).filter((i) => i?.date === todayStr).length);
-  const avgBasketSize = posSalesTodayCount > 0 ? Math.round((revenueToday || 2450000) / posSalesTodayCount) : 125000;
-  const pendingOrdersCount = (purchaseOrders || []).filter((p) => p?.status === 'Menunggu Kirim' || p?.status === 'Draft').length;
+  // Top 5 barang paling kritis (rasio stok/stok-minimum terkecil) untuk widget
+  // Fast-Moving & Reorder — data nyata dari stockItems, bukan daftar tetap.
+  const topReorderItems = (stockItems || [])
+    .map((s) => {
+      const min = s?.minStock || 1;
+      const stock = s?.stock || 0;
+      const ratio = min > 0 ? stock / min : stock > 0 ? 1 : 0;
+      const percent = Math.min(100, Math.round(ratio * 100));
+      const urgency: 'Kritis' | 'Perlu Order' | 'Aman' = percent <= 40 ? 'Kritis' : percent <= 75 ? 'Perlu Order' : 'Aman';
+      return { id: s.id, name: s.name, stock, min, unit: s.unit, supplier: s.supplierName, percent, urgency };
+    })
+    .sort((a, b) => a.percent - b.percent)
+    .slice(0, 5);
+  const posSalesTodayCount = (invoices || []).filter((i) => i?.date === todayStr).length;
+  const avgBasketSize = posSalesTodayCount > 0 ? Math.round(revenueToday / posSalesTodayCount) : 0;
+  const recentPosInvoices = (invoices || [])
+    .filter((i) => i?.date === todayStr)
+    .slice()
+    .reverse()
+    .slice(0, 5);
+  const pendingOrdersCount = (purchaseOrders || []).filter((p) => p?.status === 'Dikirim' || p?.status === 'Draft').length;
+  const todayLunasInvoices = (invoices || []).filter((i) => i?.status === 'Lunas' && i?.date === todayStr);
+  const itemsSoldToday = todayLunasInvoices.reduce(
+    (sum, inv) => sum + (inv.items || []).reduce((itemSum, item) => itemSum + (item?.quantity || 0), 0),
+    0
+  );
+  // "Resep" ditaksir dari item invoice klinik hari ini berkategori obat/vaksin/apotek.
+  const prescriptionsServedToday = todayLunasInvoices.reduce(
+    (sum, inv) =>
+      sum +
+      (inv.items || []).filter((item) => {
+        const c = (item?.category || '').toLowerCase();
+        return c.includes('obat') || c.includes('vaksin') || c.includes('apotek') || c.includes('resep') || c.includes('racik');
+      }).length,
+    0
+  );
 
   // Custom Chart Components for Theme Styling
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -382,66 +409,114 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
     );
   };
 
-  // Role-specific Revenue Datasets
-  const petshopRevenueData = [
-    { day: 'Sen', Pakan: 1400000, Pasir: 450000, Suplemen: 300000, Aksesoris: 250000, Total: 2400000, MingguLalu: 2100000 },
-    { day: 'Sel', Pakan: 1600000, Pasir: 500000, Suplemen: 350000, Aksesoris: 300000, Total: 2750000, MingguLalu: 2300000 },
-    { day: 'Rab', Pakan: 1900000, Pasir: 600000, Suplemen: 400000, Aksesoris: 350000, Total: 3250000, MingguLalu: 2900000 },
-    { day: 'Kam', Pakan: 1300000, Pasir: 400000, Suplemen: 300000, Aksesoris: 200000, Total: 2200000, MingguLalu: 2500000 },
-    { day: 'Jum', Pakan: 2400000, Pasir: 750000, Suplemen: 500000, Aksesoris: 450000, Total: 4100000, MingguLalu: 3600000 },
-    { day: 'Sab', Pakan: 3800000, Pasir: 1200000, Suplemen: 800000, Aksesoris: 700000, Total: 6500000, MingguLalu: 5800000 },
-    { day: 'Min', Pakan: 3400000, Pasir: 1100000, Suplemen: 750000, Aksesoris: 650000, Total: 5900000, MingguLalu: 5200000 },
-  ];
+  // Role-specific revenue bucketing: setiap InvoiceItem.category adalah teks
+  // bebas (diisi manual di berbagai modul), jadi dipetakan ke salah satu dari
+  // 4 kategori tampilan per role via pencocokan kata kunci sederhana — setiap
+  // item jatuh ke tepat satu bucket sehingga jumlah bucket selalu sama dengan
+  // total invoice (tidak ada kategori "tak dikenal" yang hilang dari total).
+  const categorizeClinicItem = (category?: string): 'RawatJalan' | 'Bedah' | 'Inpatient' | 'ApotekLab' => {
+    const c = (category || '').toLowerCase();
+    if (c.includes('bedah') || c.includes('operasi') || c.includes('surgery')) return 'Bedah';
+    if (c.includes('vaksin') || c.includes('obat') || c.includes('apotek') || c.includes('resep') || c.includes('racik')) return 'ApotekLab';
+    if (c.includes('inap') || c.includes('infus') || c.includes('icu')) return 'Inpatient';
+    return 'RawatJalan';
+  };
 
-  const clinicRevenueData = [
-    { day: 'Sen', RawatJalan: 1200000, Bedah: 800000, Inpatient: 450000, ApotekLab: 350000, Total: 2800000, MingguLalu: 2400000 },
-    { day: 'Sel', RawatJalan: 1400000, Bedah: 900000, Inpatient: 500000, ApotekLab: 400000, Total: 3200000, MingguLalu: 2700000 },
-    { day: 'Rab', RawatJalan: 1600000, Bedah: 1200000, Inpatient: 600000, ApotekLab: 450000, Total: 3850000, MingguLalu: 3300000 },
-    { day: 'Kam', RawatJalan: 1100000, Bedah: 700000, Inpatient: 400000, ApotekLab: 300000, Total: 2500000, MingguLalu: 2200000 },
-    { day: 'Jum', RawatJalan: 1800000, Bedah: 1400000, Inpatient: 700000, ApotekLab: 600000, Total: 4500000, MingguLalu: 3900000 },
-    { day: 'Sab', RawatJalan: 2600000, Bedah: 2000000, Inpatient: 900000, ApotekLab: 800000, Total: 6300000, MingguLalu: 5500000 },
-    { day: 'Min', RawatJalan: 2400000, Bedah: 1800000, Inpatient: 850000, ApotekLab: 750000, Total: 5800000, MingguLalu: 5100000 },
-  ];
+  const categorizePetshopItem = (category?: string): 'Pakan' | 'Pasir' | 'Suplemen' | 'Aksesoris' => {
+    const c = (category || '').toLowerCase();
+    if (c.includes('pasir') || c.includes('sanitasi') || c.includes('litter')) return 'Pasir';
+    if (c.includes('vitamin') || c.includes('suplemen') || c.includes('treat')) return 'Suplemen';
+    if (c.includes('pakan') || c.includes('makanan') || c.includes('food')) return 'Pakan';
+    return 'Aksesoris';
+  };
 
-  const petcareRevenueData = [
-    { day: 'Sen', Klinik: 1200000, Grooming: 450000, Hotel: 300000, PetShop: 600000, Total: 2550000, MingguLalu: 2100000 },
-    { day: 'Sel', Klinik: 1500000, Grooming: 600000, Hotel: 300000, PetShop: 450000, Total: 2850000, MingguLalu: 2400000 },
-    { day: 'Rab', Klinik: 1800000, Grooming: 500000, Hotel: 450000, PetShop: 750000, Total: 3500000, MingguLalu: 3100000 },
-    { day: 'Kam', Klinik: 1100000, Grooming: 350000, Hotel: 300000, PetShop: 500000, Total: 2250000, MingguLalu: 2600000 },
-    { day: 'Jum', Klinik: 2100000, Grooming: 800000, Hotel: 600000, PetShop: 900000, Total: 4400000, MingguLalu: 3900000 },
-    { day: 'Sab', Klinik: 3200000, Grooming: 1500000, Hotel: 900000, PetShop: 1400000, Total: 7000000, MingguLalu: 6200000 },
-    { day: 'Min', Klinik: 2800000, Grooming: 1200000, Hotel: 900000, PetShop: 1100000, Total: 6000000, MingguLalu: 5400000 },
-  ];
+  const categorizePetcareItem = (category?: string): 'Klinik' | 'Grooming' | 'Hotel' | 'PetShop' => {
+    const c = (category || '').toLowerCase();
+    if (c.includes('grooming') || c.includes('salon') || c.includes('spa')) return 'Grooming';
+    if (c.includes('hotel') || c.includes('boarding') || c.includes('penitipan')) return 'Hotel';
+    if (c.includes('pakan') || c.includes('pasir') || c.includes('vitamin') || c.includes('aksesoris') || c.includes('makanan')) return 'PetShop';
+    return 'Klinik';
+  };
 
-  const revenueData = isPetshop ? petshopRevenueData : isClinic ? clinicRevenueData : petcareRevenueData;
+  const categorizeItemForRole = (category?: string): string =>
+    isPetshop ? categorizePetshopItem(category) : isClinic ? categorizeClinicItem(category) : categorizePetcareItem(category);
 
-  const petshopPieData = [
-    { name: 'Pakan Kucing/Anjing', value: 54, color: '#D97706' },
-    { name: 'Pasir & Sanitasi', value: 22, color: '#1B2A45' },
-    { name: 'Vitamin & Treats', value: 14, color: '#059669' },
-    { name: 'Aksesoris & Mainan', value: 10, color: '#6366F1' },
-  ];
+  const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
-  const clinicPieData = [
-    { name: 'Rawat Jalan & Poli', value: 42, color: '#1B2A45' },
-    { name: 'Tindakan Bedah', value: 30, color: '#B8905A' },
-    { name: 'Rawat Inap & ICU', value: 16, color: '#101A2C' },
-    { name: 'Apotek & Lab', value: 12, color: '#059669' },
-  ];
+  // Trend 7 hari terakhir dihitung dari invoice 'Lunas' asli (bukan array
+  // hardcoded) — hari tanpa transaksi tampil 0, bukan angka reka-reka.
+  const revenueData = Array.from({ length: 7 }).map((_, idx) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - idx));
+    const dStr = d.toISOString().substring(0, 10);
+    const prevWeek = new Date(d);
+    prevWeek.setDate(prevWeek.getDate() - 7);
+    const prevWeekStr = prevWeek.toISOString().substring(0, 10);
 
-  const petcarePieData = [
-    { name: 'Klinik Medis', value: 45, color: '#1B2A45' },
-    { name: 'Grooming Salon', value: 20, color: '#E1D6BE' },
-    { name: 'Pet Hotel', value: 15, color: '#101A2C' },
-    { name: 'Pet Shop POS', value: 20, color: '#3B5035' },
-  ];
+    const dayInvoices = (invoices || []).filter((i) => i?.status === 'Lunas' && i?.date === dStr);
+    const prevWeekTotal = (invoices || [])
+      .filter((i) => i?.status === 'Lunas' && i?.date === prevWeekStr)
+      .reduce((sum, i) => sum + (i?.totalAmount || 0), 0);
 
-  const pieData = isPetshop ? petshopPieData : isClinic ? clinicPieData : petcarePieData;
+    const buckets: Record<string, number> = {};
+    let total = 0;
+    dayInvoices.forEach((inv) => {
+      (inv.items || []).forEach((item) => {
+        const key = categorizeItemForRole(item.category);
+        buckets[key] = (buckets[key] || 0) + (item.totalPrice || 0);
+      });
+      total += inv.totalAmount || 0;
+    });
+
+    return { day: DAY_LABELS[d.getDay()], ...buckets, Total: total, MingguLalu: prevWeekTotal };
+  });
+
+  // Distribusi kategori (pie chart) dari proporsi invoice 'Lunas' bulan
+  // berjalan — bukan persentase hardcoded.
+  const CATEGORY_META: Record<string, Record<string, { label: string; color: string }>> = {
+    petshop: {
+      Pakan: { label: 'Pakan Kucing/Anjing', color: '#D97706' },
+      Pasir: { label: 'Pasir & Sanitasi', color: '#1B2A45' },
+      Suplemen: { label: 'Vitamin & Treats', color: '#059669' },
+      Aksesoris: { label: 'Aksesoris & Mainan', color: '#6366F1' }
+    },
+    clinic: {
+      RawatJalan: { label: 'Rawat Jalan & Poli', color: '#1B2A45' },
+      Bedah: { label: 'Tindakan Bedah', color: '#B8905A' },
+      Inpatient: { label: 'Rawat Inap & ICU', color: '#101A2C' },
+      ApotekLab: { label: 'Apotek & Lab', color: '#059669' }
+    },
+    petcare: {
+      Klinik: { label: 'Klinik Medis', color: '#1B2A45' },
+      Grooming: { label: 'Grooming Salon', color: '#E1D6BE' },
+      Hotel: { label: 'Pet Hotel', color: '#101A2C' },
+      PetShop: { label: 'Pet Shop POS', color: '#3B5035' }
+    }
+  };
+
+  const pieData = (() => {
+    const meta = isPetshop ? CATEGORY_META.petshop : isClinic ? CATEGORY_META.clinic : CATEGORY_META.petcare;
+    const monthInvoices = (invoices || []).filter((i) => i?.status === 'Lunas' && i?.date?.startsWith(currentMonthStr));
+    const buckets: Record<string, number> = {};
+    let total = 0;
+    monthInvoices.forEach((inv) => {
+      (inv.items || []).forEach((item) => {
+        const key = categorizeItemForRole(item.category);
+        buckets[key] = (buckets[key] || 0) + (item.totalPrice || 0);
+        total += item.totalPrice || 0;
+      });
+    });
+    return Object.entries(meta).map(([key, info]) => ({
+      name: info.label,
+      color: info.color,
+      value: total > 0 ? Math.round(((buckets[key] || 0) / total) * 100) : 0
+    }));
+  })();
 
   const lowStockDrugs = (drugs || []).filter((d) => d && d.stock <= d.minStock);
   const dueVaccines = (vacSchedules || []).filter((v) => v && (v.status === 'Jatuh Tempo' || v.status === 'Terlambat'));
 
-  const currentServingVisit = (clinicVisits || []).find((v) => v.status === 'Sedang Diperiksa' || v.status === 'Dipanggil') || (clinicVisits || [])[0];
+  const currentServingVisit = (clinicVisits || []).find((v) => v.status === 'Sedang Diperiksa' || v.status === 'Dipanggil');
   const currentWaitingVisits = (clinicVisits || []).filter((v) => v.status === 'Menunggu');
 
   const playQueueChime = (ticketNo: string, patientName: string) => {
@@ -497,7 +572,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
                 <span className="text-xs font-bold text-[#1B2A45]">Item Terjual</span>
                 <Package className="w-4 h-4 text-[#1B2A45]" />
               </div>
-              <p className="text-2xl font-bold text-[#1B2A45]">38 pcs</p>
+              <p className="text-2xl font-bold text-[#1B2A45]">{itemsSoldToday} pcs</p>
               <p className="text-[10px] text-[#1B2A45] font-bold mt-1 bg-[#E1D6BE]/30 inline-block px-1.5 py-0.5 rounded">
                 Pakan, Pasir & Treats
               </p>
@@ -642,18 +717,18 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
               </p>
             </div>
 
-            {/* 4. Rawat Inap & ICU */}
+            {/* 4. Telehealth Aktif */}
             <div
-              onClick={() => setActiveModule('inpatient')}
+              onClick={() => setActiveModule('telehealth')}
               className="bg-white p-4 rounded-xl border border-[#E1D6BE] shadow-xs hover:shadow-md hover:-translate-y-1 cursor-pointer transition-all duration-200"
             >
               <div className="flex items-center justify-between text-[#1B2A45]/70 mb-2">
-                <span className="text-xs font-bold text-[#1B2A45]">Rawat Inap & ICU</span>
-                <HeartPulse className="w-4 h-4 text-rose-600" />
+                <span className="text-xs font-bold text-[#1B2A45]">Telehealth Aktif</span>
+                <Video className="w-4 h-4 text-indigo-600" />
               </div>
-              <p className="text-2xl font-bold text-[#1B2A45]">{activeInpatients || 4}</p>
-              <p className="text-[10px] text-rose-800 font-bold mt-1 bg-rose-50 inline-block px-1.5 py-0.5 rounded border border-rose-200">
-                Kandang ICU & Infus
+              <p className="text-2xl font-bold text-[#1B2A45]">{activeTelehealth}</p>
+              <p className="text-[10px] text-indigo-800 font-bold mt-1 bg-indigo-50 inline-block px-1.5 py-0.5 rounded border border-indigo-200">
+                Konsultasi Video Berjalan
               </p>
             </div>
 
@@ -666,7 +741,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
                 <span className="text-xs font-bold text-[#1B2A45]">Resep & Apotek</span>
                 <Pill className="w-4 h-4 text-blue-600" />
               </div>
-              <p className="text-2xl font-bold text-[#1B2A45]">14 R/</p>
+              <p className="text-2xl font-bold text-[#1B2A45]">{prescriptionsServedToday} R/</p>
               <p className="text-[10px] text-blue-800 font-bold mt-1 bg-blue-50 inline-block px-1.5 py-0.5 rounded border border-blue-200">
                 Obat Racik & Paten
               </p>
@@ -674,14 +749,14 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
 
             {/* 6. Vaksinasi Due / Terlambat */}
             <div
-              onClick={() => setActiveModule('vaccine')}
+              onClick={() => setActiveModule('vaccination')}
               className="bg-white p-4 rounded-xl border border-[#E1D6BE] shadow-xs hover:shadow-md hover:-translate-y-1 cursor-pointer transition-all duration-200"
             >
               <div className="flex items-center justify-between text-[#1B2A45]/70 mb-2">
                 <span className="text-xs font-bold text-[#1B2A45]">Vaksin Due / Telat</span>
                 <Syringe className="w-4 h-4 text-amber-600" />
               </div>
-              <p className="text-2xl font-bold text-amber-600">{dueVaccines.length || 3}</p>
+              <p className="text-2xl font-bold text-amber-600">{dueVaccines.length}</p>
               <p className="text-[10px] text-amber-800 font-bold mt-1 bg-amber-50 inline-block px-1.5 py-0.5 rounded border border-amber-200">
                 Perlu Follow-up CRM
               </p>
@@ -1379,11 +1454,11 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
           <div className="flex items-center gap-2 text-xs flex-wrap">
             <span className="px-2.5 py-1 rounded-lg bg-white/10 text-white/90 border border-white/15 flex items-center gap-1.5 font-medium">
               <Pill className="w-3.5 h-3.5 text-[#D9B98A]" />
-              <span>8 Protokol Obat</span>
+              <span>{DRUG_PROTOCOLS.length} Protokol Obat</span>
             </span>
             <span className="px-2.5 py-1 rounded-lg bg-white/10 text-white/90 border border-white/15 flex items-center gap-1.5 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>4 CCTV Online</span>
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span>{deriveCctvRooms(hotelReservations || [], inpatients || [], pets || []).length} Kamar Dipantau (Pratinjau Demo)</span>
             </span>
             <button
               onClick={() => setShowFullQueueModal(true)}
@@ -1521,7 +1596,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
                     {currentServingVisit ? `A-${String(currentServingVisit.queueNo).padStart(2, '0')} (${currentServingVisit.petName})` : 'Tidak ada pasien aktif'}
                   </p>
                   <span className="text-[11px] text-[#B8905A] font-bold block mt-0.5">
-                    {currentServingVisit ? `${currentServingVisit.vetName || 'drh. Ananda Putri'} • Poli VET-1` : 'Standby'}
+                    {currentServingVisit ? `${currentServingVisit.doctorName || 'Dokter belum ditugaskan'} • Poli VET-1` : 'Standby'}
                   </span>
                 </div>
 
@@ -1580,7 +1655,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
                             {currentServingVisit.petName} <span className="text-xs text-amber-300 font-normal">({currentServingVisit.petSpecies})</span>
                           </div>
                           <p className="text-xs text-[#E1D6BE] mt-0.5">
-                            Pemilik: <span className="text-white font-bold">{currentServingVisit.ownerName}</span>
+                            Pemilik: <span className="text-white font-bold">{currentServingVisit.customerName}</span>
                           </p>
                         </div>
                       </div>
@@ -1589,7 +1664,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div className="p-3 bg-white/5 rounded-xl border border-white/10">
                           <span className="text-[10px] text-[#E1D6BE] uppercase block font-semibold">Dokter Pemeriksa</span>
-                          <span className="font-bold text-white">{currentServingVisit.vetName || 'drh. Ananda Putri'}</span>
+                          <span className="font-bold text-white">{currentServingVisit.doctorName || 'Belum ditugaskan'}</span>
                         </div>
                         <div className="p-3 bg-white/5 rounded-xl border border-white/10">
                           <span className="text-[10px] text-[#E1D6BE] uppercase block font-semibold">Keluhan Klinis</span>
@@ -1654,7 +1729,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
                                 <span className="text-[10px] text-[#6B6656]">({visit.petSpecies})</span>
                               </div>
                               <p className="text-[10px] text-[#6B6656] mt-0.5">
-                                Pemilik: <span className="font-semibold text-[#1B2A45]">{visit.ownerName}</span> • {visit.complaint || 'Pemeriksaan'}
+                                Pemilik: <span className="font-semibold text-[#1B2A45]">{visit.customerName}</span> • {visit.complaint || 'Pemeriksaan'}
                               </p>
                             </div>
                           </div>
@@ -1718,45 +1793,53 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-[#E1D6BE] text-[#1B2A45] uppercase text-[10px] font-bold">
-                      <th className="py-2">No. Struk</th>
-                      <th className="py-2">Pelanggan / Member</th>
-                      <th className="py-2">Item Belanja Utama</th>
-                      <th className="py-2">Kasir Bertugas</th>
-                      <th className="py-2 text-right">Total Tagihan</th>
-                      <th className="py-2 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E1D6BE]/40">
-                    {[
-                      { id: 'INV-PS-001', receipt: 'STR-2408-081', customer: 'Budi Santoso (Member Gold)', items: 'Royal Canin Kitten 2kg, Whiskas Pouch (x4)', cashier: 'Dewi Lestari', total: 385000, status: 'Lunas', payment: 'QRIS BCA' },
-                      { id: 'INV-PS-002', receipt: 'STR-2408-082', customer: 'Siti Rahma (Non-Member)', items: 'Pasir Kucing Bentonite 10L, Treats Churu', cashier: 'Dewi Lestari', total: 175000, status: 'Lunas', payment: 'Tunai' },
-                      { id: 'INV-PS-003', receipt: 'STR-2408-083', customer: 'drh. Hendra Wijaya', items: 'Pro Plan Medium Adult 3kg, Shampo Flea', cashier: 'Rian Pratama', total: 540000, status: 'Lunas', payment: 'Debit Mandiri' },
-                      { id: 'INV-PS-004', receipt: 'STR-2408-084', customer: 'Maya Anggraini (Member VIP)', items: 'Bravecto Chewable Dog 10-20kg, Snack Stick', cashier: 'Dewi Lestari', total: 420000, status: 'Lunas', payment: 'QRIS BCA' },
-                      { id: 'INV-PS-005', receipt: 'STR-2408-085', customer: 'Agus Purnomo', items: 'Whiskas Dry Cat Food Tuna 1.2kg (x2)', cashier: 'Rian Pratama', total: 160000, status: 'Lunas', payment: 'Tunai' },
-                    ].map((tx) => (
-                      <tr key={tx.id} className="hover:bg-[#F6F1E6]">
-                        <td className="py-2.5 font-mono font-bold text-[#1B2A45]">{tx.receipt}</td>
-                        <td className="py-2.5">
-                          <p className="font-semibold text-[#1B2A45]">{tx.customer}</p>
-                          <p className="text-[10px] text-[#1B2A45]/60">Metode: {tx.payment}</p>
-                        </td>
-                        <td className="py-2.5 text-[#1B2A45]/90 font-medium max-w-xs truncate">{tx.items}</td>
-                        <td className="py-2.5 text-[#1B2A45] font-semibold">{tx.cashier}</td>
-                        <td className="py-2.5 text-right font-mono font-bold text-[#1B2A45]">
-                          Rp {tx.total.toLocaleString('id-ID')}
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            {tx.status}
-                          </span>
-                        </td>
+                {recentPosInvoices.length === 0 ? (
+                  <p className="text-center text-[#1B2A45]/60 py-6">Belum ada transaksi kasir hari ini.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-[#E1D6BE] text-[#1B2A45] uppercase text-[10px] font-bold">
+                        <th className="py-2">No. Struk</th>
+                        <th className="py-2">Pelanggan</th>
+                        <th className="py-2">Item Belanja Utama</th>
+                        <th className="py-2">Kasir Bertugas</th>
+                        <th className="py-2 text-right">Total Tagihan</th>
+                        <th className="py-2 text-right">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-[#E1D6BE]/40">
+                      {recentPosInvoices.map((tx) => (
+                        <tr key={tx.id} className="hover:bg-[#F6F1E6]">
+                          <td className="py-2.5 font-mono font-bold text-[#1B2A45]">{tx.invoiceNo}</td>
+                          <td className="py-2.5">
+                            <p className="font-semibold text-[#1B2A45]">{tx.customerName}</p>
+                            <p className="text-[10px] text-[#1B2A45]/60">Metode: {tx.paymentMethod}</p>
+                          </td>
+                          <td className="py-2.5 text-[#1B2A45]/90 font-medium max-w-xs truncate">
+                            {tx.items.map((it) => it.name).join(', ') || '-'}
+                          </td>
+                          <td className="py-2.5 text-[#1B2A45] font-semibold">{tx.cashierName}</td>
+                          <td className="py-2.5 text-right font-mono font-bold text-[#1B2A45]">
+                            Rp {tx.totalAmount.toLocaleString('id-ID')}
+                          </td>
+                          <td className="py-2.5 text-right">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                                tx.status === 'Lunas'
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                  : tx.status === 'Batal'
+                                  ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                  : 'bg-amber-100 text-amber-800 border-amber-300'
+                              }`}
+                            >
+                              {tx.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
 
@@ -1775,17 +1858,14 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
               </div>
 
               <div className="space-y-3">
-                {[
-                  { name: 'Royal Canin Kitten 2kg', stock: 4, min: 10, demand: 'Tinggi', supplier: 'PT Petindo Jaya', urgency: 'Kritis' },
-                  { name: 'Pasir Tofu Soya Cat 7L', stock: 7, min: 15, demand: 'Sangat Tinggi', supplier: 'CV Kucing Cantik', urgency: 'Perlu Order' },
-                  { name: 'Inaba Churu Maguro Treats', stock: 12, min: 25, demand: 'Tinggi', supplier: 'PT Anugerah Fauna', urgency: 'Perlu Order' },
-                  { name: 'Pro Plan Medium Adult 3kg', stock: 9, min: 10, demand: 'Sedang', supplier: 'PT Petindo Jaya', urgency: 'Aman' },
-                  { name: 'Bravecto Dog Chewable', stock: 3, min: 8, demand: 'Tinggi', supplier: 'PT Medika Vet', urgency: 'Kritis' },
-                ].map((item, idx) => {
-                  const percent = Math.min(100, Math.round((item.stock / item.min) * 100));
+                {topReorderItems.length === 0 && (
+                  <p className="text-xs text-[#1B2A45]/60 text-center py-4">Belum ada data stok di Master Data.</p>
+                )}
+                {topReorderItems.map((item) => {
+                  const percent = item.percent;
                   return (
                     <div
-                      key={idx}
+                      key={item.id}
                       className="p-3 rounded-xl bg-[#F6F1E6] border border-[#E1D6BE] hover:border-[#1B2A45]/40 hover:shadow-2xs transition-all duration-200 space-y-2"
                     >
                       <div className="flex items-center justify-between text-xs">
@@ -1811,8 +1891,8 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
                         />
                       </div>
                       <div className="flex items-center justify-between text-[10px] text-[#1B2A45]/80">
-                        <span>Sisa: <strong className="text-[#1B2A45]">{item.stock} pcs</strong> (Min: {item.min})</span>
-                        <span>Supplier: {item.supplier}</span>
+                        <span>Sisa: <strong className="text-[#1B2A45]">{item.stock} {item.unit || 'pcs'}</strong> (Min: {item.min})</span>
+                        <span>Supplier: {item.supplier || '-'}</span>
                       </div>
                     </div>
                   );
@@ -1820,7 +1900,7 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
               </div>
             </div>
           </>
-        ) : (
+        ) : isClinic ? (
           <>
             {/* Clinic Queue Snapshot */}
             <div className="lg:col-span-8 bg-white p-5 rounded-xl border border-[#E1D6BE] shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 space-y-4">
@@ -1911,6 +1991,55 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
               </div>
             </div>
           </>
+        ) : (
+          <>
+            {/* PetCare Multi-Unit Summary — ringkas, bukan tabel penuh milik Klinik,
+                supaya profil holding punya panel operasional sendiri (bukan reuse
+                tampilan Klinik apa adanya). */}
+            <div className="lg:col-span-12 bg-white p-5 rounded-xl border border-[#E1D6BE] shadow-xs space-y-4">
+              <h3 className="font-bold text-sm text-[#1B2A45] flex items-center gap-2">
+                <Activity className="w-4 h-4 text-[#1B2A45]" /> Ringkasan Operasional Lintas Unit Hari Ini
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div
+                  onClick={() => setActiveModule('clinic')}
+                  className="p-4 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] hover:border-[#1B2A45]/40 hover:shadow-2xs cursor-pointer transition-all duration-200"
+                >
+                  <span className="text-[10px] uppercase font-bold text-[#1B2A45]/70 flex items-center gap-1.5">
+                    <Stethoscope className="w-3.5 h-3.5 text-emerald-600" /> Antrian Klinik
+                  </span>
+                  <p className="text-2xl font-bold text-[#1B2A45] mt-1">{activeVisits}</p>
+                </div>
+                <div
+                  onClick={() => setActiveModule('grooming')}
+                  className="p-4 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] hover:border-[#1B2A45]/40 hover:shadow-2xs cursor-pointer transition-all duration-200"
+                >
+                  <span className="text-[10px] uppercase font-bold text-[#1B2A45]/70 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-pink-600" /> Grooming Berjalan
+                  </span>
+                  <p className="text-2xl font-bold text-[#1B2A45] mt-1">{activeGrooming}</p>
+                </div>
+                <div
+                  onClick={() => setActiveModule('petHotel')}
+                  className="p-4 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] hover:border-[#1B2A45]/40 hover:shadow-2xs cursor-pointer transition-all duration-200"
+                >
+                  <span className="text-[10px] uppercase font-bold text-[#1B2A45]/70 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-600" /> Boarding Terisi
+                  </span>
+                  <p className="text-2xl font-bold text-[#1B2A45] mt-1">{activeBoarding}</p>
+                </div>
+                <div
+                  onClick={() => setActiveModule('petShop')}
+                  className="p-4 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] hover:border-[#1B2A45]/40 hover:shadow-2xs cursor-pointer transition-all duration-200"
+                >
+                  <span className="text-[10px] uppercase font-bold text-[#1B2A45]/70 flex items-center gap-1.5">
+                    <ShoppingCart className="w-3.5 h-3.5 text-amber-600" /> Transaksi POS
+                  </span>
+                  <p className="text-2xl font-bold text-[#1B2A45] mt-1">{posSalesTodayCount} Struk</p>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -1920,6 +2049,19 @@ export const DashboardModule: React.FC<{ setActiveModule: (m: any) => void }> = 
         onClose={() => setShowSmartCheckInModal(false)}
         setActiveModule={setActiveModule}
       />
+
+      {pinTarget && (
+        <PinConfirmModal
+          targetLabel={OWNERSHIP_LABELS[pinTarget.role] || pinTarget.role}
+          targetEmail={pinTarget.email}
+          onSuccess={() => {
+            setActiveOwnership(pinTarget.role);
+            addToast(`Perspektif Manajemen aktif: ${OWNERSHIP_LABELS[pinTarget.role] || pinTarget.role}`, 'success');
+            setPinTarget(null);
+          }}
+          onCancel={() => setPinTarget(null)}
+        />
+      )}
     </div>
   );
 };

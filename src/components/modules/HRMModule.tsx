@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { usePermissions } from '../../hooks/usePermissions';
 import {
   Users,
   Calendar,
@@ -36,6 +37,8 @@ const EMPLOYEE_ROLES: Types.Employee['role'][] = [
 
 export const HRMModule: React.FC = () => {
   const { addToast } = useToast();
+  const { can } = usePermissions();
+  const canProcessPayroll = can('hrm', 'approve');
   const {
     employees,
     addEmployee,
@@ -57,6 +60,11 @@ export const HRMModule: React.FC = () => {
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [showSlipModal, setShowSlipModal] = useState(false);
   const [selectedSlipStaff, setSelectedSlipStaff] = useState<any>(null);
+  // Guard klik-ganda pencairan gaji — sebelumnya tidak ada apa pun yang
+  // mencegah "Cairkan Gaji" diklik ulang untuk staf yang sama, tiap klik
+  // langsung addCashTransaction pengeluaran uang riil di Buku Kas. Set ini
+  // juga menandai staf yang sudah dicairkan bulan ini di sesi berjalan.
+  const [paidStaffIds, setPaidStaffIds] = useState<Set<string>>(new Set());
 
   // New staff form state - persisted as a real Employee record via DataContext
   const [newStaffName, setNewStaffName] = useState('');
@@ -201,6 +209,15 @@ export const HRMModule: React.FC = () => {
   };
 
   const handleSimulatePayout = (sc: any) => {
+    if (!canProcessPayroll) {
+      addToast('Akun Anda tidak memiliki hak akses untuk mencairkan gaji/komisi staf.', 'error');
+      return;
+    }
+    if (paidStaffIds.has(sc.staffId)) {
+      addToast(`Gaji ${sc.name} sudah dicairkan bulan ini.`, 'warning');
+      return;
+    }
+    setPaidStaffIds((prev) => new Set(prev).add(sc.staffId));
     // Payout beneran dicatat sebagai pengeluaran kas di modul Finance
     addCashTransaction({
       type: 'Keluar',
@@ -477,9 +494,18 @@ export const HRMModule: React.FC = () => {
                   </button>
                   <button
                     onClick={() => handleSimulatePayout(sc)}
-                    className="py-2 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5"
+                    disabled={!canProcessPayroll || paidStaffIds.has(sc.staffId)}
+                    title={
+                      !canProcessPayroll
+                        ? 'Hanya owner/admin yang dapat mencairkan gaji'
+                        : paidStaffIds.has(sc.staffId)
+                        ? 'Sudah dicairkan bulan ini'
+                        : undefined
+                    }
+                    className="py-2 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#1B2A45]"
                   >
-                    <DollarSign className="w-4 h-4 text-[#D9B98A]" /> Cairkan Gaji
+                    <DollarSign className="w-4 h-4 text-[#D9B98A]" />
+                    {paidStaffIds.has(sc.staffId) ? 'Sudah Dicairkan' : 'Cairkan Gaji'}
                   </button>
                 </div>
               </div>

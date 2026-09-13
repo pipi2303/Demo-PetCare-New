@@ -31,12 +31,15 @@ import {
   Zap,
   Info,
   Loader2,
-  BarChart3
+  BarChart3,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { PetShopCategoryAnalytics } from '../petshop/PetShopCategoryAnalytics';
 import { CashDrawerSettlementModal } from '../petshop/CashDrawerSettlementModal';
 import { BarcodeCameraScanner } from '../petshop/BarcodeCameraScanner';
 import { Camera, Coins } from 'lucide-react';
+import { createQrisPayment, pollPaymentStatus, PaymentStatus } from '../../utils/payment';
 
 interface CartItem {
   id: string;
@@ -61,7 +64,18 @@ interface PetShopDraft {
 }
 
 export const PetShopModule: React.FC = () => {
-  const { stockItems = [], customers = [], addInvoice, updateStockItem, adjustCustomerPoints, addCustomer } = useData();
+  const {
+    stockItems = [],
+    customers = [],
+    addInvoice,
+    processPayment,
+    addCashTransaction,
+    updateStockItem,
+    adjustCustomerPoints,
+    addCustomer,
+    addStockMovement,
+    appSettings
+  } = useData();
   const { addToast } = useToast();
 
   // View state: 'pos' or 'analytics'
@@ -110,8 +124,49 @@ export const PetShopModule: React.FC = () => {
 
   // Payment Modal
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Tunai' | 'Kartu Debit' | 'Kartu Kredit' | 'Transfer'>('QRIS');
+  // Nilai di sini HARUS persis sama dengan union Invoice['paymentMethod'] di
+  // types.ts ('Debit', 'Transfer Bank') — sebelumnya dipakai 'Kartu Debit'/
+  // 'Transfer' yang tidak pernah cocok dengan filter di modul lain (mis.
+  // CashDrawerSettlementModal) yang membaca nilai kanonik itu.
+  const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Tunai' | 'Debit' | 'Kartu Kredit' | 'Transfer Bank'>('QRIS');
+  const paymentMethodLabels: Record<'QRIS' | 'Tunai' | 'Debit' | 'Kartu Kredit' | 'Transfer Bank', string> = {
+    QRIS: 'QRIS',
+    Tunai: 'Tunai',
+    Debit: 'Kartu Debit',
+    'Kartu Kredit': 'Kartu Kredit',
+    'Transfer Bank': 'Transfer Bank'
+  };
   const [cashPaid, setCashPaid] = useState<number>(0);
+
+  // Real QRIS payment state (Midtrans). 'idle' means no QRIS charge in
+  // flight — non-QRIS methods stay staff-confirmed & synchronous, unchanged.
+  const [qrisPhase, setQrisPhase] = useState<'idle' | 'loading' | 'waiting_real' | 'waiting_simulated' | 'failed'>('idle');
+  const [qrisImageUrl, setQrisImageUrl] = useState<string | null>(null);
+  const [qrisMessage, setQrisMessage] = useState<string>('');
+  const [pendingQrisInvoice, setPendingQrisInvoice] = useState<any>(null);
+  const qrisPollRef = React.useRef<{ stop: () => void } | null>(null);
+  // Ref (bukan useState) supaya guard-nya sinkron: dua klik cepat pada
+  // tombol checkout Tunai/Debit/Transfer sebelum re-render bisa lolos dari
+  // state React yang masih versi lama, dan memicu addInvoice/addCashTransaction/
+  // deductStockForCart dobel untuk satu transaksi yang sama.
+  const isCompletingSaleRef = React.useRef(false);
+
+  const stopQrisPolling = () => {
+    qrisPollRef.current?.stop();
+    qrisPollRef.current = null;
+  };
+
+  React.useEffect(() => {
+    if (showCheckoutModal && paymentMethod !== 'QRIS' && qrisPhase !== 'idle') {
+      stopQrisPolling();
+      setQrisPhase('idle');
+      setQrisImageUrl(null);
+      setPendingQrisInvoice(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentMethod]);
+
+  React.useEffect(() => () => stopQrisPolling(), []);
 
   // Struk Modal & Auto-Print Simulation
   const [completedInvoice, setCompletedInvoice] = useState<any>(null);
@@ -204,7 +259,10 @@ export const PetShopModule: React.FC = () => {
 
   const totalDiscount = voucherDiscount + pointDiscountRupiah;
   const taxableAmount = Math.max(0, cartSubtotal - totalDiscount);
-  const taxPPN = Math.round(taxableAmount * 0.11); // 11% PPN
+  // Tarif & aktif/tidaknya PPN sekarang dari Pengaturan Sistem (dulu 0.11
+  // hardcoded di sini, tidak pernah membaca konfigurasi apa pun).
+  const activeTaxRatePercent = appSettings.enableTax ? appSettings.taxRate : 0;
+  const taxPPN = Math.round(taxableAmount * (activeTaxRatePercent / 100));
   const grandTotal = taxableAmount + taxPPN;
   const earnedPoints = isGuestCustomer ? 0 : Math.floor(grandTotal / 10000); // 1 point per 10k spent for members
 
@@ -315,7 +373,68 @@ export const PetShopModule: React.FC = () => {
   };
 
   // Execute Checkout
+  // Auto-deduct stok untuk item di keranjang — dipakai setelah invoice benar
+  // lunas (langsung untuk metode non-QRIS, atau setelah settlement QRIS).
+  // Sebelumnya HANYA updateStockItem yang dipanggil — tidak pernah mencatat
+  // addStockMovement type:'Keluar'. Akibatnya setiap fitur "AI" inventori
+  // yang menganalisis stockMovements (Velocity Heatmap, Audit Assistant, PO
+  // Suggestions) tidak pernah punya riwayat penjualan nyata untuk dianalisis
+  // — akar masalah kenapa semua fitur itu jatuh ke rumus tebakan.
+  const deductStockForCart = (referenceNo: string) => {
+    draft.cart.forEach((cartItem) => {
+      const stockObj = stockItems.find((s) => s.id === cartItem.id);
+      if (stockObj) {
+        updateStockItem(stockObj.id, {
+          stock: Math.max(0, stockObj.stock - cartItem.quantity)
+        });
+        addStockMovement({
+          itemId: stockObj.id,
+          itemName: stockObj.name,
+          type: 'Keluar',
+          quantity: cartItem.quantity,
+          fromWarehouse: stockObj.warehouse,
+          referenceNo,
+          operator: 'Kasir Pet Shop'
+        });
+      }
+    });
+  };
+
+  // Reset draft, tampilkan struk, & (opsional) auto-print — bagian akhir yang
+  // sama persis dipakai baik oleh jalur pembayaran langsung maupun QRIS.
+  const finishSaleUi = (finalInvoice: any, methodForReceipt: typeof paymentMethod) => {
+    clearDraft();
+    setShowCheckoutModal(false);
+    const invoicePayload = {
+      ...finalInvoice,
+      cashPaid: methodForReceipt === 'Tunai' ? cashPaid : grandTotal,
+      changeAmount: methodForReceipt === 'Tunai' ? Math.max(0, cashPaid - grandTotal) : 0,
+      taxPPN
+    };
+    setCompletedInvoice(invoicePayload);
+    setShowStrukModal(true);
+
+    if (autoPrintEnabled) {
+      runSimulatedPrint(finalInvoice.invoiceNo);
+    } else {
+      setPrintStage('idle');
+      addToast(`Transaksi POS #${finalInvoice.invoiceNo} berhasil diselesaikan!`, 'success');
+    }
+  };
+
+  const buildInvoiceItems = () =>
+    draft.cart.map((item) => ({
+      id: 'inv_item_' + Date.now() + Math.random(),
+      category: item.category,
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.price,
+      totalPrice: item.price * item.quantity
+    }));
+
   const handleCompleteSale = () => {
+    if (isCompletingSaleRef.current) return;
+
     if (draft.cart.length === 0) {
       addToast('Keranjang belanja masih kosong.', 'error');
       return;
@@ -326,16 +445,26 @@ export const PetShopModule: React.FC = () => {
       return;
     }
 
-    // 1. Create Invoice
-    const invoiceItems = draft.cart.map((item) => ({
-      id: 'inv_item_' + Date.now() + Math.random(),
-      category: item.category,
-      name: item.name,
-      quantity: item.quantity,
-      unitPrice: item.price,
-      totalPrice: item.price * item.quantity
-    }));
+    if (paymentMethod === 'QRIS') {
+      handleStartQrisSale();
+      return;
+    }
 
+    isCompletingSaleRef.current = true;
+
+    // Metode selain QRIS tetap staff-confirmed langsung & lunas seketika
+    // (Tunai/Kartu/Transfer tidak lewat payment gateway). Catatan penting:
+    // TIDAK bisa memanggil processPayment(newInvoice.id, ...) di sini —
+    // processPayment mencari invoice lewat `invoices.find()` dari state
+    // DataContext, dan karena addInvoice() baru saja menjadwalkan
+    // setInvoices() di tick React yang sama, closure `invoices` di sini masih
+    // versi lama (belum berisi invoice yang baru dibuat) sampai re-render
+    // berikutnya — processPayment akan diam-diam tidak menemukan invoice-nya
+    // dan tidak melakukan apa-apa. Makanya invoice dibuat langsung 'Lunas' di
+    // sini, dan addCashTransaction dipanggil langsung (fungsi ini tidak perlu
+    // mencari apa pun dari state, jadi aman dari masalah closure basi yang
+    // sama) — supaya buku kas benar-benar tercatat untuk SEMUA metode bayar,
+    // bukan cuma QRIS seperti sebelumnya.
     const isGuest = isGuestCustomer;
     const finalCustomerId = isGuest ? 'guest' : (selectedCustomer?.id || 'guest');
     const finalCustomerName = isGuest ? (guestName.trim() || 'Pelanggan Umum (Walk-in)') : (selectedCustomer?.name || 'Pelanggan Umum');
@@ -343,7 +472,7 @@ export const PetShopModule: React.FC = () => {
     const newInvoice = addInvoice({
       customerId: finalCustomerId,
       customerName: finalCustomerName,
-      items: invoiceItems,
+      items: buildInvoiceItems(),
       subtotal: cartSubtotal,
       discountAmount: totalDiscount,
       totalAmount: grandTotal,
@@ -354,17 +483,17 @@ export const PetShopModule: React.FC = () => {
       cashierName: 'Kasir Pet Shop'
     });
 
-    // 2. Auto-Deduct Stock
-    draft.cart.forEach((cartItem) => {
-      const stockObj = stockItems.find((s) => s.id === cartItem.id);
-      if (stockObj) {
-        updateStockItem(stockObj.id, {
-          stock: Math.max(0, stockObj.stock - cartItem.quantity)
-        });
-      }
+    addCashTransaction({
+      type: 'Masuk',
+      category: 'Pelunasan Invoice',
+      amount: grandTotal,
+      description: `Pelunasan ${newInvoice.invoiceNo} (${finalCustomerName}) via ${paymentMethod}`,
+      referenceNo: newInvoice.invoiceNo,
+      operator: 'Kasir Pet Shop'
     });
 
-    // 3. Update Loyalty Points
+    deductStockForCart(newInvoice.invoiceNo);
+
     if (!isGuest && selectedCustomer) {
       let pointsChange = earnedPoints;
       if (draft.useLoyaltyPoints && pointDiscountRupiah > 0) {
@@ -376,24 +505,91 @@ export const PetShopModule: React.FC = () => {
       }
     }
 
-    // Reset draft
-    clearDraft();
-    setShowCheckoutModal(false);
-    const invoicePayload = {
-      ...newInvoice,
-      cashPaid: paymentMethod === 'Tunai' ? cashPaid : grandTotal,
-      changeAmount: paymentMethod === 'Tunai' ? Math.max(0, cashPaid - grandTotal) : 0,
-      taxPPN
-    };
-    setCompletedInvoice(invoicePayload);
-    setShowStrukModal(true);
+    finishSaleUi(newInvoice, paymentMethod);
+    isCompletingSaleRef.current = false;
+  };
 
-    if (autoPrintEnabled) {
-      runSimulatedPrint(newInvoice.invoiceNo);
-    } else {
-      setPrintStage('idle');
-      addToast(`Transaksi POS #${newInvoice.invoiceNo} berhasil diselesaikan!`, 'success');
+  // Membuat charge QRIS nyata via Midtrans untuk transaksi POS. Invoice dibuat
+  // dulu sebagai 'Belum Dibayar' — stok & poin loyalti baru diproses SETELAH
+  // pembayaran benar terkonfirmasi (settlement), bukan langsung saat checkout
+  // diklik seperti sebelumnya. Kalau gateway belum dikonfigurasi, backend balas
+  // simulated:true dan UI fallback ke QR dekoratif + tombol konfirmasi manual.
+  const handleStartQrisSale = async () => {
+    const isGuest = isGuestCustomer;
+    const finalCustomerId = isGuest ? 'guest' : (selectedCustomer?.id || 'guest');
+    const finalCustomerName = isGuest ? (guestName.trim() || 'Pelanggan Umum (Walk-in)') : (selectedCustomer?.name || 'Pelanggan Umum');
+
+    const pendingInvoice = addInvoice({
+      customerId: finalCustomerId,
+      customerName: finalCustomerName,
+      items: buildInvoiceItems(),
+      subtotal: cartSubtotal,
+      discountAmount: totalDiscount,
+      totalAmount: grandTotal,
+      paidAmount: 0,
+      paymentMethod: 'QRIS',
+      status: 'Belum Dibayar',
+      loyaltyPointsEarned: 0,
+      cashierName: 'Kasir Pet Shop'
+    });
+
+    stopQrisPolling();
+    setQrisPhase('loading');
+    setQrisImageUrl(null);
+    setQrisMessage('');
+    setPendingQrisInvoice(pendingInvoice);
+
+    const result = await createQrisPayment(pendingInvoice.invoiceNo, grandTotal, finalCustomerName);
+
+    if (result.simulated) {
+      setQrisPhase('waiting_simulated');
+      return;
     }
+    if (!result.success || !result.qrImageUrl) {
+      setQrisPhase('failed');
+      setQrisMessage(result.message || 'Gagal membuat kode QRIS. Coba lagi.');
+      return;
+    }
+
+    setQrisImageUrl(result.qrImageUrl);
+    setQrisPhase('waiting_real');
+
+    qrisPollRef.current = pollPaymentStatus(pendingInvoice.invoiceNo, {
+      onSettled: (status: PaymentStatus) => {
+        if (status === 'settlement') {
+          finalizeQrisSale(pendingInvoice, isGuest);
+        } else {
+          setQrisPhase('failed');
+          setQrisMessage(
+            status === 'expire' ? 'Kode QRIS kedaluwarsa sebelum dibayar.' : 'Pembayaran dibatalkan atau ditolak.'
+          );
+        }
+      }
+    });
+  };
+
+  // Konfirmasi manual untuk mode simulasi (gateway belum dikonfigurasi) — sama
+  // seperti jalur non-QRIS, tapi invoice-nya sudah terlanjur dibuat 'Belum
+  // Dibayar' oleh handleStartQrisSale sehingga tinggal melunaskan.
+  const handleConfirmSimulatedQris = (pendingInvoice: any) => {
+    finalizeQrisSale(pendingInvoice, isGuestCustomer);
+  };
+
+  const finalizeQrisSale = (pendingInvoice: any, isGuest: boolean) => {
+    const pointsRedeemed =
+      !isGuest && draft.useLoyaltyPoints && pointDiscountRupiah > 0 ? Math.ceil(pointDiscountRupiah / 1000) : 0;
+
+    processPayment(pendingInvoice.id, 'QRIS', pointsRedeemed);
+    deductStockForCart(pendingInvoice.invoiceNo);
+
+    addToast(`Pembayaran QRIS Rp ${grandTotal.toLocaleString('id-ID')} untuk ${pendingInvoice.invoiceNo} berhasil dikonfirmasi!`, 'success');
+
+    stopQrisPolling();
+    setQrisPhase('idle');
+    setQrisImageUrl(null);
+    setPendingQrisInvoice(null);
+
+    finishSaleUi({ ...pendingInvoice, status: 'Lunas', paidAmount: grandTotal, loyaltyPointsEarned: isGuest ? 0 : earnedPoints }, 'QRIS');
   };
 
   // Image placeholder mapping based on product category
@@ -923,7 +1119,7 @@ export const PetShopModule: React.FC = () => {
                 </div>
               )}
               <div className="flex justify-between text-[#EDE6D6]/80">
-                <span>PPN 11%:</span>
+                <span>PPN {activeTaxRatePercent}%:</span>
                 <span className="font-bold">Rp {taxPPN.toLocaleString('id-ID')}</span>
               </div>
               <div className="flex justify-between border-t border-slate-700 pt-2 text-sm font-extrabold text-[#D9B98A]">
@@ -965,7 +1161,13 @@ export const PetShopModule: React.FC = () => {
                 <Receipt className="w-5 h-5 text-[#B8905A]" /> Pembayaran Kasir Pet Shop
               </h3>
               <button
-                onClick={() => setShowCheckoutModal(false)}
+                onClick={() => {
+                  stopQrisPolling();
+                  setQrisPhase('idle');
+                  setQrisImageUrl(null);
+                  setPendingQrisInvoice(null);
+                  setShowCheckoutModal(false);
+                }}
                 className="text-xs font-bold text-rose-700 hover:bg-rose-50 px-2.5 py-1 rounded-lg"
               >
                 Tutup
@@ -986,7 +1188,7 @@ export const PetShopModule: React.FC = () => {
               <div>
                 <label className="font-bold text-[#1B2A45] block mb-1">Metode Pembayaran</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {(['QRIS', 'Tunai', 'Kartu Debit', 'Kartu Kredit', 'Transfer'] as const).map((m) => (
+                  {(['QRIS', 'Tunai', 'Debit', 'Kartu Kredit', 'Transfer Bank'] as const).map((m) => (
                     <button
                       key={m}
                       onClick={() => setPaymentMethod(m)}
@@ -998,9 +1200,9 @@ export const PetShopModule: React.FC = () => {
                     >
                       {m === 'QRIS' && <QrCode className="w-4 h-4 text-[#D9B98A]" />}
                       {m === 'Tunai' && <Banknote className="w-4 h-4 text-[#D9B98A]" />}
-                      {(m === 'Kartu Debit' || m === 'Kartu Kredit') && <CreditCard className="w-4 h-4 text-[#D9B98A]" />}
-                      {m === 'Transfer' && <Receipt className="w-4 h-4 text-[#D9B98A]" />}
-                      <span>{m}</span>
+                      {(m === 'Debit' || m === 'Kartu Kredit') && <CreditCard className="w-4 h-4 text-[#D9B98A]" />}
+                      {m === 'Transfer Bank' && <Receipt className="w-4 h-4 text-[#D9B98A]" />}
+                      <span>{paymentMethodLabels[m]}</span>
                     </button>
                   ))}
                 </div>
@@ -1009,11 +1211,51 @@ export const PetShopModule: React.FC = () => {
               {/* QRIS Display */}
               {paymentMethod === 'QRIS' && (
                 <div className="p-4 bg-white border border-[#E1D6BE] rounded-xl text-center space-y-2">
-                  <p className="text-[11px] font-bold text-[#1B2A45]">Scan QRIS Statis / Dinamis</p>
-                  <div className="w-36 h-36 mx-auto bg-slate-900 rounded-lg p-2 flex items-center justify-center text-white">
-                    <QrCode className="w-28 h-28 text-white" />
-                  </div>
-                  <p className="text-[10px] text-[#6B6656]">Gopay, OVO, Dana, ShopeePay, BCA, Mandiri</p>
+                  {qrisPhase === 'loading' && (
+                    <div className="w-36 h-36 mx-auto flex flex-col items-center justify-center gap-2 text-[#1B2A45]">
+                      <Loader2 className="w-7 h-7 animate-spin text-[#B8905A]" />
+                      <span className="text-[10px]">Membuat kode QRIS...</span>
+                    </div>
+                  )}
+
+                  {qrisPhase === 'waiting_real' && qrisImageUrl && (
+                    <>
+                      <p className="text-[11px] font-bold text-[#1B2A45]">Scan QRIS untuk Bayar</p>
+                      <div className="w-36 h-36 mx-auto bg-white rounded-lg p-1 flex items-center justify-center border border-[#E1D6BE]">
+                        <img src={qrisImageUrl} alt="Kode QRIS pembayaran" className="w-full h-full object-contain" />
+                      </div>
+                      <p className="text-[10px] text-emerald-700 font-bold flex items-center justify-center gap-1.5">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Menunggu pembayaran pelanggan...
+                      </p>
+                    </>
+                  )}
+
+                  {qrisPhase === 'failed' && (
+                    <div className="w-36 h-36 mx-auto flex flex-col items-center justify-center gap-2 text-rose-600">
+                      <AlertTriangle className="w-7 h-7" />
+                      <span className="text-[10px] px-2">{qrisMessage}</span>
+                      <button
+                        onClick={handleStartQrisSale}
+                        className="px-2.5 py-1 bg-[#B8905A] text-white font-bold text-[10px] rounded-lg flex items-center gap-1"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Buat Ulang QRIS
+                      </button>
+                    </div>
+                  )}
+
+                  {(qrisPhase === 'idle' || qrisPhase === 'waiting_simulated') && (
+                    <>
+                      <p className="text-[11px] font-bold text-[#1B2A45]">Scan QRIS Statis / Dinamis</p>
+                      <div className="w-36 h-36 mx-auto bg-slate-900 rounded-lg p-2 flex items-center justify-center text-white">
+                        <QrCode className="w-28 h-28 text-white" />
+                      </div>
+                      <p className="text-[10px] text-[#6B6656]">
+                        {qrisPhase === 'waiting_simulated'
+                          ? 'Mode simulasi — payment gateway belum dikonfigurasi (MIDTRANS_SERVER_KEY)'
+                          : 'Gopay, OVO, Dana, ShopeePay, BCA, Mandiri'}
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -1074,15 +1316,29 @@ export const PetShopModule: React.FC = () => {
                 </button>
               </div>
 
-              <button
-                onClick={handleCompleteSale}
-                className="w-full py-3 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>
-                  {autoPrintEnabled ? 'Selesaikan Transaksi & Auto-Print Struk' : 'Selesaikan Transaksi Kasir'}
-                </span>
-              </button>
+              {paymentMethod === 'QRIS' && qrisPhase === 'waiting_real' ? (
+                <button
+                  disabled
+                  className="w-full py-3 bg-[#B8905A]/50 text-white/80 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-not-allowed"
+                >
+                  <Loader2 className="w-4 h-4 animate-spin" /> Menunggu Pelanggan Bayar QRIS
+                </button>
+              ) : (
+                <button
+                  onClick={
+                    paymentMethod === 'QRIS' && qrisPhase === 'waiting_simulated' && pendingQrisInvoice
+                      ? () => handleConfirmSimulatedQris(pendingQrisInvoice)
+                      : handleCompleteSale
+                  }
+                  disabled={paymentMethod === 'QRIS' && qrisPhase === 'loading'}
+                  className="w-full py-3 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>
+                    {autoPrintEnabled ? 'Selesaikan Transaksi & Auto-Print Struk' : 'Selesaikan Transaksi Kasir'}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1150,7 +1406,7 @@ export const PetShopModule: React.FC = () => {
               {completedInvoice.discountAmount > 0 && (
                 <div className="flex justify-between text-emerald-700"><span>Diskon:</span><span>- Rp {completedInvoice.discountAmount.toLocaleString('id-ID')}</span></div>
               )}
-              <div className="flex justify-between"><span>PPN 11%:</span><span>Rp {completedInvoice.taxPPN.toLocaleString('id-ID')}</span></div>
+              <div className="flex justify-between"><span>PPN {activeTaxRatePercent}%:</span><span>Rp {completedInvoice.taxPPN.toLocaleString('id-ID')}</span></div>
               <div className="flex justify-between font-bold text-xs text-slate-900 border-t border-slate-200 pt-1">
                 <span>TOTAL:</span>
                 <span>Rp {completedInvoice.totalAmount.toLocaleString('id-ID')}</span>

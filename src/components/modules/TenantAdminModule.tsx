@@ -42,47 +42,7 @@ export const TenantAdminModule: React.FC = () => {
   const [tenantPhone, setTenantPhone] = useState('');
   const [tenantPlan, setTenantPlan] = useState<'trial' | 'basic' | 'pro' | 'enterprise'>('pro');
 
-  // Fallback initial SaaS tenants if context is small
-  const [allTenants, setAllTenants] = useState<Tenant[]>([
-    {
-      id: 'tenant-1',
-      name: 'VetCare Animal Hospital Group',
-      code: 'VETCARE-GRP',
-      plan: 'enterprise',
-      status: 'active',
-      ownerName: 'Drh. Hendra Wijaya',
-      phone: '+62 812-3456-7890',
-      email: 'hendra@vetcare-hospital.id',
-      createdAt: '2025-01-15',
-      expiresAt: '2027-01-15'
-    },
-    {
-      id: 'tenant-2',
-      name: 'Paws & Claws Pet Clinic & Spa',
-      code: 'PAWSCLAWS-ID',
-      plan: 'pro',
-      status: 'active',
-      ownerName: 'Melani Cynthia',
-      phone: '+62 813-8899-7766',
-      email: 'owner@pawsandclaws.co.id',
-      createdAt: '2025-06-10',
-      expiresAt: '2026-12-31'
-    },
-    {
-      id: 'tenant-3',
-      name: 'Sahabat Satwa Veterinary Clinic',
-      code: 'SAHABAT-VET',
-      plan: 'basic',
-      status: 'trial',
-      ownerName: 'Drh. Bagus Prasetyo',
-      phone: '+62 811-9988-7744',
-      email: 'bagus@sahabatsatwa.com',
-      createdAt: '2026-08-01',
-      expiresAt: '2026-08-31'
-    }
-  ]);
-
-  const filteredTenants = allTenants.filter(
+  const filteredTenants = tenants.filter(
     (t) =>
       t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -96,8 +56,7 @@ export const TenantAdminModule: React.FC = () => {
       return;
     }
 
-    const created: Tenant = {
-      id: `tenant-${Date.now().toString().slice(-4)}`,
+    const created = addTenant({
       name: tenantName,
       code: tenantCode.toUpperCase(),
       plan: tenantPlan,
@@ -105,11 +64,9 @@ export const TenantAdminModule: React.FC = () => {
       ownerName: tenantOwnerName,
       phone: tenantPhone || '+62 812-0000-0000',
       email: tenantEmail || 'admin@clinic.id',
-      createdAt: new Date().toISOString().split('T')[0],
       expiresAt: '2027-12-31'
-    };
+    });
 
-    setAllTenants([...allTenants, created]);
     setShowAddTenantModal(false);
     setTenantName('');
     setTenantCode('');
@@ -146,7 +103,7 @@ export const TenantAdminModule: React.FC = () => {
               SLA 99.98%
             </span>
           ),
-          { label: `${allTenants.length} Tenant Terisolasi`, variant: 'purple' },
+          { label: `${tenants.length} Tenant Terisolasi`, variant: 'purple' },
           { label: 'Latency 18ms', variant: 'gold' }
         ]}
         actions={
@@ -159,8 +116,8 @@ export const TenantAdminModule: React.FC = () => {
           </button>
         }
         stats={[
-          { label: 'Total Tenant', value: `${allTenants.length} Klinik`, variant: 'default' },
-          { label: 'Enterprise', value: '1 Hospital', variant: 'purple' },
+          { label: 'Total Tenant', value: `${tenants.length} Klinik`, variant: 'default' },
+          { label: 'Enterprise', value: `${tenants.filter((t) => t.plan === 'enterprise').length} Hospital`, variant: 'purple' },
           { label: 'MRR SaaS', value: 'Rp 14.5M/bln', variant: 'emerald' },
           { label: 'DB Latency', value: '18 ms', variant: 'blue' }
         ]}

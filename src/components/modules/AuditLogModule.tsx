@@ -182,14 +182,14 @@ export const AuditLogModule: React.FC = () => {
       }
     ];
 
-    // Combine user-generated audit logs with default mock if small
-    const combined = [...auditLogs];
-    for (const mock of defaultMock) {
-      if (!combined.some((l) => l.id === mock.id)) {
-        combined.push(mock);
-      }
-    }
-    return combined;
+    // Sebelumnya 8 entri contoh ini SELALU digabung permanen ke log asli
+    // (bukan cuma fallback saat kosong) — setiap ekspor "System Activity
+    // Report" untuk audit kepatuhan selalu tercampur aktivitas staf fiktif
+    // dengan yang sungguhan, mengaburkan keabsahannya. Log audit adalah data
+    // sensitif kepatuhan — beda dari widget notifikasi, di sini contoh
+    // hanya tampil kalau BENAR-BENAR belum ada aktivitas tercatat sama
+    // sekali (instalasi baru), dan tidak pernah campur dengan data asli.
+    return auditLogs.length > 0 ? auditLogs : defaultMock;
   }, [auditLogs]);
 
   // Filter logs for System Activity Report generator based on modal options

@@ -10,68 +10,61 @@ import {
   Activity,
   Layers,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Info
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { useData } from '../../context/DataContext';
+import * as Types from '../../types';
 
-interface RoomCamera {
+export interface RoomCamera {
   roomNo: string;
   petName: string;
   petSpecies: string;
   ownerName: string;
   roomType: string;
-  temperature: number;
-  humidity: number;
   statusNotes: string;
   category: 'hotel' | 'icu';
 }
 
-const ROOMS_DATA: RoomCamera[] = [
-  {
-    roomNo: 'R01',
-    petName: 'Milo',
-    petSpecies: 'Anjing Golden',
-    ownerName: 'Andri Santoso',
-    roomType: 'VIP CCTV Suite',
-    temperature: 23.5,
-    humidity: 52,
-    statusNotes: 'Nafsu makan baik, sedang tidur',
-    category: 'hotel'
-  },
-  {
-    roomNo: 'R02',
-    petName: 'Luna',
-    petSpecies: 'Kucing British Shorthair',
-    ownerName: 'Siti Rahma',
-    roomType: 'Deluxe Cat Suite',
-    temperature: 24.1,
-    humidity: 50,
-    statusNotes: 'Aktif bermain bola wol',
-    category: 'hotel'
-  },
-  {
-    roomNo: 'R03',
-    petName: 'Max',
-    petSpecies: 'French Bulldog',
-    ownerName: 'Dewi Lestari',
-    roomType: 'Small Suite AC',
-    temperature: 23.8,
-    humidity: 55,
-    statusNotes: 'Jadwal makan malam selesai',
-    category: 'hotel'
-  },
-  {
-    roomNo: 'R04',
-    petName: 'Oreo',
-    petSpecies: 'Kucing Ragdoll',
-    ownerName: 'Ahmad Dani',
-    roomType: 'Ruang Rawat Inap & ICU',
-    temperature: 24.5,
-    humidity: 58,
-    statusNotes: 'Monitoring infus IV D5% normal',
-    category: 'icu'
-  },
-];
+// Sebelumnya 4 pasien contoh tetap (Milo/Luna/Max/Oreo) yang tidak pernah
+// berkaitan dengan tamu boarding/rawat inap sungguhan — pelanggan manapun
+// yang login akan melihat "kamar" & hewan yang sama persis. Sekarang
+// diturunkan dari reservasi Pet Hotel aktif & pasien rawat inap sungguhan,
+// supaya minimal identitas kamar/hewan/pemilik yang ditampilkan itu nyata.
+export function deriveCctvRooms(
+  hotelReservations: Types.HotelReservation[],
+  inpatients: Types.Inpatient[],
+  pets: Types.Pet[]
+): RoomCamera[] {
+  const speciesFor = (petId: string) => pets.find((p) => p.id === petId)?.species || '-';
+
+  const hotelRooms: RoomCamera[] = hotelReservations
+    .filter((r) => r.status === 'Aktif')
+    .map((r) => ({
+      roomNo: r.roomNo,
+      petName: r.petName,
+      petSpecies: speciesFor(r.petId),
+      ownerName: r.customerName,
+      roomType: r.roomType,
+      statusNotes: `Menginap s/d ${r.checkOutDate}`,
+      category: 'hotel' as const
+    }));
+
+  const icuRooms: RoomCamera[] = inpatients
+    .filter((i) => i.status !== 'Pulang')
+    .map((i) => ({
+      roomNo: i.cageNo,
+      petName: i.petName,
+      petSpecies: speciesFor(i.petId),
+      ownerName: i.customerName,
+      roomType: 'Rawat Inap & ICU',
+      statusNotes: `${i.status} — ${i.diagnosis}`,
+      category: 'icu' as const
+    }));
+
+  return [...hotelRooms, ...icuRooms];
+}
 
 interface CctvMonitorProps {
   onClose?: () => void;
@@ -79,18 +72,20 @@ interface CctvMonitorProps {
 
 export const CctvMonitor: React.FC<CctvMonitorProps> = ({ onClose }) => {
   const { addToast } = useToast();
+  const { hotelReservations = [], inpatients = [], pets = [] } = useData();
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<'all' | 'hotel' | 'icu'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const filteredRooms = ROOMS_DATA.filter((r) => activeFilter === 'all' || r.category === activeFilter);
-  const activeRoomObj = ROOMS_DATA.find((r) => r.roomNo === selectedRoom);
+  const roomsData = deriveCctvRooms(hotelReservations, inpatients, pets);
+  const filteredRooms = roomsData.filter((r) => activeFilter === 'all' || r.category === activeFilter);
+  const activeRoomObj = roomsData.find((r) => r.roomNo === selectedRoom);
 
   const handleRefreshFeeds = () => {
     setIsRefreshing(true);
     setTimeout(() => {
       setIsRefreshing(false);
-      addToast('Seluruh stream CCTV & sensor telemetri lingkungan berhasil disinkronkan!', 'success');
+      addToast('Daftar kamar disinkronkan ulang dari reservasi & rawat inap aktif.', 'success');
     }, 600);
   };
 
@@ -105,15 +100,15 @@ export const CctvMonitor: React.FC<CctvMonitorProps> = ({ onClose }) => {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-sm text-[#FFFDF9] font-display">
-                Live CCTV & Surveillance Telemetri
+                Pratinjau Kamar CCTV (Demo)
               </h3>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                4 Stream Online
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black uppercase flex items-center gap-1">
+                <Info className="w-3 h-3" />
+                Pratinjau, Bukan Live
               </span>
             </div>
             <p className="text-xs text-[#E1D6BE]">
-              Pemantauan visual waktu-nyata kamar Pet Hotel, ICU Rawat Inap, sensor suhu & deteksi gerakan aktif.
+              Integrasi kamera CCTV sungguhan belum tersedia — gambar di bawah hanya foto pratinjau. Daftar kamar & pasien sudah sesuai reservasi Pet Hotel / rawat inap yang sedang aktif.
             </p>
           </div>
         </div>
@@ -129,7 +124,7 @@ export const CctvMonitor: React.FC<CctvMonitorProps> = ({ onClose }) => {
                   : 'text-white/70 hover:text-white'
               }`}
             >
-              Semua ({ROOMS_DATA.length})
+              Semua ({roomsData.length})
             </button>
             <button
               onClick={() => setActiveFilter('hotel')}
@@ -176,22 +171,26 @@ export const CctvMonitor: React.FC<CctvMonitorProps> = ({ onClose }) => {
       </div>
 
       {/* Grid of CCTV Feeds */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredRooms.map((r) => (
-          <CctvFeed
-            key={r.roomNo}
-            roomNo={r.roomNo}
-            petName={r.petName}
-            petSpecies={r.petSpecies}
-            ownerName={r.ownerName}
-            roomType={r.roomType}
-            temperature={r.temperature}
-            humidity={r.humidity}
-            statusNotes={r.statusNotes}
-            onOpenFullscreen={() => setSelectedRoom(r.roomNo)}
-          />
-        ))}
-      </div>
+      {filteredRooms.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredRooms.map((r) => (
+            <CctvFeed
+              key={r.roomNo}
+              roomNo={r.roomNo}
+              petName={r.petName}
+              petSpecies={r.petSpecies}
+              ownerName={r.ownerName}
+              roomType={r.roomType}
+              statusNotes={r.statusNotes}
+              onOpenFullscreen={() => setSelectedRoom(r.roomNo)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="p-8 text-center bg-[#0F172A] rounded-2xl border border-slate-800 text-slate-400 text-xs">
+          Tidak ada kamar dengan reservasi Pet Hotel atau pasien rawat inap yang sedang aktif saat ini.
+        </div>
+      )}
 
       {/* Fullscreen Popup Modal */}
       {selectedRoom && activeRoomObj && (
@@ -230,8 +229,6 @@ export const CctvMonitor: React.FC<CctvMonitorProps> = ({ onClose }) => {
                 petSpecies={activeRoomObj.petSpecies}
                 ownerName={activeRoomObj.ownerName}
                 roomType={activeRoomObj.roomType}
-                temperature={activeRoomObj.temperature}
-                humidity={activeRoomObj.humidity}
                 statusNotes={activeRoomObj.statusNotes}
               />
             </div>
