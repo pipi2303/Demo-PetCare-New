@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Store,
   LogOut,
+  Lock,
   KeyRound,
   Zap,
   Building2,
@@ -78,7 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
   openPublicBooking,
   onOpenAI,
 }) => {
-  const { user, findAccountEmailByRole, logout, openLoginScreen, activeOwnership } = useAuth();
+  const { user, findAccountEmailByRole, logout, openLoginScreen, activeOwnership, lockApp } = useAuth();
   const { notifications = [], markNotificationRead } = useData();
   const { addToast } = useToast();
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
@@ -510,6 +511,17 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <KeyRound className="w-3.5 h-3.5" />
                   <span>Buka Layar Login & Otorisasi</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowUserDropdown(false);
+                    lockApp();
+                  }}
+                  className="w-full py-1.5 px-2.5 rounded-lg bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] border border-[#E1D6BE] font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5 text-[#B8905A]" />
+                  <span>Kunci Sekarang</span>
                 </button>
 
                 <button

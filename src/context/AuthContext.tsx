@@ -34,6 +34,11 @@ export interface AuthContextType {
   isLoginScreenOpen: boolean;
   openLoginScreen: () => void;
   closeLoginScreen: () => void;
+  // Lock Aplikasi Otomatis — berbeda dari logout: sesi/token tetap ada,
+  // hanya disembunyikan di balik LockScreen sampai unlock berhasil.
+  isLocked: boolean;
+  lockApp: () => void;
+  unlockApp: (pin: string) => Promise<{ success: boolean; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -99,6 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [isLoginScreenOpen, setIsLoginScreenOpen] = useState<boolean>(false);
+  const [isLocked, setIsLocked] = useState<boolean>(false);
 
   const setActiveBranchId = (branchId: string) => {
     setActiveBranchIdState(branchId);
@@ -260,6 +266,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Lock Aplikasi Otomatis — kunci sesi tanpa logout (token/state tetap).
+  const lockApp = () => {
+    if (!user || isLocked) return;
+    setIsLocked(true);
+    recordSecurityLog('Edit', user.name, `Aplikasi otomatis terkunci (idle) untuk sesi ${user.name} (${user.role}).`, user, 'Info');
+  };
+
+  // Unlock HANYA menerima PIN milik user yang sedang login — verifikasi
+  // memakai endpoint switch-account yang sudah ada, ditarget ke email user
+  // aktif sendiri, jadi PIN staf lain otomatis ditolak server (401).
+  const unlockApp = async (pin: string): Promise<{ success: boolean; message?: string }> => {
+    if (!user) return { success: false, message: 'Tidak ada sesi aktif untuk dibuka.' };
+    const result = await switchAccount(user.email, pin);
+    if (result.success) {
+      setIsLocked(false);
+      recordSecurityLog('Login', user.name, `Aplikasi berhasil dibuka kembali (unlock) oleh ${user.name}.`, user, 'Info');
+    } else {
+      recordSecurityLog('Login', user.name, `Percobaan unlock aplikasi gagal untuk ${user.name} (PIN salah).`, user, 'Warning');
+    }
+    return result;
+  };
+
   // Directory-only lookup (name/email/role, no secrets) so UI can show which
   // persona a "quick switch" button targets before the PIN is entered.
   const findAccountEmailByRole = (role: UserRole): string | null => {
@@ -278,6 +306,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthToken(null);
     setUser(null);
     setIsLoginScreenOpen(true);
+    setIsLocked(false);
   };
 
   const openLoginScreen = () => setIsLoginScreenOpen(true);
@@ -301,7 +330,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         isLoginScreenOpen,
         openLoginScreen,
-        closeLoginScreen
+        closeLoginScreen,
+        isLocked,
+        lockApp,
+        unlockApp
       }}
     >
       {children}

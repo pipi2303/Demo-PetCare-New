@@ -35,6 +35,8 @@ import { NotificationsModule } from './components/modules/NotificationsModule';
 import { TenantAdminModule } from './components/modules/TenantAdminModule';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ResetPasswordScreen } from './components/auth/ResetPasswordScreen';
+import { LockScreen } from './components/auth/LockScreen';
+import { useIdleTimer } from './hooks/useIdleTimer';
 import { getRoleInfo } from './utils/roleUtils';
 import {
   CalendarCheck,
@@ -114,8 +116,14 @@ const MainAppContent: React.FC = () => {
     () => new URLSearchParams(window.location.search).get('resetToken')
   );
 
-  const { user, isLoginScreenOpen, closeLoginScreen } = useAuth();
+  const { user, isLoginScreenOpen, closeLoginScreen, isLocked, lockApp } = useAuth();
   const { addToast } = useToast();
+  const { appSettings } = useData();
+
+  // Lock Aplikasi Otomatis — timer cuma aktif kalau sudah login & fiturnya
+  // diaktifkan di Pengaturan Sistem. Berhenti total (tidak dengar event
+  // apa pun) kalau appLockEnabled false, supaya tidak ada overhead diam-diam.
+  useIdleTimer(!!user && !isLoginScreenOpen && appSettings.appLockEnabled, appSettings.appLockTimeoutMinutes, lockApp);
 
   // Single source of truth for role/permission resolution (see usePermissions.ts) —
   // replaces the divergent effectiveRole logic that used to live separately here.
@@ -169,6 +177,11 @@ const MainAppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#F6F1E6] text-[#22242B] font-sans antialiased selection:bg-[#1B2A45] selection:text-[#FFFDF9]">
+      {/* Lock Aplikasi Otomatis — overlay di atas aplikasi, BUKAN ganti
+          seluruh halaman seperti LoginScreen, supaya modal/form yang
+          sedang terbuka di baliknya tidak hilang saat unlock. */}
+      {isLocked && <LockScreen />}
+
       {/* Sidebar Navigation */}
       <Sidebar
         activeModule={activeModule}
