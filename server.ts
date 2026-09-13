@@ -365,6 +365,27 @@ async function startServer() {
     }
   });
 
+  // Unlock the CURRENT session with its own account password instead of the
+  // PIN — an alternative to switch-account for users who forgot/don't use
+  // their PIN. Target email always comes from the verified session, never
+  // the client body, and no new token is issued (the existing session stays
+  // valid throughout — locking is a client-side UI state, not a logout).
+  app.post("/api/auth/unlock-password", requireSession, (req, res) => {
+    try {
+      const email = (req as any).session.email as string;
+      const { password } = req.body || {};
+      if (!password) {
+        return res.status(400).json({ success: false, message: "Kata sandi wajib diisi." });
+      }
+      if (!verifyPassword(email, password)) {
+        return res.status(401).json({ success: false, message: "Kata sandi tidak sesuai." });
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
   // End the current session (logout).
   app.post("/api/auth/logout", requireSession, (req, res) => {
     const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");

@@ -39,6 +39,7 @@ export interface AuthContextType {
   isLocked: boolean;
   lockApp: () => void;
   unlockApp: (pin: string) => Promise<{ success: boolean; message?: string }>;
+  unlockAppWithPassword: (password: string) => Promise<{ success: boolean; message?: string }>;
   changePin: (currentPassword: string, newPin: string) => Promise<{ success: boolean; message?: string }>;
 }
 
@@ -289,6 +290,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return result;
   };
 
+  // Unlock alternatif memakai kata sandi akun sendiri (bukan PIN). Tidak
+  // menerbitkan token baru — sesi yang sudah ada tetap dipakai, cuma
+  // dibuka kembali di sisi client.
+  const unlockAppWithPassword = async (password: string): Promise<{ success: boolean; message?: string }> => {
+    if (!user) return { success: false, message: 'Tidak ada sesi aktif untuk dibuka.' };
+    try {
+      const res = await fetch('/api/auth/unlock-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ password })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        recordSecurityLog('Login', user.name, `Percobaan unlock aplikasi gagal untuk ${user.name} (kata sandi salah).`, user, 'Warning');
+        return { success: false, message: data.message || 'Kata sandi tidak sesuai.' };
+      }
+      setIsLocked(false);
+      recordSecurityLog('Login', user.name, `Aplikasi berhasil dibuka kembali (unlock via kata sandi) oleh ${user.name}.`, user, 'Info');
+      return { success: true };
+    } catch (e) {
+      return { success: false, message: 'Tidak dapat terhubung ke server autentikasi. Coba lagi.' };
+    }
+  };
+
   // Ganti PIN akun yang sedang login. Target email selalu dari sesi
   // server-side (backend membaca req.session.email, bukan dari body) —
   // frontend tidak perlu (dan tidak bisa) mengganti PIN akun lain.
@@ -357,6 +382,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLocked,
         lockApp,
         unlockApp,
+        unlockAppWithPassword,
         changePin
       }}
     >
