@@ -13,7 +13,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 #[Fillable(['username', 'email', 'password', 'first_name', 'last_name', 'status'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class PlatformUser extends Authenticatable
 {
     use HasFactory, Notifiable, SoftDeletes;
@@ -25,6 +25,7 @@ class PlatformUser extends Authenticatable
             'last_login_at' => 'datetime',
             'password_changed_at' => 'datetime',
             'locked_at' => 'datetime',
+            'two_factor_confirmed_at' => 'datetime',
             'password' => 'hashed',
         ];
     }

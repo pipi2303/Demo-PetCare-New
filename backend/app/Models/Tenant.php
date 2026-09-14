@@ -20,6 +20,21 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     use HasDatabase;
     use HasDomains;
 
+    /**
+     * Real columns on the `tenants` table, as opposed to virtual attributes
+     * the package would otherwise fold into the `data` JSON blob (its
+     * default here is just `['id']`). `status` is a genuine migrated
+     * column (Phase 5) and must stay queryable/settable directly — leaving
+     * it out of this list would silently store it in `data` instead, where
+     * a plain `WHERE status = ...` query would never see it.
+     *
+     * @return list<string>
+     */
+    public static function getCustomColumns(): array
+    {
+        return ['id', 'status'];
+    }
+
     public function tenantPlans(): HasMany
     {
         return $this->hasMany(TenantPlan::class);

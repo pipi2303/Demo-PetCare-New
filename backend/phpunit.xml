@@ -21,6 +21,10 @@
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
+        <!-- Higher than the lockout threshold so lockout tests aren't
+             short-circuited by the rate limiter first; a dedicated test
+             lowers this at runtime to exercise rate limiting itself. -->
+        <env name="AUTH_LOGIN_RATE_LIMIT" value="20"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <env name="DB_DATABASE" value="testing"/>
