@@ -1,6 +1,8 @@
 <?php
 
 use App\Exceptions\ApiException;
+use App\Http\Middleware\EnsureFeatureEnabled;
+use App\Http\Middleware\EnsurePermission;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,6 +25,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // token issuance path for these routes, so requiring one would
         // just lock every API client out.
         $middleware->validateCsrfTokens(except: ['api/*']);
+
+        // Phase 7 — Permission Guard and Feature Guard (§7.4).
+        $middleware->alias([
+            'permission' => EnsurePermission::class,
+            'feature' => EnsureFeatureEnabled::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
