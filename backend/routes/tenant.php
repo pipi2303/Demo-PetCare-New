@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\Auth\InvitationController;
 use App\Http\Controllers\Api\Auth\LoginController;
 use App\Http\Controllers\Api\Auth\PasswordResetController;
+use App\Http\Controllers\Api\NavigationController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\UserRoleController;
@@ -88,5 +89,8 @@ Route::middleware([
 
         Route::put('/api/tenant/users/{user}/roles', [UserRoleController::class, 'sync'])
             ->middleware('permission:user.update');
+
+        // Phase 8 — Dynamic Menu (§8.4).
+        Route::get('/api/navigation', [NavigationController::class, 'index']);
     });
 });

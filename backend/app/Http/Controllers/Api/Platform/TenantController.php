@@ -13,8 +13,8 @@ use App\Services\Tenant\TenantProvisioningService;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Granular permission checks (Phase 7) aren't wired in yet — these routes
- * are gated only by `auth:platform` (any logged-in platform user) for now.
+ * Gated only by `auth:platform` (any logged-in platform user) — the
+ * platform side has no granular permission table by design (Phase 2/7).
  */
 class TenantController extends Controller
 {

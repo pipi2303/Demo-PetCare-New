@@ -27,9 +27,11 @@ class DatabaseSeeder extends Seeder
             return;
         }
 
-        // Central (platform) default data has nothing to seed yet — default
-        // platform roles are a DB-level enum, not catalog rows (see the
-        // Phase 3/4 plan). A bootstrap Platform Super Admin account is
-        // deferred to Phase 5/6, where a login flow exists to verify it.
+        // Default platform roles are a DB-level enum, not catalog rows (see
+        // the Phase 3/4 plan) — nothing to seed for those. A bootstrap
+        // Platform Super Admin account is deferred until it's actually
+        // needed by a concrete flow (none yet requires one to exist by
+        // default).
+        $this->call(PlatformFeatureSeeder::class);
     }
 }

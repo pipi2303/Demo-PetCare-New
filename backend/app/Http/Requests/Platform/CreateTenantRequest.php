@@ -27,6 +27,8 @@ class CreateTenantRequest extends FormRequest
             'admin.last_name' => ['nullable', 'string', 'max:255'],
             'admin.email' => ['required', 'string', 'email', 'max:255'],
             'admin.username' => ['nullable', 'string', 'max:255'],
+            'features' => ['sometimes', 'array'],
+            'features.*' => ['string', 'exists:features,code'],
         ];
     }
 }

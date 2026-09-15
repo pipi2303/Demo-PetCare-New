@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Services\Tenant;
 
 use App\Exceptions\ApiException;
+use App\Models\Feature;
 use App\Models\PlatformAuditLog;
 use App\Models\Role;
 use App\Models\Tenant;
+use App\Models\TenantFeature;
 use App\Models\TenantProvisioningJob;
 use App\Models\User;
 use App\Services\Auth\InvitationService;
@@ -36,10 +38,12 @@ class TenantProvisioningService
     public function __construct(private InvitationService $invitations) {}
 
     /**
-     * @param  array{id: string, name: string, domain: string, admin: array{first_name: string, last_name?: string, email: string, username?: string}}  $data
+     * @param  array{id: string, name: string, domain: string, admin: array{first_name: string, last_name?: string, email: string, username?: string}, features?: list<string>}  $data
      */
     public function provision(array $data): Tenant
     {
+        $featureCodes = $data['features'] ?? [];
+
         $tenant = new Tenant([
             'id' => $data['id'],
             'status' => 'SUSPENDED',
@@ -48,6 +52,7 @@ class TenantProvisioningService
             // original request payload again — it just re-reads this.
             'pending_admin' => $data['admin'],
             'pending_domain' => $data['domain'],
+            'pending_features' => $featureCodes,
         ]);
 
         try {
@@ -56,6 +61,8 @@ class TenantProvisioningService
             $tenant->save();
 
             $tenant->domains()->create(['domain' => $data['domain']]);
+
+            $this->enableFeatures($tenant, $featureCodes);
         } catch (Throwable $e) {
             $this->recordFailure($tenant, null, $e);
 
@@ -87,6 +94,10 @@ class TenantProvisioningService
 
             if ($tenant->domains()->doesntExist() && $tenant->pending_domain) {
                 $tenant->domains()->create(['domain' => $tenant->pending_domain]);
+            }
+
+            if ($tenant->tenantFeatures()->doesntExist()) {
+                $this->enableFeatures($tenant, $tenant->pending_features ?? []);
             }
         } catch (Throwable $e) {
             $this->recordFailure($tenant, null, $e);
@@ -154,6 +165,26 @@ class TenantProvisioningService
             $this->recordFailure($tenant, $job, $e);
 
             throw new ApiException('PROVISIONING_FAILED', 'Tenant provisioning failed: '.$e->getMessage(), 500, $e);
+        }
+    }
+
+    /**
+     * @param  list<string>  $featureCodes
+     */
+    private function enableFeatures(Tenant $tenant, array $featureCodes): void
+    {
+        if (empty($featureCodes)) {
+            return;
+        }
+
+        $featureIds = Feature::whereIn('code', $featureCodes)->pluck('id');
+
+        foreach ($featureIds as $featureId) {
+            TenantFeature::create([
+                'tenant_id' => $tenant->id,
+                'feature_id' => $featureId,
+                'enabled' => true,
+            ]);
         }
     }
 
