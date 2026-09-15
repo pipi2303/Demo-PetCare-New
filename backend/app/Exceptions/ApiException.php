@@ -16,7 +16,8 @@ class ApiException extends Exception
         public readonly string $errorCode,
         string $message,
         public readonly int $status = 422,
+        ?\Throwable $previous = null,
     ) {
-        parent::__construct($message);
+        parent::__construct($message, 0, $previous);
     }
 }

@@ -37,8 +37,12 @@ class PasswordResetMail extends Mailable
 
     public function content(): Content
     {
+        // markdown, not view: the template uses <x-mail::message> markdown
+        // mail components, which only get their view namespace registered
+        // via the Markdown renderer (view: renders it as a plain Blade
+        // view instead, which fails with "No hint path defined for [mail]").
         return new Content(
-            view: 'emails.password-reset',
+            markdown: 'emails.password-reset',
         );
     }
 }

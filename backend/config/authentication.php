@@ -43,4 +43,18 @@ return [
         'expire_minutes' => (int) env('AUTH_PASSWORD_RESET_EXPIRE', 60),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | User Invitations
+    |--------------------------------------------------------------------------
+    |
+    | Master Prompt §9.3 — how long a new user (including a freshly
+    | provisioned tenant's bootstrap admin, Phase 6) has to accept their
+    | invitation before the token expires.
+    |
+    */
+    'invitation' => [
+        'expire_days' => (int) env('AUTH_INVITATION_EXPIRE_DAYS', 7),
+    ],
+
 ];

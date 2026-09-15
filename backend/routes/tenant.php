@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\Auth\InvitationController;
 use App\Http\Controllers\Api\Auth\LoginController;
 use App\Http\Controllers\Api\Auth\PasswordResetController;
 use Illuminate\Support\Facades\DB;
@@ -49,6 +50,7 @@ Route::middleware([
     Route::post('/api/auth/login', [LoginController::class, 'login'])->middleware('throttle:login');
     Route::post('/api/auth/password-reset/request', [PasswordResetController::class, 'request']);
     Route::post('/api/auth/password-reset/confirm', [PasswordResetController::class, 'confirm']);
+    Route::post('/api/auth/invitations/accept', [InvitationController::class, 'accept']);
 
     Route::middleware('auth:web')->group(function () {
         Route::post('/api/auth/logout', [LoginController::class, 'logout']);
