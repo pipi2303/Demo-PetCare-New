@@ -1,20 +1,20 @@
 services:
-  petcare-demo:
+  petcares-demo:
     build:
       context: .
       dockerfile: Dockerfile
 
-    container_name: petcare-demo
+    container_name: petcares-demo
 
     restart: unless-stopped
 
     ports:
-      - "3001:3000"
+      - "3002:3000"
 
     environment:
       NODE_ENV: production
       PORT: 3000
-      APP_URL: http://123.176.120.78:3001
+      APP_URL: http://123.176.120.78:3002
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
       GMAIL_USER: ${GMAIL_USER}
