@@ -1,10 +1,7 @@
 import crypto from "crypto";
-import fs from "fs";
-import path from "path";
+import { pool } from "./db";
 import { INITIAL_USERS } from "../src/data/mockData";
 
-const USERS_DATA_PATH = path.join(process.cwd(), "server", "data", "users.json");
-const PINS_DATA_PATH = path.join(process.cwd(), "server", "data", "pins.json");
 const DEFAULT_PASSWORD = "petcare123";
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -30,10 +27,9 @@ interface ResetTokenEntry {
   expiresAt: number;
 }
 
-// email (lowercase) -> "salt:hash"
-let passwordStore: Record<string, string> = {};
-// email (lowercase) -> "salt:hash" of a 4-digit shift PIN
-let pinStore: Record<string, string> = {};
+// Reset tokens are short-lived (30min) and only meaningful for the process
+// that issued them — in-memory is an intentional trade-off, same as
+// server/sessionService.ts, not something that needs a database.
 const resetTokens = new Map<string, ResetTokenEntry>();
 let cleanupInterval: NodeJS.Timeout | null = null;
 
@@ -42,98 +38,85 @@ function hashPassword(plainPassword: string, salt: string = crypto.randomBytes(1
   return `${salt}:${hash}`;
 }
 
-function verifyHash(plainPassword: string, stored: string): boolean {
+function verifyHash(plainPassword: string, stored: string | null): boolean {
+  if (!stored) return false;
   const [salt, hash] = stored.split(":");
   if (!salt || !hash) return false;
   const candidate = crypto.scryptSync(plainPassword, salt, 64).toString("hex");
   return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(candidate, "hex"));
 }
 
-function persistPasswordStore() {
-  fs.mkdirSync(path.dirname(USERS_DATA_PATH), { recursive: true });
-  fs.writeFileSync(USERS_DATA_PATH, JSON.stringify(passwordStore, null, 2), "utf8");
-}
-
-function persistPinStore() {
-  fs.mkdirSync(path.dirname(PINS_DATA_PATH), { recursive: true });
-  fs.writeFileSync(PINS_DATA_PATH, JSON.stringify(pinStore, null, 2), "utf8");
-}
-
 /**
- * Load password/PIN stores from disk, or seed every known demo user with the
- * default password/PIN on first run.
+ * Seed the `users` table from INITIAL_USERS on first boot (profile + a
+ * default password/PIN hash), same "seed once if missing" behavior the old
+ * file-backed store had. Existing rows (and any password/PIN already set)
+ * are left untouched.
  */
-export function initAuthService() {
-  try {
-    if (fs.existsSync(USERS_DATA_PATH)) {
-      passwordStore = JSON.parse(fs.readFileSync(USERS_DATA_PATH, "utf8"));
-    }
-  } catch (err) {
-    console.error("[AuthService] Failed to read users.json, reseeding:", err);
-    passwordStore = {};
-  }
+export async function initAuthService() {
+  const { rows: branchRows } = await pool.query<{ id: string; legacy_id: string }>(
+    "SELECT id, legacy_id FROM branches WHERE legacy_id IS NOT NULL"
+  );
+  const branchIdByLegacy = new Map(branchRows.map((r) => [r.legacy_id, r.id]));
 
-  try {
-    if (fs.existsSync(PINS_DATA_PATH)) {
-      pinStore = JSON.parse(fs.readFileSync(PINS_DATA_PATH, "utf8"));
-    }
-  } catch (err) {
-    console.error("[AuthService] Failed to read pins.json, reseeding:", err);
-    pinStore = {};
-  }
-
-  let seeded = false;
-  let pinsSeeded = false;
   for (const u of INITIAL_USERS) {
-    const key = u.email.toLowerCase();
-    if (!passwordStore[key]) {
-      passwordStore[key] = hashPassword(DEFAULT_PASSWORD);
-      seeded = true;
-    }
-    if (!pinStore[key]) {
-      const defaultPin = DEFAULT_PINS[key] || "1234";
-      pinStore[key] = hashPassword(defaultPin);
-      pinsSeeded = true;
-    }
-  }
-  if (seeded) {
-    persistPasswordStore();
-  }
-  if (pinsSeeded) {
-    persistPinStore();
+    const email = u.email.toLowerCase();
+    const branchId = u.branchId && branchIdByLegacy.has(u.branchId) ? branchIdByLegacy.get(u.branchId)! : null;
+    await pool.query(
+      `INSERT INTO users (legacy_id, email, name, role, ownership_type, branch_id, branch_name, active, password_hash, pin_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (email) DO NOTHING`,
+      [
+        u.id,
+        email,
+        u.name,
+        u.role,
+        u.ownershipType || null,
+        branchId,
+        u.branchName || null,
+        u.active,
+        hashPassword(DEFAULT_PASSWORD),
+        hashPassword(DEFAULT_PINS[email] || "1234"),
+      ]
+    );
   }
 
   if (cleanupInterval) clearInterval(cleanupInterval);
   cleanupInterval = setInterval(cleanupExpiredTokens, 5 * 60 * 1000);
 
-  console.log(`[AuthService] 🔐 Password store ready (${Object.keys(passwordStore).length} accounts).`);
-  console.log(`[AuthService] 🔢 PIN store ready (${Object.keys(pinStore).length} accounts).`);
+  const { rows: countRows } = await pool.query<{ count: string }>("SELECT count(*)::text FROM users");
+  console.log(`[AuthService] 🔐 Postgres user/PIN store ready (${countRows[0].count} akun).`);
 }
 
-export function verifyPassword(email: string, plainPassword: string): boolean {
-  const stored = passwordStore[email.toLowerCase()];
-  if (!stored) return false;
-  return verifyHash(plainPassword, stored);
+export async function verifyPassword(email: string, plainPassword: string): Promise<boolean> {
+  const { rows } = await pool.query<{ password_hash: string | null }>(
+    "SELECT password_hash FROM users WHERE lower(email) = lower($1)",
+    [email]
+  );
+  return verifyHash(plainPassword, rows[0]?.password_hash ?? null);
 }
 
-export function setPassword(email: string, plainPassword: string) {
-  passwordStore[email.toLowerCase()] = hashPassword(plainPassword);
-  persistPasswordStore();
+export async function setPassword(email: string, plainPassword: string): Promise<void> {
+  await pool.query("UPDATE users SET password_hash = $1 WHERE lower(email) = lower($2)", [
+    hashPassword(plainPassword),
+    email,
+  ]);
 }
 
-export function userExists(email: string): boolean {
-  return !!passwordStore[email.toLowerCase()];
+export async function userExists(email: string): Promise<boolean> {
+  const { rows } = await pool.query("SELECT 1 FROM users WHERE lower(email) = lower($1)", [email]);
+  return rows.length > 0;
 }
 
-export function verifyPin(email: string, plainPin: string): boolean {
-  const stored = pinStore[email.toLowerCase()];
-  if (!stored) return false;
-  return verifyHash(plainPin, stored);
+export async function verifyPin(email: string, plainPin: string): Promise<boolean> {
+  const { rows } = await pool.query<{ pin_hash: string | null }>(
+    "SELECT pin_hash FROM users WHERE lower(email) = lower($1)",
+    [email]
+  );
+  return verifyHash(plainPin, rows[0]?.pin_hash ?? null);
 }
 
-export function setPin(email: string, plainPin: string) {
-  pinStore[email.toLowerCase()] = hashPassword(plainPin);
-  persistPinStore();
+export async function setPin(email: string, plainPin: string): Promise<void> {
+  await pool.query("UPDATE users SET pin_hash = $1 WHERE lower(email) = lower($2)", [hashPassword(plainPin), email]);
 }
 
 /**
@@ -141,9 +124,10 @@ export function setPin(email: string, plainPin: string) {
  * login, where the caller doesn't know which email to check yet). Returns
  * the matching email in lowercase, or null. O(n) over a small demo roster.
  */
-export function findAccountByPin(plainPin: string): string | null {
-  for (const email of Object.keys(pinStore)) {
-    if (verifyHash(plainPin, pinStore[email])) return email;
+export async function findAccountByPin(plainPin: string): Promise<string | null> {
+  const { rows } = await pool.query<{ email: string; pin_hash: string | null }>("SELECT email, pin_hash FROM users");
+  for (const row of rows) {
+    if (verifyHash(plainPin, row.pin_hash)) return row.email;
   }
   return null;
 }
@@ -161,16 +145,26 @@ export interface AccountInfo {
  * Server-side source of truth for who a given account actually is — the
  * client must never be trusted to declare its own role/ownership.
  */
-export function getAccountInfo(email: string): AccountInfo | null {
-  const found = INITIAL_USERS.find((u) => u.email.toLowerCase() === email.toLowerCase());
+export async function getAccountInfo(email: string): Promise<AccountInfo | null> {
+  const { rows } = await pool.query<{
+    email: string;
+    name: string;
+    role: string;
+    ownership_type: string | null;
+    branch_id: string | null;
+    branch_name: string | null;
+  }>("SELECT email, name, role, ownership_type, branch_id, branch_name FROM users WHERE lower(email) = lower($1)", [
+    email,
+  ]);
+  const found = rows[0];
   if (!found) return null;
   return {
     email: found.email,
     name: found.name,
     role: found.role,
-    ownershipType: found.ownershipType,
-    branchId: found.branchId,
-    branchName: found.branchName,
+    ownershipType: found.ownership_type || undefined,
+    branchId: found.branch_id || undefined,
+    branchName: found.branch_name || undefined,
   };
 }
 

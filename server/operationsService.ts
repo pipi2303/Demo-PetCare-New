@@ -1,8 +1,6 @@
 import crypto from "crypto";
-import fs from "fs";
-import path from "path";
-
-const STORE_PATH = path.join(process.cwd(), "server", "data", "operations.json");
+import { pool, withTransaction } from "./db";
+import type { PoolClient } from "pg";
 
 export type AmbulanceStatus = "received" | "triaged" | "assigned" | "en_route" | "arrived" | "patient_onboard" | "at_clinic" | "handed_over" | "closed" | "cancelled";
 export type TelehealthStatus = "scheduled" | "waiting_room" | "in_progress" | "completed" | "cancelled" | "no_show";
@@ -54,79 +52,147 @@ export interface TelehealthRecord {
   events: OperationEvent[];
 }
 
-interface OperationsStore {
-  ambulanceUnits: AmbulanceUnitRecord[];
-  ambulanceRequests: AmbulanceRequestRecord[];
-  telehealthSessions: TelehealthRecord[];
-}
-
-let store: OperationsStore = { ambulanceUnits: [], ambulanceRequests: [], telehealthSessions: [] };
-
 function now() {
   return new Date().toISOString();
 }
 
-function persist() {
-  fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
-  const tempPath = `${STORE_PATH}.tmp`;
-  fs.writeFileSync(tempPath, JSON.stringify(store, null, 2), "utf8");
-  fs.renameSync(tempPath, STORE_PATH);
+function toAmbulanceUnit(row: any): AmbulanceUnitRecord {
+  return { id: row.id, code: row.code, status: row.status, updatedAt: row.updated_at.toISOString() };
 }
 
-function event(actor: string, type: string, note?: string): OperationEvent {
-  return { at: now(), actor, type, note };
+function toEvent(row: any): OperationEvent {
+  return { at: row.at.toISOString(), actor: row.actor, type: row.type, note: row.note ?? undefined };
 }
 
-export function initOperationsService() {
-  try {
-    if (fs.existsSync(STORE_PATH)) {
-      const loaded = JSON.parse(fs.readFileSync(STORE_PATH, "utf8"));
-      store = {
-        ambulanceUnits: Array.isArray(loaded.ambulanceUnits) ? loaded.ambulanceUnits : [],
-        ambulanceRequests: Array.isArray(loaded.ambulanceRequests) ? loaded.ambulanceRequests : [],
-        telehealthSessions: Array.isArray(loaded.telehealthSessions) ? loaded.telehealthSessions : [],
-      };
-    }
-  } catch (error) {
-    console.error("[OperationsService] Unable to load operations store:", error);
-    store = { ambulanceUnits: [], ambulanceRequests: [], telehealthSessions: [] };
+function toAmbulanceRequest(row: any, events: OperationEvent[]): AmbulanceRequestRecord {
+  return {
+    id: row.id,
+    requestNo: row.request_no,
+    patientName: row.patient_name,
+    callerName: row.caller_name,
+    callerPhone: row.caller_phone,
+    urgency: row.urgency,
+    pickupAddress: row.pickup_address,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined,
+    notes: row.notes ?? undefined,
+    status: row.status,
+    assignedUnitId: row.assigned_unit_id ?? undefined,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+    events,
+  };
+}
+
+function toTelehealthSession(row: any, events: OperationEvent[]): TelehealthRecord {
+  return {
+    id: row.id,
+    sessionNo: row.session_no,
+    patientName: row.patient_name,
+    customerId: row.customer_id,
+    doctorId: row.doctor_id,
+    scheduledAt: row.scheduled_at.toISOString(),
+    durationMinutes: row.duration_minutes,
+    consentAcceptedAt: row.consent_accepted_at.toISOString(),
+    status: row.status,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+    events,
+  };
+}
+
+async function loadAmbulanceRequests(): Promise<AmbulanceRequestRecord[]> {
+  const { rows: requests } = await pool.query("SELECT * FROM ambulance_requests ORDER BY created_at DESC");
+  const { rows: events } = await pool.query("SELECT * FROM ambulance_events ORDER BY at ASC");
+  const eventsByRequest = new Map<string, OperationEvent[]>();
+  for (const e of events) {
+    const list = eventsByRequest.get(e.request_id) || [];
+    list.push(toEvent(e));
+    eventsByRequest.set(e.request_id, list);
   }
+  return requests.map((r) => toAmbulanceRequest(r, eventsByRequest.get(r.id) || []));
 }
 
-export function listOperations() {
-  return structuredClone(store);
+async function loadTelehealthSessions(): Promise<TelehealthRecord[]> {
+  const { rows: sessions } = await pool.query("SELECT * FROM telehealth_sessions ORDER BY created_at DESC");
+  const { rows: events } = await pool.query("SELECT * FROM telehealth_events ORDER BY at ASC");
+  const eventsBySession = new Map<string, OperationEvent[]>();
+  for (const e of events) {
+    const list = eventsBySession.get(e.session_id) || [];
+    list.push(toEvent(e));
+    eventsBySession.set(e.session_id, list);
+  }
+  return sessions.map((s) => toTelehealthSession(s, eventsBySession.get(s.id) || []));
 }
 
-export function registerAmbulanceUnit(input: { id?: string; code: string; status?: AmbulanceUnitRecord["status"] }, actor: string) {
+export async function initOperationsService() {
+  const { rows } = await pool.query<{ count: string }>(
+    "SELECT (SELECT count(*) FROM ambulance_requests) + (SELECT count(*) FROM telehealth_sessions) AS count"
+  );
+  console.log(`[OperationsService] 🚑 Postgres-backed operations store ready (${rows[0].count} catatan existing).`);
+}
+
+export async function listOperations() {
+  const [ambulanceUnitsRows, ambulanceRequests, telehealthSessions] = await Promise.all([
+    pool.query("SELECT * FROM ambulance_units ORDER BY code ASC"),
+    loadAmbulanceRequests(),
+    loadTelehealthSessions(),
+  ]);
+  return {
+    ambulanceUnits: ambulanceUnitsRows.rows.map(toAmbulanceUnit),
+    ambulanceRequests,
+    telehealthSessions,
+  };
+}
+
+export async function registerAmbulanceUnit(input: { code: string; status?: AmbulanceUnitRecord["status"] }, _actor: string) {
   const code = input.code?.trim().toUpperCase();
   if (!code) throw new Error("Kode unit ambulance wajib diisi.");
-  const existing = store.ambulanceUnits.find((unit) => unit.code === code);
-  if (existing) return existing;
-  const unit: AmbulanceUnitRecord = { id: input.id || crypto.randomUUID(), code, status: input.status || "available", updatedAt: now() };
-  store.ambulanceUnits.push(unit);
-  persist();
-  return unit;
+  const { rows: existingRows } = await pool.query("SELECT * FROM ambulance_units WHERE code = $1", [code]);
+  if (existingRows[0]) return toAmbulanceUnit(existingRows[0]);
+  const { rows } = await pool.query(
+    "INSERT INTO ambulance_units (code, status) VALUES ($1, $2) RETURNING *",
+    [code, input.status || "available"]
+  );
+  return toAmbulanceUnit(rows[0]);
 }
 
-export function createAmbulanceRequest(input: Omit<AmbulanceRequestRecord, "id" | "requestNo" | "status" | "createdAt" | "updatedAt" | "events">, actor: string) {
+export async function createAmbulanceRequest(
+  input: Omit<AmbulanceRequestRecord, "id" | "requestNo" | "status" | "createdAt" | "updatedAt" | "events">,
+  actor: string
+) {
   if (!input.patientName?.trim() || !input.callerName?.trim() || !input.callerPhone?.trim() || !input.pickupAddress?.trim()) {
     throw new Error("Data pasien, pelapor, telepon, dan lokasi penjemputan wajib diisi.");
   }
   if (input.latitude !== undefined && (input.latitude < -90 || input.latitude > 90)) throw new Error("Latitude tidak valid.");
   if (input.longitude !== undefined && (input.longitude < -180 || input.longitude > 180)) throw new Error("Longitude tidak valid.");
+
   const createdAt = now();
-  const request: AmbulanceRequestRecord = {
-    ...input,
-    id: crypto.randomUUID(),
-    requestNo: `AMB-${createdAt.slice(0, 10).replaceAll("-", "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`,
-    status: "received",
-    createdAt,
-    updatedAt: createdAt,
-    events: [event(actor, "received")],
-  };
-  store.ambulanceRequests.push(request);
-  persist();
-  return request;
+  const requestNo = `AMB-${createdAt.slice(0, 10).replaceAll("-", "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO ambulance_requests (request_no, patient_name, caller_name, caller_phone, urgency, pickup_address, latitude, longitude, notes, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'received') RETURNING *`,
+      [
+        requestNo,
+        input.patientName,
+        input.callerName,
+        input.callerPhone,
+        input.urgency,
+        input.pickupAddress,
+        input.latitude ?? null,
+        input.longitude ?? null,
+        input.notes ?? null,
+      ]
+    );
+    const request = rows[0];
+    const { rows: eventRows } = await client.query(
+      "INSERT INTO ambulance_events (request_id, actor, type) VALUES ($1, $2, 'received') RETURNING *",
+      [request.id, actor]
+    );
+    return toAmbulanceRequest(request, [toEvent(eventRows[0])]);
+  });
 }
 
 const AMBULANCE_TRANSITIONS: Record<AmbulanceStatus, AmbulanceStatus[]> = {
@@ -135,29 +201,49 @@ const AMBULANCE_TRANSITIONS: Record<AmbulanceStatus, AmbulanceStatus[]> = {
   at_clinic: ["handed_over"], handed_over: ["closed"], closed: [], cancelled: [],
 };
 
-export function transitionAmbulanceRequest(id: string, to: AmbulanceStatus, actor: string, input: { unitId?: string; note?: string } = {}) {
-  const request = store.ambulanceRequests.find((item) => item.id === id);
-  if (!request) throw new Error("Permintaan ambulance tidak ditemukan.");
-  if (!AMBULANCE_TRANSITIONS[request.status].includes(to)) throw new Error(`Transisi ${request.status} ke ${to} tidak diizinkan.`);
-  if (to === "assigned") {
-    const unit = store.ambulanceUnits.find((item) => item.id === input.unitId);
-    if (!unit || unit.status !== "available") throw new Error("Unit ambulance tidak tersedia.");
-    unit.status = "assigned";
-    unit.updatedAt = now();
-    request.assignedUnitId = unit.id;
-  }
-  if ((to === "cancelled" || to === "closed") && request.assignedUnitId) {
-    const unit = store.ambulanceUnits.find((item) => item.id === request.assignedUnitId);
-    if (unit && unit.status === "assigned") {
-      unit.status = "available";
-      unit.updatedAt = now();
+export async function transitionAmbulanceRequest(
+  id: string,
+  to: AmbulanceStatus,
+  actor: string,
+  input: { unitId?: string; note?: string } = {}
+) {
+  return withTransaction(async (client: PoolClient) => {
+    const { rows } = await client.query("SELECT * FROM ambulance_requests WHERE id = $1 FOR UPDATE", [id]);
+    const requestRow = rows[0];
+    if (!requestRow) throw new Error("Permintaan ambulance tidak ditemukan.");
+    if (!AMBULANCE_TRANSITIONS[requestRow.status as AmbulanceStatus].includes(to)) {
+      throw new Error(`Transisi ${requestRow.status} ke ${to} tidak diizinkan.`);
     }
-  }
-  request.status = to;
-  request.updatedAt = now();
-  request.events.push(event(actor, to, input.note));
-  persist();
-  return request;
+
+    let assignedUnitId: string | null = requestRow.assigned_unit_id;
+
+    if (to === "assigned") {
+      const { rows: unitRows } = await client.query("SELECT * FROM ambulance_units WHERE id = $1 FOR UPDATE", [input.unitId]);
+      const unit = unitRows[0];
+      if (!unit || unit.status !== "available") throw new Error("Unit ambulance tidak tersedia.");
+      await client.query("UPDATE ambulance_units SET status = 'assigned', updated_at = now() WHERE id = $1", [unit.id]);
+      assignedUnitId = unit.id;
+    }
+
+    if ((to === "cancelled" || to === "closed") && requestRow.assigned_unit_id) {
+      await client.query("UPDATE ambulance_units SET status = 'available', updated_at = now() WHERE id = $1 AND status = 'assigned'", [
+        requestRow.assigned_unit_id,
+      ]);
+    }
+
+    const { rows: updatedRows } = await client.query(
+      "UPDATE ambulance_requests SET status = $1, assigned_unit_id = $2, updated_at = now() WHERE id = $3 RETURNING *",
+      [to, assignedUnitId, id]
+    );
+    await client.query("INSERT INTO ambulance_events (request_id, actor, type, note) VALUES ($1, $2, $3, $4)", [
+      id,
+      actor,
+      to,
+      input.note ?? null,
+    ]);
+    const { rows: eventRows } = await client.query("SELECT * FROM ambulance_events WHERE request_id = $1 ORDER BY at ASC", [id]);
+    return toAmbulanceRequest(updatedRows[0], eventRows.map(toEvent));
+  });
 }
 
 const TELEHEALTH_TRANSITIONS: Record<TelehealthStatus, TelehealthStatus[]> = {
@@ -165,26 +251,61 @@ const TELEHEALTH_TRANSITIONS: Record<TelehealthStatus, TelehealthStatus[]> = {
   in_progress: ["completed"], completed: [], cancelled: [], no_show: [],
 };
 
-export function createTelehealthSession(input: Omit<TelehealthRecord, "id" | "sessionNo" | "status" | "createdAt" | "updatedAt" | "events">, actor: string) {
-  if (!input.patientName?.trim() || !input.customerId?.trim() || !input.doctorId?.trim() || !input.consentAcceptedAt) throw new Error("Pasien, pelanggan, dokter, dan persetujuan telehealth wajib diisi.");
-  if (!Number.isInteger(input.durationMinutes) || input.durationMinutes < 15 || input.durationMinutes > 60) throw new Error("Durasi telehealth harus 15–60 menit.");
+export async function createTelehealthSession(
+  input: Omit<TelehealthRecord, "id" | "sessionNo" | "status" | "createdAt" | "updatedAt" | "events">,
+  actor: string
+) {
+  if (!input.patientName?.trim() || !input.customerId?.trim() || !input.doctorId?.trim() || !input.consentAcceptedAt) {
+    throw new Error("Pasien, pelanggan, dokter, dan persetujuan telehealth wajib diisi.");
+  }
+  if (!Number.isInteger(input.durationMinutes) || input.durationMinutes < 15 || input.durationMinutes > 60) {
+    throw new Error("Durasi telehealth harus 15–60 menit.");
+  }
   if (Number.isNaN(Date.parse(input.scheduledAt))) throw new Error("Jadwal telehealth tidak valid.");
-  const conflicting = store.telehealthSessions.some((session) => session.doctorId === input.doctorId && session.scheduledAt === input.scheduledAt && !["cancelled", "no_show"].includes(session.status));
-  if (conflicting) throw new Error("Dokter sudah memiliki sesi telehealth pada waktu tersebut.");
+
+  const { rows: conflictRows } = await pool.query(
+    `SELECT 1 FROM telehealth_sessions WHERE doctor_id = $1 AND scheduled_at = $2 AND status NOT IN ('cancelled', 'no_show')`,
+    [input.doctorId, input.scheduledAt]
+  );
+  if (conflictRows.length > 0) throw new Error("Dokter sudah memiliki sesi telehealth pada waktu tersebut.");
+
   const createdAt = now();
-  const session: TelehealthRecord = { ...input, id: crypto.randomUUID(), sessionNo: `TH-${createdAt.slice(0, 10).replaceAll("-", "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`, status: "scheduled", createdAt, updatedAt: createdAt, events: [event(actor, "scheduled")] };
-  store.telehealthSessions.push(session);
-  persist();
-  return session;
+  const sessionNo = `TH-${createdAt.slice(0, 10).replaceAll("-", "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO telehealth_sessions (session_no, patient_name, customer_id, doctor_id, scheduled_at, duration_minutes, consent_accepted_at, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'scheduled') RETURNING *`,
+      [sessionNo, input.patientName, input.customerId, input.doctorId, input.scheduledAt, input.durationMinutes, input.consentAcceptedAt]
+    );
+    const session = rows[0];
+    const { rows: eventRows } = await client.query(
+      "INSERT INTO telehealth_events (session_id, actor, type) VALUES ($1, $2, 'scheduled') RETURNING *",
+      [session.id, actor]
+    );
+    return toTelehealthSession(session, [toEvent(eventRows[0])]);
+  });
 }
 
-export function transitionTelehealthSession(id: string, to: TelehealthStatus, actor: string, note?: string) {
-  const session = store.telehealthSessions.find((item) => item.id === id);
-  if (!session) throw new Error("Sesi telehealth tidak ditemukan.");
-  if (!TELEHEALTH_TRANSITIONS[session.status].includes(to)) throw new Error(`Transisi ${session.status} ke ${to} tidak diizinkan.`);
-  session.status = to;
-  session.updatedAt = now();
-  session.events.push(event(actor, to, note));
-  persist();
-  return session;
+export async function transitionTelehealthSession(id: string, to: TelehealthStatus, actor: string, note?: string) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query("SELECT * FROM telehealth_sessions WHERE id = $1 FOR UPDATE", [id]);
+    const session = rows[0];
+    if (!session) throw new Error("Sesi telehealth tidak ditemukan.");
+    if (!TELEHEALTH_TRANSITIONS[session.status as TelehealthStatus].includes(to)) {
+      throw new Error(`Transisi ${session.status} ke ${to} tidak diizinkan.`);
+    }
+    const { rows: updatedRows } = await client.query(
+      "UPDATE telehealth_sessions SET status = $1, updated_at = now() WHERE id = $2 RETURNING *",
+      [to, id]
+    );
+    await client.query("INSERT INTO telehealth_events (session_id, actor, type, note) VALUES ($1, $2, $3, $4)", [
+      id,
+      actor,
+      to,
+      note ?? null,
+    ]);
+    const { rows: eventRows } = await client.query("SELECT * FROM telehealth_events WHERE session_id = $1 ORDER BY at ASC", [id]);
+    return toTelehealthSession(updatedRows[0], eventRows.map(toEvent));
+  });
 }

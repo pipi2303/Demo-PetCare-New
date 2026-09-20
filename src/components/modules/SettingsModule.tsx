@@ -107,55 +107,67 @@ export const SettingsModule: React.FC = () => {
   const [appLockEnabled, setAppLockEnabled] = useState<boolean>(appSettings.appLockEnabled);
   const [appLockTimeoutMinutes, setAppLockTimeoutMinutes] = useState<number>(appSettings.appLockTimeoutMinutes);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateAppSettings({
-      clinicName,
-      slogan,
-      sipNumber,
-      taxId,
-      clinicPhone,
-      clinicEmail,
-      clinicAddress,
-      operationalHours
-    });
-    addToast('Profil klinik & identitas operasional berhasil diperbarui! Dipakai juga sebagai kop surat laporan PDF resmi.', 'success');
+    try {
+      await updateAppSettings({
+        clinicName,
+        slogan,
+        sipNumber,
+        taxId,
+        clinicPhone,
+        clinicEmail,
+        clinicAddress,
+        operationalHours
+      });
+      addToast('Profil klinik & identitas operasional berhasil diperbarui! Dipakai juga sebagai kop surat laporan PDF resmi.', 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan profil klinik.', 'error');
+    }
   };
 
-  const handleSaveInvoiceSettings = (e: React.FormEvent) => {
+  const handleSaveInvoiceSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateAppSettings({
-      invoicePrefix,
-      invoiceHeader,
-      invoiceFooter,
-      taxRate,
-      enableTax,
-      serviceFeePercent,
-      roundingMode,
-      cashierAutoPrint,
-      // Field printer disimpan bersamaan karena tabnya sendiri tidak punya
-      // tombol Simpan terpisah (lihat TAB 4) — perubahan di sana langsung
-      // diterapkan ke draft lokal, ikut tersimpan saat tab lain disimpan.
-      paperWidth,
-      printerConnection,
-      printerDeviceName,
-      printerIpAddress,
-      cutPaperAfterPrint
-    });
-    addToast('Pengaturan format invoice, PPN & kasir POS berhasil disimpan! Prefix & PPN langsung dipakai di Kasir Pet Shop.', 'success');
+    try {
+      await updateAppSettings({
+        invoicePrefix,
+        invoiceHeader,
+        invoiceFooter,
+        taxRate,
+        enableTax,
+        serviceFeePercent,
+        roundingMode,
+        cashierAutoPrint,
+        // Field printer disimpan bersamaan karena tabnya sendiri tidak punya
+        // tombol Simpan terpisah (lihat TAB 4) — perubahan di sana langsung
+        // diterapkan ke draft lokal, ikut tersimpan saat tab lain disimpan.
+        paperWidth,
+        printerConnection,
+        printerDeviceName,
+        printerIpAddress,
+        cutPaperAfterPrint
+      });
+      addToast('Pengaturan format invoice, PPN & kasir POS berhasil disimpan! Prefix & PPN langsung dipakai di Kasir Pet Shop.', 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan pengaturan invoice.', 'error');
+    }
   };
 
-  const handleSaveWaSettings = (e: React.FormEvent) => {
+  const handleSaveWaSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateAppSettings({
-      waSessionName,
-      waPhoneConnected,
-      waApiKey,
-      autoReminderHMinus1,
-      autoVaccineAlert,
-      autoSendInvoicePdf
-    });
-    addToast('Konfigurasi WhatsApp Gateway & pesan otomatis berhasil disimpan!', 'success');
+    try {
+      await updateAppSettings({
+        waSessionName,
+        waPhoneConnected,
+        waApiKey,
+        autoReminderHMinus1,
+        autoVaccineAlert,
+        autoSendInvoicePdf
+      });
+      addToast('Konfigurasi WhatsApp Gateway & pesan otomatis berhasil disimpan!', 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan konfigurasi WhatsApp.', 'error');
+    }
   };
 
   const handleTestPrint = () => {
@@ -165,15 +177,19 @@ export const SettingsModule: React.FC = () => {
     }, 1200);
   };
 
-  const handleSaveSecuritySettings = (e: React.FormEvent) => {
+  const handleSaveSecuritySettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateAppSettings({ appLockEnabled, appLockTimeoutMinutes });
-    addToast(
-      appLockEnabled
-        ? `Lock Aplikasi Otomatis aktif — sesi akan terkunci setelah ${appLockTimeoutMinutes} menit tanpa aktivitas.`
-        : 'Lock Aplikasi Otomatis dinonaktifkan.',
-      'success'
-    );
+    try {
+      await updateAppSettings({ appLockEnabled, appLockTimeoutMinutes });
+      addToast(
+        appLockEnabled
+          ? `Lock Aplikasi Otomatis aktif — sesi akan terkunci setelah ${appLockTimeoutMinutes} menit tanpa aktivitas.`
+          : 'Lock Aplikasi Otomatis dinonaktifkan.',
+        'success'
+      );
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan pengaturan keamanan.', 'error');
+    }
   };
 
   return (

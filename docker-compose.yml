@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: petcares-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-petcare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-petcare}
+      POSTGRES_DB: ${POSTGRES_DB:-petcare}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-petcare} -d ${POSTGRES_DB:-petcare}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   petcares-demo:
     build:
       context: .
@@ -8,6 +24,10 @@ services:
 
     restart: unless-stopped
 
+    depends_on:
+      postgres:
+        condition: service_healthy
+
     ports:
       - "3002:3000"
 
@@ -15,7 +35,13 @@ services:
       NODE_ENV: production
       PORT: 3000
       APP_URL: http://123.176.120.78:3002
+      DATABASE_URL: postgres://${POSTGRES_USER:-petcare}:${POSTGRES_PASSWORD:-petcare}@postgres:5432/${POSTGRES_DB:-petcare}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
       GMAIL_USER: ${GMAIL_USER}
       WA_TOKEN: ${WA_TOKEN}
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
+      MIDTRANS_IS_PRODUCTION: ${MIDTRANS_IS_PRODUCTION:-false}
+
+volumes:
+  pgdata:

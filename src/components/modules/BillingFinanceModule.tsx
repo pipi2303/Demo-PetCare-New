@@ -76,32 +76,36 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
 
   const selectedInvoice = invoices.find((i) => i.id === selectedInvId) || invoices[0];
 
-  const handleCreateInvoice = () => {
-    const inv = addInvoice({
-      customerId: 'c1',
-      customerName: custName,
-      petName,
-      items: [
-        {
-          id: 'item_' + Date.now(),
-          category: itemCategory,
-          name: itemName,
-          quantity: 1,
-          unitPrice: itemPrice,
-          totalPrice: itemPrice
-        }
-      ],
-      subtotal: itemPrice,
-      discountAmount: 0,
-      totalAmount: itemPrice,
-      paidAmount: 0,
-      paymentMethod: 'QRIS',
-      status: 'Belum Dibayar',
-      loyaltyPointsEarned: Math.floor(itemPrice / 10000),
-      cashierName: 'Kasir Utama'
-    });
+  const handleCreateInvoice = async () => {
+    try {
+      const inv = await addInvoice({
+        customerId: 'c1',
+        customerName: custName,
+        petName,
+        items: [
+          {
+            id: 'item_' + Date.now(),
+            category: itemCategory,
+            name: itemName,
+            quantity: 1,
+            unitPrice: itemPrice,
+            totalPrice: itemPrice
+          }
+        ],
+        subtotal: itemPrice,
+        discountAmount: 0,
+        totalAmount: itemPrice,
+        paidAmount: 0,
+        paymentMethod: 'QRIS',
+        status: 'Belum Dibayar',
+        loyaltyPointsEarned: Math.floor(itemPrice / 10000),
+        cashierName: 'Kasir Utama'
+      });
 
-    addToast(`Invoice baru ${inv.invoiceNo} senilai Rp ${itemPrice.toLocaleString('id-ID')} dibuat.`, 'success');
+      addToast(`Invoice baru ${inv.invoiceNo} senilai Rp ${itemPrice.toLocaleString('id-ID')} dibuat.`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal membuat invoice.', 'error');
+    }
   };
 
   const stopQrisPolling = () => {
@@ -126,13 +130,18 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
   // Kredit/Transfer Bank tidak lewat payment gateway — dicatat manual seperti
   // sebelumnya, itu memang di luar skop integrasi Midtrans).
   const isConfirmingPaymentRef = React.useRef(false);
-  const handleConfirmManualPayment = () => {
+  const handleConfirmManualPayment = async () => {
     if (!selectedInvId || isConfirmingPaymentRef.current) return;
     isConfirmingPaymentRef.current = true;
-    processPayment(selectedInvId, paymentMethod);
-    setShowQrisModal(false);
-    addToast(`Pembayaran Rp ${selectedInvoice?.totalAmount.toLocaleString('id-ID')} via ${paymentMethod} LUNAS!`, 'success');
-    isConfirmingPaymentRef.current = false;
+    try {
+      await processPayment(selectedInvId, paymentMethod);
+      setShowQrisModal(false);
+      addToast(`Pembayaran Rp ${selectedInvoice?.totalAmount.toLocaleString('id-ID')} via ${paymentMethod} LUNAS!`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal memproses pembayaran.', 'error');
+    } finally {
+      isConfirmingPaymentRef.current = false;
+    }
   };
 
   // Membuat charge QRIS nyata via Midtrans (server/paymentService.ts). Kalau
@@ -162,10 +171,14 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
     setQrisPhase('waiting_real');
 
     pollRef.current = pollPaymentStatus(selectedInvoice.invoiceNo, {
-      onSettled: (status: PaymentStatus) => {
+      onSettled: async (status: PaymentStatus) => {
         if (status === 'settlement') {
-          processPayment(selectedInvoice.id, 'QRIS');
-          addToast(`Pembayaran QRIS Rp ${selectedInvoice.totalAmount.toLocaleString('id-ID')} untuk ${selectedInvoice.invoiceNo} berhasil dikonfirmasi!`, 'success');
+          try {
+            await processPayment(selectedInvoice.id, 'QRIS');
+            addToast(`Pembayaran QRIS Rp ${selectedInvoice.totalAmount.toLocaleString('id-ID')} untuk ${selectedInvoice.invoiceNo} berhasil dikonfirmasi!`, 'success');
+          } catch (err: any) {
+            addToast(err?.message || 'Gagal mengonfirmasi pembayaran QRIS.', 'error');
+          }
           handleCloseQrisModal();
         } else {
           setQrisPhase('failed');
@@ -191,22 +204,27 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
 
   React.useEffect(() => () => stopQrisPolling(), []);
 
-  const handleAddCashRecord = (e: React.FormEvent) => {
+  const handleAddCashRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cashDescription || cashAmount <= 0) {
       addToast('Harap isi deskripsi dan nominal transaksi kas!', 'error');
       return;
     }
 
-    addCashTransaction({
-      type: cashType,
-      category: cashCategory,
-      description: cashDescription,
-      amount: cashAmount,
-      operator: 'Manager Keuangan'
-    });
+    try {
+      await addCashTransaction({
+        type: cashType,
+        category: cashCategory,
+        description: cashDescription,
+        amount: cashAmount,
+        operator: 'Manager Keuangan'
+      });
 
-    addToast(`Pencatatan Kas ${cashType} senilai Rp ${cashAmount.toLocaleString('id-ID')} berhasil disimpan.`, 'success');
+      addToast(`Pencatatan Kas ${cashType} senilai Rp ${cashAmount.toLocaleString('id-ID')} berhasil disimpan.`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan pencatatan kas.', 'error');
+      return;
+    }
     setCashDescription('');
     setCashAmount(100000);
   };

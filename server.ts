@@ -46,6 +46,39 @@ import {
   transitionAmbulanceRequest,
   transitionTelehealthSession
 } from "./server/operationsService";
+import { runMigrations } from "./server/migrate";
+import { seedIfEmpty } from "./server/seed";
+import {
+  listTenants,
+  createTenant,
+  listBranches,
+  createBranch,
+  updateBranch as updateBranchRecord,
+  deleteBranch as deleteBranchRecord,
+  getAppSettings,
+  updateAppSettings
+} from "./server/tenantService";
+import {
+  listCustomers,
+  createCustomer,
+  updateCustomer as updateCustomerRecord,
+  deleteCustomer as deleteCustomerRecord,
+  adjustCustomerPoints
+} from "./server/customerService";
+import { listPets, createPet, updatePet as updatePetRecord, deletePet as deletePetRecord } from "./server/petService";
+import {
+  listServices,
+  createService,
+  updateService as updateServiceRecord,
+  deleteService as deleteServiceRecord
+} from "./server/catalogService";
+import {
+  listClinicVisits,
+  createClinicVisit,
+  updateVisitStatus,
+  updateClinicVisit
+} from "./server/clinicService";
+import { listInvoices, createInvoice, processPayment, listCashTransactions, createCashTransaction } from "./server/invoiceService";
 
 async function startServer() {
   const app = express();
@@ -53,17 +86,22 @@ async function startServer() {
 
   app.use(express.json({ limit: "25mb" }));
 
+  // Postgres schema + fresh-start seed must be ready before any service
+  // below touches the database.
+  await runMigrations();
+  await seedIfEmpty();
+
   // Initialize Background Daemon for Automatic End-of-Business-Day Backups
   initBackupBackgroundService();
 
-  // Initialize Password Store & Reset Token Cleanup Daemon
-  initAuthService();
+  // Initialize Password Store & Reset Token Cleanup Daemon (Postgres-backed)
+  await initAuthService();
 
   // Initialize in-memory session store cleanup daemon
   initSessionService();
 
   // Persistent server-side operational state for the safety-critical service flows.
-  initOperationsService();
+  await initOperationsService();
 
   // Reads the "Authorization: Bearer <token>" header and attaches the
   // resolved session (email/role) to the request, or responds 401 if the
@@ -110,32 +148,32 @@ async function startServer() {
   const OPERATIONS_ROLES = ["owner_klinik", "owner_petcare", "admin", "dokter", "perawat", "superadmin"];
   const actorFor = (req: express.Request) => (req as any).session?.email || "system";
 
-  app.get("/api/operations", requireRole(...OPERATIONS_ROLES), (_req, res) => {
-    res.json({ success: true, data: listOperations() });
+  app.get("/api/operations", requireRole(...OPERATIONS_ROLES), async (_req, res) => {
+    res.json({ success: true, data: await listOperations() });
   });
 
-  app.post("/api/operations/ambulance/units", requireRole("owner_klinik", "owner_petcare", "admin", "superadmin"), (req, res) => {
-    try { res.status(201).json({ success: true, data: registerAmbulanceUnit(req.body || {}, actorFor(req)) }); }
+  app.post("/api/operations/ambulance/units", requireRole("owner_klinik", "owner_petcare", "admin", "superadmin"), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await registerAmbulanceUnit(req.body || {}, actorFor(req)) }); }
     catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
   });
 
-  app.post("/api/operations/ambulance/requests", requireRole(...OPERATIONS_ROLES), (req, res) => {
-    try { res.status(201).json({ success: true, data: createAmbulanceRequest(req.body || {}, actorFor(req)) }); }
+  app.post("/api/operations/ambulance/requests", requireRole(...OPERATIONS_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createAmbulanceRequest(req.body || {}, actorFor(req)) }); }
     catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
   });
 
-  app.post("/api/operations/ambulance/requests/:id/transition", requireRole(...OPERATIONS_ROLES), (req, res) => {
-    try { res.json({ success: true, data: transitionAmbulanceRequest(req.params.id, req.body?.status, actorFor(req), { unitId: req.body?.unitId, note: req.body?.note }) }); }
+  app.post("/api/operations/ambulance/requests/:id/transition", requireRole(...OPERATIONS_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await transitionAmbulanceRequest(req.params.id, req.body?.status, actorFor(req), { unitId: req.body?.unitId, note: req.body?.note }) }); }
     catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
   });
 
-  app.post("/api/operations/telehealth/sessions", requireRole("owner_klinik", "owner_petcare", "admin", "dokter", "superadmin"), (req, res) => {
-    try { res.status(201).json({ success: true, data: createTelehealthSession(req.body || {}, actorFor(req)) }); }
+  app.post("/api/operations/telehealth/sessions", requireRole("owner_klinik", "owner_petcare", "admin", "dokter", "superadmin"), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createTelehealthSession(req.body || {}, actorFor(req)) }); }
     catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
   });
 
-  app.post("/api/operations/telehealth/sessions/:id/transition", requireRole("owner_klinik", "owner_petcare", "admin", "dokter", "superadmin"), (req, res) => {
-    try { res.json({ success: true, data: transitionTelehealthSession(req.params.id, req.body?.status, actorFor(req), req.body?.note) }); }
+  app.post("/api/operations/telehealth/sessions/:id/transition", requireRole("owner_klinik", "owner_petcare", "admin", "dokter", "superadmin"), async (req, res) => {
+    try { res.json({ success: true, data: await transitionTelehealthSession(req.params.id, req.body?.status, actorFor(req), req.body?.note) }); }
     catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
   });
 
@@ -259,17 +297,17 @@ async function startServer() {
   // Validate email + password credentials against the server-side password
   // store, then issue a session. Role/ownership are read from the server's
   // own account directory — the client's claimed role is never trusted.
-  app.post("/api/auth/login", (req, res) => {
+  app.post("/api/auth/login", async (req, res) => {
     try {
       const { email, password } = req.body || {};
       if (!email || !password) {
         return res.status(400).json({ success: false, message: "Email dan kata sandi wajib diisi." });
       }
-      const valid = verifyPassword(email, password);
+      const valid = await verifyPassword(email, password);
       if (!valid) {
         return res.status(401).json({ success: false, message: "Email atau kata sandi tidak sesuai." });
       }
-      const account = getAccountInfo(email);
+      const account = await getAccountInfo(email);
       if (!account) {
         return res.status(401).json({ success: false, message: "Akun tidak ditemukan." });
       }
@@ -283,17 +321,17 @@ async function startServer() {
   // Fast shift login via 4-digit PIN — the PIN is matched against the
   // server-side hashed PIN store, never against a value shipped to the
   // client bundle.
-  app.post("/api/auth/login-pin", (req, res) => {
+  app.post("/api/auth/login-pin", async (req, res) => {
     try {
       const { pin } = req.body || {};
       if (!pin || typeof pin !== "string" || pin.trim().length !== 4) {
         return res.status(400).json({ success: false, message: "PIN shift harus berupa 4 digit angka." });
       }
-      const email = findAccountByPin(pin.trim());
+      const email = await findAccountByPin(pin.trim());
       if (!email) {
         return res.status(401).json({ success: false, message: "PIN yang dimasukkan tidak terdaftar." });
       }
-      const account = getAccountInfo(email);
+      const account = await getAccountInfo(email);
       if (!account) {
         return res.status(401).json({ success: false, message: "Akun tidak ditemukan." });
       }
@@ -311,16 +349,16 @@ async function startServer() {
   // demo mode has no session at all, and should still be able to PIN-switch
   // into a real one). This replaces the old client-only "switchRole" which
   // let anyone become anyone with a single click and no credential at all.
-  app.post("/api/auth/switch-account", (req, res) => {
+  app.post("/api/auth/switch-account", async (req, res) => {
     try {
       const { targetEmail, pin } = req.body || {};
       if (!targetEmail || !pin) {
         return res.status(400).json({ success: false, message: "Email tujuan dan PIN wajib diisi." });
       }
-      if (!verifyPin(targetEmail, pin)) {
+      if (!(await verifyPin(targetEmail, pin))) {
         return res.status(401).json({ success: false, message: "PIN tidak sesuai untuk akun tujuan." });
       }
-      const account = getAccountInfo(targetEmail);
+      const account = await getAccountInfo(targetEmail);
       if (!account) {
         return res.status(404).json({ success: false, message: "Akun tujuan tidak ditemukan." });
       }
@@ -341,7 +379,7 @@ async function startServer() {
   // password (a stronger secret) since a 4-digit PIN can't safely verify
   // itself; also rejects a PIN already in use by a DIFFERENT account so the
   // PIN-only quick-login (findAccountByPin) stays unambiguous.
-  app.post("/api/auth/change-pin", requireSession, (req, res) => {
+  app.post("/api/auth/change-pin", requireSession, async (req, res) => {
     try {
       const email = (req as any).session.email as string;
       const { currentPassword, newPin } = req.body || {};
@@ -351,14 +389,14 @@ async function startServer() {
       if (typeof newPin !== "string" || !/^\d{4}$/.test(newPin)) {
         return res.status(400).json({ success: false, message: "PIN baru harus berupa 4 digit angka." });
       }
-      if (!verifyPassword(email, currentPassword)) {
+      if (!(await verifyPassword(email, currentPassword))) {
         return res.status(401).json({ success: false, message: "Kata sandi saat ini tidak sesuai." });
       }
-      const existingOwner = findAccountByPin(newPin);
+      const existingOwner = await findAccountByPin(newPin);
       if (existingOwner && existingOwner.toLowerCase() !== email.toLowerCase()) {
         return res.status(409).json({ success: false, message: "PIN tersebut sudah dipakai akun lain. Pilih PIN yang berbeda." });
       }
-      setPin(email, newPin);
+      await setPin(email, newPin);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
@@ -370,14 +408,14 @@ async function startServer() {
   // their PIN. Target email always comes from the verified session, never
   // the client body, and no new token is issued (the existing session stays
   // valid throughout — locking is a client-side UI state, not a logout).
-  app.post("/api/auth/unlock-password", requireSession, (req, res) => {
+  app.post("/api/auth/unlock-password", requireSession, async (req, res) => {
     try {
       const email = (req as any).session.email as string;
       const { password } = req.body || {};
       if (!password) {
         return res.status(400).json({ success: false, message: "Kata sandi wajib diisi." });
       }
-      if (!verifyPassword(email, password)) {
+      if (!(await verifyPassword(email, password))) {
         return res.status(401).json({ success: false, message: "Kata sandi tidak sesuai." });
       }
       res.json({ success: true });
@@ -398,7 +436,7 @@ async function startServer() {
     const genericMessage = "Kalau email tersebut terdaftar, tautan pemulihan sandi sudah dikirim.";
     try {
       const { email } = req.body || {};
-      if (!email || !userExists(email)) {
+      if (!email || !(await userExists(email))) {
         // Always respond with a generic success message to avoid user enumeration
         return res.json({ success: true, message: genericMessage });
       }
@@ -434,7 +472,7 @@ async function startServer() {
   });
 
   // Confirm a password reset using the token emailed to the user
-  app.post("/api/auth/reset-password", (req, res) => {
+  app.post("/api/auth/reset-password", async (req, res) => {
     try {
       const { token, newPassword } = req.body || {};
       if (!token || !newPassword || newPassword.length < 6) {
@@ -444,7 +482,7 @@ async function startServer() {
       if (!email) {
         return res.status(400).json({ success: false, message: "Tautan reset tidak valid atau sudah kedaluwarsa." });
       }
-      setPassword(email, newPassword);
+      await setPassword(email, newPassword);
       res.json({ success: true, message: "Kata sandi berhasil diperbarui. Silakan login dengan kata sandi baru." });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
@@ -1623,6 +1661,166 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
       preparedAt: new Date().toISOString()
     };
   }
+
+  // ==========================================
+  // CORE ERP DATA (Fase 1 migrasi Postgres): tenants/branches/app-settings,
+  // customers, pets, catalog services, clinic visits, invoices & payment.
+  // Modul lain (grooming, hotel, inventory, HR, dst) masih di localStorage
+  // sisi klien dan menyusul di fase migrasi berikutnya.
+  // ==========================================
+  const STAFF_ROLES = ["owner_klinik", "owner_petshop", "owner_petcare", "owner", "admin", "dokter", "kasir", "perawat", "groomer", "resepsionis", "superadmin"];
+
+  app.get("/api/tenants", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listTenants() }); }
+    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/tenants", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createTenant(req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.get("/api/branches", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listBranches() }); }
+    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/branches", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createBranch(req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.put("/api/branches/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateBranchRecord(req.params.id, req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.delete("/api/branches/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteBranchRecord(req.params.id); res.json({ success: true }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.get("/api/app-settings", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await getAppSettings() }); }
+    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+  });
+
+  app.put("/api/app-settings", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateAppSettings(req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.get("/api/customers", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listCustomers() }); }
+    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/customers", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createCustomer(req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.put("/api/customers/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateCustomerRecord(req.params.id, req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.delete("/api/customers/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { await deleteCustomerRecord(req.params.id); res.json({ success: true }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/customers/:id/loyalty-points", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await adjustCustomerPoints(req.params.id, Number(req.body?.amount) || 0) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.get("/api/pets", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listPets() }); }
+    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/pets", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createPet(req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.put("/api/pets/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updatePetRecord(req.params.id, req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.delete("/api/pets/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { await deletePetRecord(req.params.id); res.json({ success: true }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.get("/api/services", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listServices() }); }
+    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/services", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createService(req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.put("/api/services/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateServiceRecord(req.params.id, req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.delete("/api/services/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { await deleteServiceRecord(req.params.id); res.json({ success: true }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.get("/api/clinic-visits", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listClinicVisits() }); }
+    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/clinic-visits", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createClinicVisit(req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/clinic-visits/:id/status", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateVisitStatus(req.params.id, req.body?.status) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.put("/api/clinic-visits/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateClinicVisit(req.params.id, req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.get("/api/invoices", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listInvoices() }); }
+    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/invoices", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createInvoice(req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/invoices/:id/payment", requireRole(...STAFF_ROLES), async (req, res) => {
+    try {
+      const operatorName = (req as any).session?.email || "system";
+      res.json({ success: true, data: await processPayment(req.params.id, req.body?.method, Number(req.body?.pointsRedeemed) || 0, operatorName) });
+    } catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
+
+  app.get("/api/cash-transactions", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listCashTransactions() }); }
+    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+  });
+
+  app.post("/api/cash-transactions", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createCashTransaction(req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  });
 
   // Reset Queue / Daily Cron endpoint simulation
   app.post("/api/cron/reset-queue", requireRole("admin", "superadmin"), (_req, res) => {

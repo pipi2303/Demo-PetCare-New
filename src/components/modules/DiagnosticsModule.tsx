@@ -210,7 +210,9 @@ export const DiagnosticsModule: React.FC<DiagnosticsModuleProps> = ({ activeModu
       ...prev,
       [selectedPet.id]: [...(prev[selectedPet.id] || []), { date: diagDraft.newWeightDate, weight: val }]
     }));
-    updatePet(selectedPet.id, { weightKg: val });
+    updatePet(selectedPet.id, { weightKg: val }).catch((err: any) =>
+      addToast(err?.message || 'Gagal menyimpan berat badan ke profil pasien.', 'error')
+    );
     updateDraft({ newWeight: '' });
     addToast(`Berhasil mencatat berat badan ${val} kg untuk ${selectedPet.name}.`, 'success');
   };

@@ -351,25 +351,29 @@ export const PetShopModule: React.FC = () => {
   };
 
   // Handle Quick Member Registration from POS
-  const handleQuickRegister = (e: React.FormEvent) => {
+  const handleQuickRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustName.trim()) {
       addToast('Nama pelanggan wajib diisi.', 'error');
       return;
     }
-    const newCust = addCustomer({
-      name: newCustName.trim(),
-      phone: newCustPhone.trim() || '081234567890',
-      email: '',
-      address: newCustAddress.trim() || 'Alamat Pelanggan',
-      notes: 'Registrasi Cepat dari Kasir POS Pet Shop'
-    });
-    updateDraft({ selectedCustomerId: newCust.id });
-    setShowQuickRegisterModal(false);
-    setNewCustName('');
-    setNewCustPhone('');
-    setNewCustAddress('');
-    addToast(`Member baru "${newCust.name}" berhasil didaftarkan & dipilih di kasir!`, 'success');
+    try {
+      const newCust = await addCustomer({
+        name: newCustName.trim(),
+        phone: newCustPhone.trim() || '081234567890',
+        email: '',
+        address: newCustAddress.trim() || 'Alamat Pelanggan',
+        notes: 'Registrasi Cepat dari Kasir POS Pet Shop'
+      });
+      updateDraft({ selectedCustomerId: newCust.id });
+      setShowQuickRegisterModal(false);
+      setNewCustName('');
+      setNewCustPhone('');
+      setNewCustAddress('');
+      addToast(`Member baru "${newCust.name}" berhasil didaftarkan & dipilih di kasir!`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal mendaftarkan member baru.', 'error');
+    }
   };
 
   // Execute Checkout
@@ -432,7 +436,7 @@ export const PetShopModule: React.FC = () => {
       totalPrice: item.price * item.quantity
     }));
 
-  const handleCompleteSale = () => {
+  const handleCompleteSale = async () => {
     if (isCompletingSaleRef.current) return;
 
     if (draft.cart.length === 0) {
@@ -452,61 +456,58 @@ export const PetShopModule: React.FC = () => {
 
     isCompletingSaleRef.current = true;
 
-    // Metode selain QRIS tetap staff-confirmed langsung & lunas seketika
-    // (Tunai/Kartu/Transfer tidak lewat payment gateway). Catatan penting:
-    // TIDAK bisa memanggil processPayment(newInvoice.id, ...) di sini —
-    // processPayment mencari invoice lewat `invoices.find()` dari state
-    // DataContext, dan karena addInvoice() baru saja menjadwalkan
-    // setInvoices() di tick React yang sama, closure `invoices` di sini masih
-    // versi lama (belum berisi invoice yang baru dibuat) sampai re-render
-    // berikutnya — processPayment akan diam-diam tidak menemukan invoice-nya
-    // dan tidak melakukan apa-apa. Makanya invoice dibuat langsung 'Lunas' di
-    // sini, dan addCashTransaction dipanggil langsung (fungsi ini tidak perlu
-    // mencari apa pun dari state, jadi aman dari masalah closure basi yang
-    // sama) — supaya buku kas benar-benar tercatat untuk SEMUA metode bayar,
-    // bukan cuma QRIS seperti sebelumnya.
-    const isGuest = isGuestCustomer;
-    const finalCustomerId = isGuest ? 'guest' : (selectedCustomer?.id || 'guest');
-    const finalCustomerName = isGuest ? (guestName.trim() || 'Pelanggan Umum (Walk-in)') : (selectedCustomer?.name || 'Pelanggan Umum');
+    try {
+      // Metode selain QRIS tetap staff-confirmed langsung & lunas seketika
+      // (Tunai/Kartu/Transfer tidak lewat payment gateway). Invoice dibuat
+      // langsung 'Lunas' di sini, dan addCashTransaction dipanggil langsung —
+      // supaya buku kas benar-benar tercatat untuk SEMUA metode bayar, bukan
+      // cuma QRIS seperti sebelumnya.
+      const isGuest = isGuestCustomer;
+      const finalCustomerId = isGuest ? 'guest' : (selectedCustomer?.id || 'guest');
+      const finalCustomerName = isGuest ? (guestName.trim() || 'Pelanggan Umum (Walk-in)') : (selectedCustomer?.name || 'Pelanggan Umum');
 
-    const newInvoice = addInvoice({
-      customerId: finalCustomerId,
-      customerName: finalCustomerName,
-      items: buildInvoiceItems(),
-      subtotal: cartSubtotal,
-      discountAmount: totalDiscount,
-      totalAmount: grandTotal,
-      paidAmount: grandTotal,
-      paymentMethod: paymentMethod,
-      status: 'Lunas',
-      loyaltyPointsEarned: isGuest ? 0 : earnedPoints,
-      cashierName: 'Kasir Pet Shop'
-    });
+      const newInvoice = await addInvoice({
+        customerId: finalCustomerId,
+        customerName: finalCustomerName,
+        items: buildInvoiceItems(),
+        subtotal: cartSubtotal,
+        discountAmount: totalDiscount,
+        totalAmount: grandTotal,
+        paidAmount: grandTotal,
+        paymentMethod: paymentMethod,
+        status: 'Lunas',
+        loyaltyPointsEarned: isGuest ? 0 : earnedPoints,
+        cashierName: 'Kasir Pet Shop'
+      });
 
-    addCashTransaction({
-      type: 'Masuk',
-      category: 'Pelunasan Invoice',
-      amount: grandTotal,
-      description: `Pelunasan ${newInvoice.invoiceNo} (${finalCustomerName}) via ${paymentMethod}`,
-      referenceNo: newInvoice.invoiceNo,
-      operator: 'Kasir Pet Shop'
-    });
+      await addCashTransaction({
+        type: 'Masuk',
+        category: 'Pelunasan Invoice',
+        amount: grandTotal,
+        description: `Pelunasan ${newInvoice.invoiceNo} (${finalCustomerName}) via ${paymentMethod}`,
+        referenceNo: newInvoice.invoiceNo,
+        operator: 'Kasir Pet Shop'
+      });
 
-    deductStockForCart(newInvoice.invoiceNo);
+      deductStockForCart(newInvoice.invoiceNo);
 
-    if (!isGuest && selectedCustomer) {
-      let pointsChange = earnedPoints;
-      if (draft.useLoyaltyPoints && pointDiscountRupiah > 0) {
-        const pointsRedeemed = Math.ceil(pointDiscountRupiah / 1000);
-        pointsChange -= pointsRedeemed;
+      if (!isGuest && selectedCustomer) {
+        let pointsChange = earnedPoints;
+        if (draft.useLoyaltyPoints && pointDiscountRupiah > 0) {
+          const pointsRedeemed = Math.ceil(pointDiscountRupiah / 1000);
+          pointsChange -= pointsRedeemed;
+        }
+        if (pointsChange !== 0) {
+          await adjustCustomerPoints(selectedCustomer.id, pointsChange, `Transaksi POS #${newInvoice.invoiceNo}`);
+        }
       }
-      if (pointsChange !== 0) {
-        adjustCustomerPoints(selectedCustomer.id, pointsChange, `Transaksi POS #${newInvoice.invoiceNo}`);
-      }
+
+      finishSaleUi(newInvoice, paymentMethod);
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyelesaikan transaksi kasir.', 'error');
+    } finally {
+      isCompletingSaleRef.current = false;
     }
-
-    finishSaleUi(newInvoice, paymentMethod);
-    isCompletingSaleRef.current = false;
   };
 
   // Membuat charge QRIS nyata via Midtrans untuk transaksi POS. Invoice dibuat
@@ -519,19 +520,25 @@ export const PetShopModule: React.FC = () => {
     const finalCustomerId = isGuest ? 'guest' : (selectedCustomer?.id || 'guest');
     const finalCustomerName = isGuest ? (guestName.trim() || 'Pelanggan Umum (Walk-in)') : (selectedCustomer?.name || 'Pelanggan Umum');
 
-    const pendingInvoice = addInvoice({
-      customerId: finalCustomerId,
-      customerName: finalCustomerName,
-      items: buildInvoiceItems(),
-      subtotal: cartSubtotal,
-      discountAmount: totalDiscount,
-      totalAmount: grandTotal,
-      paidAmount: 0,
-      paymentMethod: 'QRIS',
-      status: 'Belum Dibayar',
-      loyaltyPointsEarned: 0,
-      cashierName: 'Kasir Pet Shop'
-    });
+    let pendingInvoice;
+    try {
+      pendingInvoice = await addInvoice({
+        customerId: finalCustomerId,
+        customerName: finalCustomerName,
+        items: buildInvoiceItems(),
+        subtotal: cartSubtotal,
+        discountAmount: totalDiscount,
+        totalAmount: grandTotal,
+        paidAmount: 0,
+        paymentMethod: 'QRIS',
+        status: 'Belum Dibayar',
+        loyaltyPointsEarned: 0,
+        cashierName: 'Kasir Pet Shop'
+      });
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal membuat invoice QRIS.', 'error');
+      return;
+    }
 
     stopQrisPolling();
     setQrisPhase('loading');
@@ -575,21 +582,25 @@ export const PetShopModule: React.FC = () => {
     finalizeQrisSale(pendingInvoice, isGuestCustomer);
   };
 
-  const finalizeQrisSale = (pendingInvoice: any, isGuest: boolean) => {
+  const finalizeQrisSale = async (pendingInvoice: any, isGuest: boolean) => {
     const pointsRedeemed =
       !isGuest && draft.useLoyaltyPoints && pointDiscountRupiah > 0 ? Math.ceil(pointDiscountRupiah / 1000) : 0;
 
-    processPayment(pendingInvoice.id, 'QRIS', pointsRedeemed);
-    deductStockForCart(pendingInvoice.invoiceNo);
+    try {
+      await processPayment(pendingInvoice.id, 'QRIS', pointsRedeemed);
+      deductStockForCart(pendingInvoice.invoiceNo);
 
-    addToast(`Pembayaran QRIS Rp ${grandTotal.toLocaleString('id-ID')} untuk ${pendingInvoice.invoiceNo} berhasil dikonfirmasi!`, 'success');
+      addToast(`Pembayaran QRIS Rp ${grandTotal.toLocaleString('id-ID')} untuk ${pendingInvoice.invoiceNo} berhasil dikonfirmasi!`, 'success');
 
-    stopQrisPolling();
-    setQrisPhase('idle');
-    setQrisImageUrl(null);
-    setPendingQrisInvoice(null);
+      stopQrisPolling();
+      setQrisPhase('idle');
+      setQrisImageUrl(null);
+      setPendingQrisInvoice(null);
 
-    finishSaleUi({ ...pendingInvoice, status: 'Lunas', paidAmount: grandTotal, loyaltyPointsEarned: isGuest ? 0 : earnedPoints }, 'QRIS');
+      finishSaleUi({ ...pendingInvoice, status: 'Lunas', paidAmount: grandTotal, loyaltyPointsEarned: isGuest ? 0 : earnedPoints }, 'QRIS');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal mengonfirmasi pembayaran QRIS.', 'error');
+    }
   };
 
   // Image placeholder mapping based on product category

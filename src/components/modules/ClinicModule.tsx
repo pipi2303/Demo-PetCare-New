@@ -360,7 +360,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
         triageUrgency: result.level,
         triageRationale: result.triageRationale,
         triageScore: result.severityScore
-      });
+      }).catch((err: any) => addToast(err?.message || 'Gagal menyimpan hasil triase ke server.', 'error'));
     }
 
     addToast(
@@ -441,7 +441,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     addToast(`Diagnosis ICD-10 [${item.code}] berhasil dipilih.`, 'info');
   };
 
-  const handleSaveSOAP = () => {
+  const handleSaveSOAP = async () => {
     if (!selectedVisit || isSavingSOAP) return;
     if (selectedVisit.status === 'Selesai') {
       addToast('Kunjungan ini sudah Selesai & tertagih. Pilih pasien lain dari Antrean.', 'warning');
@@ -500,7 +500,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
 
     if (treatmentItems.length > 0) {
       const subtotal = treatmentItems.reduce((sum, item) => sum + item.totalPrice, 0);
-      addInvoice({
+      await addInvoice({
         customerId: selectedVisit.customerId,
         customerName: selectedVisit.customerName,
         petName: selectedVisit.petName,
@@ -518,12 +518,14 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     }
 
     // Mark visit finished
-    updateVisitStatus(selectedVisit.id, 'Selesai');
+    await updateVisitStatus(selectedVisit.id, 'Selesai');
 
     // Clear auto-saved draft from localStorage after successful submission
     clearDraft();
 
     addToast(`SOAP Note untuk ${selectedVisit.petName} tersimpan & draft lokal telah dibersihkan.`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan SOAP Note ke server.', 'error');
     } finally {
       setIsSavingSOAP(false);
     }
