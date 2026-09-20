@@ -5,7 +5,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-petcare}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-petcare}
+      # No weak fallback for the password: if POSTGRES_PASSWORD isn't set as
+      # a real environment variable on the stack, deployment now fails
+      # loudly instead of silently starting with a guessable default.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the stack's environment variables — no default is provided}
       POSTGRES_DB: ${POSTGRES_DB:-petcare}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -35,7 +38,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       APP_URL: http://123.176.120.78:3002
-      DATABASE_URL: postgres://${POSTGRES_USER:-petcare}:${POSTGRES_PASSWORD:-petcare}@postgres:5432/${POSTGRES_DB:-petcare}
+      DATABASE_URL: postgres://${POSTGRES_USER:-petcare}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the stack's environment variables — no default is provided}@postgres:5432/${POSTGRES_DB:-petcare}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
       GMAIL_USER: ${GMAIL_USER}
