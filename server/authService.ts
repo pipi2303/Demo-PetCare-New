@@ -2,25 +2,48 @@ import crypto from "crypto";
 import { pool } from "./db";
 import { INITIAL_USERS } from "../src/data/mockData";
 
-const DEFAULT_PASSWORD = "petcare123";
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
-// Demo shift PINs, server-side only — never shipped to the client bundle
-// (mockData.ts, which IS imported by client code, intentionally has no `pin`
-// field anymore). Seeded once on first boot, then only the hash persists.
-const DEFAULT_PINS: Record<string, string> = {
-  "owner.klinik@petcare.id": "1234",
-  "owner.petshop@petcare.id": "5678",
-  "owner.petcare@petcare.id": "9999",
-  "owner@petcare.id": "1234",
-  "ananda@petcare.id": "2222",
-  "ani@petcare.id": "3333",
-  "binta@petcare.id": "4444",
-  "admin@petcare.id": "5555",
-  "superadmin@petcare.co.id": "0000",
-  "andri@email.com": "7777",
-  "dewi@email.com": "8888",
-};
+// Seeding only ever runs for accounts that don't exist yet in the `users`
+// table (ON CONFLICT DO NOTHING below) — it never touches an account that
+// already has a password/PIN hash. That means changing these defaults is
+// safe for an already-running deployment: it does NOT retroactively change
+// any credential already issued. It only affects brand-new accounts seeded
+// from here on (a fresh install, or a new employee added to INITIAL_USERS).
+//
+// IMPORTANT: this app was previously seeded with a shared hardcoded
+// password ("petcare123") and predictable 4-digit PINs (1234, 0000, ...)
+// for every account in INITIAL_USERS. If this app is already deployed,
+// those specific credentials are still active on every account that hasn't
+// had its password/PIN changed since — fixing the code here does not fix
+// already-issued credentials. Rotate them for existing accounts via
+// setPassword()/setPin() (e.g. by having each user use "lupa kata sandi" or
+// "ganti PIN"), or with a one-off admin script.
+//
+// SEED_DEFAULT_PASSWORD / SEED_DEFAULT_PINS let an operator pin these to a
+// known value for a fresh install (e.g. to hand out temporary credentials).
+// When unset, a random password/PIN is generated per user at boot and
+// printed once to the server log so whoever runs the first deploy can
+// capture and distribute it — nothing weak or predictable ships as a
+// fallback.
+const DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD || null;
+
+let SEED_DEFAULT_PINS: Record<string, string> = {};
+if (process.env.SEED_DEFAULT_PINS) {
+  try {
+    SEED_DEFAULT_PINS = JSON.parse(process.env.SEED_DEFAULT_PINS);
+  } catch {
+    console.warn("[AuthService] SEED_DEFAULT_PINS bukan JSON yang valid, diabaikan.");
+  }
+}
+
+function randomPassword(): string {
+  return crypto.randomBytes(9).toString("base64url"); // 12 chars, URL-safe
+}
+
+function randomPin(): string {
+  return String(crypto.randomInt(0, 10000)).padStart(4, "0");
+}
 
 interface ResetTokenEntry {
   email: string;
@@ -58,10 +81,18 @@ export async function initAuthService() {
   );
   const branchIdByLegacy = new Map(branchRows.map((r) => [r.legacy_id, r.id]));
 
+  // Credentials generated for genuinely NEW accounts this boot (not accounts
+  // that already existed) get logged once below, so whoever runs the first
+  // deploy can capture and hand them out — they're never recoverable after
+  // this, only resettable via "lupa kata sandi" / "ganti PIN".
+  const issuedCredentials: { email: string; password?: string; pin: string }[] = [];
+
   for (const u of INITIAL_USERS) {
     const email = u.email.toLowerCase();
     const branchId = u.branchId && branchIdByLegacy.has(u.branchId) ? branchIdByLegacy.get(u.branchId)! : null;
-    await pool.query(
+    const password = DEFAULT_PASSWORD || randomPassword();
+    const pin = SEED_DEFAULT_PINS[email] || randomPin();
+    const result = await pool.query(
       `INSERT INTO users (legacy_id, email, name, role, ownership_type, branch_id, branch_name, active, password_hash, pin_hash)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (email) DO NOTHING`,
@@ -74,10 +105,23 @@ export async function initAuthService() {
         branchId,
         u.branchName || null,
         u.active,
-        hashPassword(DEFAULT_PASSWORD),
-        hashPassword(DEFAULT_PINS[email] || "1234"),
+        hashPassword(password),
+        hashPassword(pin),
       ]
     );
+    if ((result.rowCount ?? 0) > 0) {
+      issuedCredentials.push({ email, password: DEFAULT_PASSWORD ? undefined : password, pin });
+    }
+  }
+
+  if (issuedCredentials.length > 0) {
+    console.log(
+      `[AuthService] 🔑 ${issuedCredentials.length} akun baru di-seed dengan kredensial berikut (dicetak SEKALI, catat sekarang):`
+    );
+    for (const c of issuedCredentials) {
+      const passwordNote = c.password ? `password=${c.password}` : "password=(dari SEED_DEFAULT_PASSWORD)";
+      console.log(`[AuthService]   ${c.email} — ${passwordNote} pin=${c.pin}`);
+    }
   }
 
   if (cleanupInterval) clearInterval(cleanupInterval);

@@ -1,5 +1,8 @@
 import "dotenv/config";
 import express from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import pinoHttp from "pino-http";
 import path from "path";
 import nodemailer from "nodemailer";
 import { createServer as createViteServer } from "vite";
@@ -84,7 +87,59 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Standard security headers (X-Content-Type-Options, X-Frame-Options,
+  // Strict-Transport-Security, etc.). Content-Security-Policy is left off
+  // for now: this app serves its own bundled SPA and enabling a default CSP
+  // without first auditing every inline script/style would risk breaking
+  // the frontend. Revisit once the frontend's script/style sources are
+  // audited.
+  app.use(helmet({ contentSecurityPolicy: false }));
+
+  // Structured (JSON) access logging — one line per request with method,
+  // path, status, response time, request id. Replaces having no request
+  // visibility at all in production; never logs the Authorization header
+  // (session tokens) or the request/response body (which can carry
+  // passwords/PINs on the auth routes).
+  app.use(
+    pinoHttp({
+      level: process.env.LOG_LEVEL || "info",
+      redact: {
+        paths: ["req.headers.authorization", "req.headers.cookie"],
+        remove: true
+      },
+      serializers: {
+        req(req) {
+          return { method: req.method, url: req.url, id: req.id };
+        }
+      }
+    })
+  );
+
   app.use(express.json({ limit: "25mb" }));
+
+  // Rate limiting for authentication endpoints — this app previously had
+  // none, which meant /api/auth/login-pin (a 4-digit PIN, only 10,000
+  // possible values) and /api/auth/login could be brute-forced with no
+  // slowdown. These limiters are IP-based, not a full replacement for
+  // per-account lockout, but they raise the cost of automated guessing to a
+  // level a single attacker can't easily script around.
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: "Terlalu banyak percobaan. Coba lagi dalam beberapa menit." }
+  });
+
+  // PIN space is tiny (10,000 combinations for a 4-digit PIN), so PIN-based
+  // endpoints get a tighter limit than password-based ones.
+  const pinLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 8,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: "Terlalu banyak percobaan PIN. Coba lagi dalam beberapa menit." }
+  });
 
   // Postgres schema + fresh-start seed must be ready before any service
   // below touches the database.
@@ -297,7 +352,7 @@ async function startServer() {
   // Validate email + password credentials against the server-side password
   // store, then issue a session. Role/ownership are read from the server's
   // own account directory — the client's claimed role is never trusted.
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       const { email, password } = req.body || {};
       if (!email || !password) {
@@ -321,7 +376,7 @@ async function startServer() {
   // Fast shift login via 4-digit PIN — the PIN is matched against the
   // server-side hashed PIN store, never against a value shipped to the
   // client bundle.
-  app.post("/api/auth/login-pin", async (req, res) => {
+  app.post("/api/auth/login-pin", pinLimiter, async (req, res) => {
     try {
       const { pin } = req.body || {};
       if (!pin || typeof pin !== "string" || pin.trim().length !== 4) {
@@ -349,7 +404,7 @@ async function startServer() {
   // demo mode has no session at all, and should still be able to PIN-switch
   // into a real one). This replaces the old client-only "switchRole" which
   // let anyone become anyone with a single click and no credential at all.
-  app.post("/api/auth/switch-account", async (req, res) => {
+  app.post("/api/auth/switch-account", pinLimiter, async (req, res) => {
     try {
       const { targetEmail, pin } = req.body || {};
       if (!targetEmail || !pin) {
@@ -379,7 +434,7 @@ async function startServer() {
   // password (a stronger secret) since a 4-digit PIN can't safely verify
   // itself; also rejects a PIN already in use by a DIFFERENT account so the
   // PIN-only quick-login (findAccountByPin) stays unambiguous.
-  app.post("/api/auth/change-pin", requireSession, async (req, res) => {
+  app.post("/api/auth/change-pin", authLimiter, requireSession, async (req, res) => {
     try {
       const email = (req as any).session.email as string;
       const { currentPassword, newPin } = req.body || {};
@@ -408,7 +463,7 @@ async function startServer() {
   // their PIN. Target email always comes from the verified session, never
   // the client body, and no new token is issued (the existing session stays
   // valid throughout — locking is a client-side UI state, not a logout).
-  app.post("/api/auth/unlock-password", requireSession, async (req, res) => {
+  app.post("/api/auth/unlock-password", authLimiter, requireSession, async (req, res) => {
     try {
       const email = (req as any).session.email as string;
       const { password } = req.body || {};
@@ -432,7 +487,7 @@ async function startServer() {
   });
 
   // Request a password reset link to be emailed to the account owner
-  app.post("/api/auth/forgot-password", async (req, res) => {
+  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
     const genericMessage = "Kalau email tersebut terdaftar, tautan pemulihan sandi sudah dikirim.";
     try {
       const { email } = req.body || {};
@@ -472,7 +527,7 @@ async function startServer() {
   });
 
   // Confirm a password reset using the token emailed to the user
-  app.post("/api/auth/reset-password", async (req, res) => {
+  app.post("/api/auth/reset-password", authLimiter, async (req, res) => {
     try {
       const { token, newPassword } = req.body || {};
       if (!token || !newPassword || newPassword.length < 6) {
