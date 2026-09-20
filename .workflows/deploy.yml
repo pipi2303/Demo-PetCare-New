@@ -56,4 +56,4 @@ jobs:
             echo "::error::PORTAINER_WEBHOOK_URL secret is not set. Add it in GitHub repo Settings > Secrets and variables > Actions."
             exit 1
           fi
-          curl --fail --silent --show-error -X POST "$WEBHOOK_URL"
+          curl --fail --silent --show-error -k -X POST "$WEBHOOK_URL"

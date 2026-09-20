@@ -56,4 +56,8 @@ jobs:
             echo "::error::PORTAINER_WEBHOOK_URL secret is not set. Add it in GitHub repo Settings > Secrets and variables > Actions."
             exit 1
           fi
-          curl --fail --silent --show-error -X POST "$WEBHOOK_URL"
+          # -k: skip TLS verification. Portainer here is reached over a
+          # self-signed HTTPS certificate (common for an IP-based Portainer
+          # install), so curl would otherwise refuse the connection with
+          # "SSL certificate problem: self-signed certificate".
+          curl --fail --silent --show-error -k -X POST "$WEBHOOK_URL"
