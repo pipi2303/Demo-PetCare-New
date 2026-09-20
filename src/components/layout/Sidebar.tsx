@@ -4,6 +4,7 @@ import { useData } from '../../context/DataContext';
 import { UserRole } from '../../types';
 import { getRoleInfo } from '../../utils/roleUtils';
 import { PinConfirmModal } from '../auth/PinConfirmModal';
+import { ModalPortal } from '../common/ModalPortal';
 import { usePermissions } from '../../hooks/usePermissions';
 // NavModule & MODULE_PERMISSIONS now live in a standalone constants file so
 // usePermissions.ts can import them without a circular dependency on this
@@ -356,9 +357,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         )}
 
-        {/* Modal / Popover Role Switcher */}
+        {/* Modal / Popover Role Switcher — Sidebar lives outside
+            .content-area in the DOM, so this modal is portaled into
+            #modal-root (inside .content-area) to stay off the Sidebar
+            itself and off the Header, exactly like every other modal. */}
         {showRoleSelector && (
-          <div 
+          <ModalPortal>
+          <div
             className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
             onClick={(e) => {
               if (e.target === e.currentTarget) setShowRoleSelector(false);
@@ -532,6 +537,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
       </div>
 

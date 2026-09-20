@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { KeyRound, X, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { ModalPortal } from '../common/ModalPortal';
 
 interface PinConfirmModalProps {
   targetLabel: string;
@@ -41,7 +42,12 @@ export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({ targetLabel, t
     if (next.length === 4) submit(next);
   };
 
+  // Portaled into #modal-root (inside .content-area) so this modal is
+  // always confined to the main content area even when it's opened from
+  // the persistent Sidebar or Header, both of which sit outside
+  // .content-area in the DOM.
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="max-w-xs w-full bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 space-y-4 shadow-2xl text-[#22242B]">
         <div className="flex justify-between items-center border-b border-[#E1D6BE] pb-3">
@@ -116,5 +122,6 @@ export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({ targetLabel, t
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };

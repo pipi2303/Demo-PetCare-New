@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { KeyRound, X, Eye, EyeOff, AlertCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { ModalPortal } from '../common/ModalPortal';
 
 interface ChangePinModalProps {
   onClose: () => void;
@@ -53,7 +54,12 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({ onClose }) => {
     onClose();
   };
 
+  // Portaled into #modal-root (inside .content-area): ChangePinModal is only
+  // ever opened from the Header, which sits outside .content-area in the
+  // DOM, so without this it would cover the Sidebar/Header instead of being
+  // confined to the main content area like every other modal.
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-[998] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 cursor-pointer"
       onClick={(e) => {
@@ -163,5 +169,6 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({ onClose }) => {
         </form>
       </div>
     </div>
+    </ModalPortal>
   );
 };
