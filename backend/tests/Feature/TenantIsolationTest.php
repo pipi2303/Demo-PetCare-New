@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Role;
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -36,23 +38,25 @@ class TenantIsolationTest extends TestCase
         $this->tenantB->domains()->create(['domain' => 'tenant-b.isolation-test']);
 
         $this->tenantA->run(function (): void {
-            DB::table('users')->insert([
+            $user = User::create([
                 'username' => 'budi.santoso',
                 'first_name' => 'Budi (Tenant A)',
                 'email' => 'budi@tenant-a.test',
-                'password' => bcrypt('secret'),
+                'password' => 'secret123',
                 'status' => 'ACTIVE',
             ]);
+            $user->roles()->attach(Role::where('code', 'TENANT_ADMIN')->firstOrFail());
         });
 
         $this->tenantB->run(function (): void {
-            DB::table('users')->insert([
+            $user = User::create([
                 'username' => 'sari.wulandari',
                 'first_name' => 'Sari (Tenant B)',
                 'email' => 'sari@tenant-b.test',
-                'password' => bcrypt('secret'),
+                'password' => 'secret123',
                 'status' => 'ACTIVE',
             ]);
+            $user->roles()->attach(Role::where('code', 'TENANT_ADMIN')->firstOrFail());
         });
     }
 
@@ -86,20 +90,33 @@ class TenantIsolationTest extends TestCase
             ]);
     }
 
+    /**
+     * Exercised through the real, authenticated Phase 9 user list endpoint
+     * (not a debug bypass) — the isolation guarantee as an actual client
+     * would experience it.
+     */
     public function test_tenant_a_cannot_read_tenant_bs_data(): void
     {
-        $this->get('http://tenant-a.isolation-test/api/tenant/_debug/users')
+        $this->postJson('http://tenant-a.isolation-test/api/auth/login', [
+            'identifier' => 'budi.santoso', 'password' => 'secret123',
+        ])->assertOk();
+
+        $this->getJson('http://tenant-a.isolation-test/api/tenant/users')
             ->assertOk()
-            ->assertJsonCount(1, 'users')
+            ->assertJsonCount(1, 'data')
             ->assertJsonFragment(['email' => 'budi@tenant-a.test'])
             ->assertJsonMissing(['email' => 'sari@tenant-b.test']);
     }
 
     public function test_tenant_b_cannot_read_tenant_as_data(): void
     {
-        $this->get('http://tenant-b.isolation-test/api/tenant/_debug/users')
+        $this->postJson('http://tenant-b.isolation-test/api/auth/login', [
+            'identifier' => 'sari.wulandari', 'password' => 'secret123',
+        ])->assertOk();
+
+        $this->getJson('http://tenant-b.isolation-test/api/tenant/users')
             ->assertOk()
-            ->assertJsonCount(1, 'users')
+            ->assertJsonCount(1, 'data')
             ->assertJsonFragment(['email' => 'sari@tenant-b.test'])
             ->assertJsonMissing(['email' => 'budi@tenant-a.test']);
     }

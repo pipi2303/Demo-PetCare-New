@@ -60,7 +60,9 @@ class TenantSeederTest extends TestCase
             (new TenantRolesAndPermissionsSeeder)->run();
 
             $this->assertSame(3, Role::count());
-            $this->assertSame(13, Permission::count());
+            // 13 from Phase 4 + department.manage/branch.manage added in
+            // Phase 9.
+            $this->assertSame(15, Permission::count());
             $this->assertSame(
                 Permission::count(),
                 Role::where('code', 'TENANT_ADMIN')->first()->permissions()->count()

@@ -48,6 +48,10 @@ class TenantRolesAndPermissionsSeeder extends Seeder
         'permission.read',
         'feature.read', 'feature.manage',
         'menu.read', 'menu.manage',
+        // Phase 9 — not in the doc's Phase 4 list, added since departments/
+        // branches need their own gate; TENANT_ADMIN only (below), not
+        // TENANT_MANAGER's read-leaning grant.
+        'department.manage', 'branch.manage',
     ];
 
     public function run(): void

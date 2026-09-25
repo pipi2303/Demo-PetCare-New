@@ -4,20 +4,21 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
-use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SyncUserRolesRequest;
 use App\Models\AuditLog;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Auth\LastAdminGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 
 class UserRoleController extends Controller
 {
+    public function __construct(private LastAdminGuard $lastAdminGuard) {}
+
     /**
-     * Full replace, via sync — the only user-facing action this phase
-     * needs; full user CRUD is still Phase 9.
+     * Full replace, via sync.
      */
     public function sync(SyncUserRolesRequest $request, User $user): JsonResponse
     {
@@ -30,17 +31,7 @@ class UserRoleController extends Controller
             && ! in_array('TENANT_ADMIN', $newCodes, true);
 
         if ($losingTenantAdmin) {
-            $remainingAdmins = User::whereHas('roles', fn ($q) => $q->where('code', 'TENANT_ADMIN'))
-                ->where('id', '!=', $user->id)
-                ->count();
-
-            if ($remainingAdmins === 0) {
-                throw new ApiException(
-                    'LAST_ADMIN_PROTECTED',
-                    'Tenant must have at least one active administrator.',
-                    422,
-                );
-            }
+            $this->lastAdminGuard->assertNotSoleAdmin($user);
         }
 
         $newRoleIds = Role::whereIn('code', $newCodes)->pluck('id');
