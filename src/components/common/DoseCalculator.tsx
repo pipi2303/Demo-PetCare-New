@@ -771,7 +771,9 @@ Catatan Klinis: ${currentSpeciesProfile.clinicalAdvice || currentSpeciesProfile.
 
     // 2. Sync weight to pet profile if altered
     if (updatePet && activeEMRPet.weightKg !== weightKg && weightKg > 0) {
-      updatePet(activeEMRPet.id, { weightKg });
+      updatePet(activeEMRPet.id, { weightKg }).catch(() => {
+        // Non-blocking: EMR record & callback below tetap jalan walau sync bobot ke profil pasien gagal.
+      });
     }
 
     // 3. Trigger parent callback if provided

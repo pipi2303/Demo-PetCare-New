@@ -49,31 +49,35 @@ export const TenantAdminModule: React.FC = () => {
       t.ownerName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddTenant = (e: React.FormEvent) => {
+  const handleAddTenant = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenantName || !tenantCode || !tenantOwnerName) {
       addToast('Nama Organisasi, Kode, dan Nama Owner wajib diisi!', 'warning');
       return;
     }
 
-    const created = addTenant({
-      name: tenantName,
-      code: tenantCode.toUpperCase(),
-      plan: tenantPlan,
-      status: 'active',
-      ownerName: tenantOwnerName,
-      phone: tenantPhone || '+62 812-0000-0000',
-      email: tenantEmail || 'admin@clinic.id',
-      expiresAt: '2027-12-31'
-    });
+    try {
+      const created = await addTenant({
+        name: tenantName,
+        code: tenantCode.toUpperCase(),
+        plan: tenantPlan,
+        status: 'active',
+        ownerName: tenantOwnerName,
+        phone: tenantPhone || '+62 812-0000-0000',
+        email: tenantEmail || 'admin@clinic.id',
+        expiresAt: '2027-12-31'
+      });
 
-    setShowAddTenantModal(false);
-    setTenantName('');
-    setTenantCode('');
-    setTenantOwnerName('');
-    setTenantEmail('');
-    setTenantPhone('');
-    addToast(`Tenant Baru "${created.name}" (${created.code}) berhasil didaftarkan di SaaS Cloud!`, 'success');
+      setShowAddTenantModal(false);
+      setTenantName('');
+      setTenantCode('');
+      setTenantOwnerName('');
+      setTenantEmail('');
+      setTenantPhone('');
+      addToast(`Tenant Baru "${created.name}" (${created.code}) berhasil didaftarkan di SaaS Cloud!`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal mendaftarkan tenant baru.', 'error');
+    }
   };
 
   const getPlanBadge = (plan: Tenant['plan']) => {

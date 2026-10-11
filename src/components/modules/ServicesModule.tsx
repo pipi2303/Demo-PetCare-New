@@ -193,21 +193,25 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
     setShowAddBookingModal(false);
   };
 
-  const handleCheckInBookingToQueue = (booking: Types.DoctorBooking) => {
+  const handleCheckInBookingToQueue = async (booking: Types.DoctorBooking) => {
     const pet = pets.find((p) => p.id === booking.petId);
     checkInDoctorBooking(booking.id);
-    addClinicVisit({
-      customerId: booking.customerId,
-      customerName: booking.customerName,
-      petId: booking.petId,
-      petName: booking.petName,
-      petSpecies: booking.petSpecies,
-      petBreed: pet?.breed || 'Umum',
-      doctorId: booking.doctorId || 'unassigned',
-      doctorName: booking.doctorName || 'Belum Ditugaskan',
-      complaint: booking.complaint || 'Janji Temu Terjadwal'
-    });
-    addToast(`Pasien ${booking.petName} telah di-checkin dan masuk ke Antrean Klinik Live!`, 'success');
+    try {
+      await addClinicVisit({
+        customerId: booking.customerId,
+        customerName: booking.customerName,
+        petId: booking.petId,
+        petName: booking.petName,
+        petSpecies: booking.petSpecies,
+        petBreed: pet?.breed || 'Umum',
+        doctorId: booking.doctorId || 'unassigned',
+        doctorName: booking.doctorName || 'Belum Ditugaskan',
+        complaint: booking.complaint || 'Janji Temu Terjadwal'
+      });
+      addToast(`Pasien ${booking.petName} telah di-checkin dan masuk ke Antrean Klinik Live!`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal memasukkan pasien ke antrean klinik.', 'error');
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -287,7 +291,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   // diperbaiki di Check-Out Pet Hotel pada file ini).
   const [advancingGroomingIds, setAdvancingGroomingIds] = useState<Set<string>>(new Set());
 
-  const handleAdvanceGroomingStage = (session: Types.GroomingSession) => {
+  const handleAdvanceGroomingStage = async (session: Types.GroomingSession) => {
     if (advancingGroomingIds.has(session.id)) return;
     const currentIndex = stageOrder.indexOf(session.stage);
     if (currentIndex < stageOrder.length - 1) {
@@ -306,30 +310,39 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       if (nextStage === 'Selesai') {
         const pet = pets.find((p) => p.id === session.petId);
         const cust = customers.find((c) => c.id === pet?.customerId);
-        addInvoice({
-          customerId: cust?.id || 'guest',
-          customerName: session.customerName,
-          petName: session.petName,
-          items: [
-            {
-              id: 'inv_item_' + Date.now() + Math.random(),
-              category: 'Grooming',
-              name: `Grooming ${session.packageType} - ${session.petName}`,
-              quantity: 1,
-              unitPrice: session.price,
-              totalPrice: session.price
-            }
-          ],
-          subtotal: session.price,
-          discountAmount: 0,
-          totalAmount: session.price,
-          paidAmount: 0,
-          paymentMethod: 'Tunai',
-          status: 'Belum Dibayar',
-          loyaltyPointsEarned: 0,
-          cashierName: session.groomerName
-        });
-        addToast(`Tagihan grooming Rp ${session.price.toLocaleString('id-ID')} untuk ${session.petName} diteruskan ke Kasir.`, 'success');
+        try {
+          await addInvoice({
+            customerId: cust?.id || 'guest',
+            customerName: session.customerName,
+            petName: session.petName,
+            items: [
+              {
+                id: 'inv_item_' + Date.now() + Math.random(),
+                category: 'Grooming',
+                name: `Grooming ${session.packageType} - ${session.petName}`,
+                quantity: 1,
+                unitPrice: session.price,
+                totalPrice: session.price
+              }
+            ],
+            subtotal: session.price,
+            discountAmount: 0,
+            totalAmount: session.price,
+            paidAmount: 0,
+            paymentMethod: 'Tunai',
+            status: 'Belum Dibayar',
+            loyaltyPointsEarned: 0,
+            cashierName: session.groomerName
+          });
+          addToast(`Tagihan grooming Rp ${session.price.toLocaleString('id-ID')} untuk ${session.petName} diteruskan ke Kasir.`, 'success');
+        } catch (err: any) {
+          addToast(err?.message || 'Gagal menerbitkan tagihan grooming.', 'error');
+          setAdvancingGroomingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(session.id);
+            return next;
+          });
+        }
       }
     }
   };
@@ -481,31 +494,34 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
         prescription: telePrescription
       });
 
-      addInvoice({
-        customerId: activeCallSession.customerId,
-        customerName: activeCallSession.customerName,
-        petName: activeCallSession.petName,
-        items: [
-          {
-            id: 'item_' + Date.now(),
-            category: 'Telehealth',
-            name: `Konsultasi Telehealth — ${activeCallSession.doctorName}`,
-            quantity: 1,
-            unitPrice: activeCallSession.fee,
-            totalPrice: activeCallSession.fee
-          }
-        ],
-        subtotal: activeCallSession.fee,
-        discountAmount: 0,
-        totalAmount: activeCallSession.fee,
-        paidAmount: 0,
-        paymentMethod: 'Tunai',
-        status: 'Belum Dibayar',
-        loyaltyPointsEarned: 0,
-        cashierName: activeCallSession.doctorName
-      });
-
-      addToast(`Sesi Telehealth dengan ${activeCallSession.petName} telah selesai. Catatan medis tersimpan & tagihan diterbitkan.`, 'success');
+      try {
+        await addInvoice({
+          customerId: activeCallSession.customerId,
+          customerName: activeCallSession.customerName,
+          petName: activeCallSession.petName,
+          items: [
+            {
+              id: 'item_' + Date.now(),
+              category: 'Telehealth',
+              name: `Konsultasi Telehealth — ${activeCallSession.doctorName}`,
+              quantity: 1,
+              unitPrice: activeCallSession.fee,
+              totalPrice: activeCallSession.fee
+            }
+          ],
+          subtotal: activeCallSession.fee,
+          discountAmount: 0,
+          totalAmount: activeCallSession.fee,
+          paidAmount: 0,
+          paymentMethod: 'Tunai',
+          status: 'Belum Dibayar',
+          loyaltyPointsEarned: 0,
+          cashierName: activeCallSession.doctorName
+        });
+        addToast(`Sesi Telehealth dengan ${activeCallSession.petName} telah selesai. Catatan medis tersimpan & tagihan diterbitkan.`, 'success');
+      } catch (err: any) {
+        addToast(err?.message || 'Gagal menerbitkan tagihan telehealth.', 'error');
+      }
       setActiveCallSession(null);
       isEndingCallRef.current = false;
     }
@@ -1221,7 +1237,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                   </button>
                   <button
                     disabled={checkingOutIds.has(res.id)}
-                    onClick={() => {
+                    onClick={async () => {
                       if (checkingOutIds.has(res.id)) return;
                       setCheckingOutIds((prev) => new Set(prev).add(res.id));
 
@@ -1231,31 +1247,40 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                       // sebagai invoice 'Belum Dibayar' saat check-out.
                       const pet = pets.find((p) => p.id === res.petId);
                       const cust = customers.find((c) => c.id === pet?.customerId);
-                      addInvoice({
-                        customerId: cust?.id || 'guest',
-                        customerName: res.customerName,
-                        petName: res.petName,
-                        items: [
-                          {
-                            id: 'inv_item_' + Date.now() + Math.random(),
-                            category: 'Pet Hotel',
-                            name: `Boarding ${res.roomType} (${res.totalNights} malam) - ${res.petName}`,
-                            quantity: res.totalNights,
-                            unitPrice: res.dailyRate,
-                            totalPrice: res.totalCost
-                          }
-                        ],
-                        subtotal: res.totalCost,
-                        discountAmount: 0,
-                        totalAmount: res.totalCost,
-                        paidAmount: 0,
-                        paymentMethod: 'Tunai',
-                        status: 'Belum Dibayar',
-                        loyaltyPointsEarned: 0,
-                        cashierName: 'Staf Pet Hotel'
-                      });
-                      updateHotelStatus(res.id, 'Selesai');
-                      addToast(`Pasien ${res.petName} check-out. Tagihan Rp ${res.totalCost.toLocaleString('id-ID')} diteruskan ke Kasir.`, 'success');
+                      try {
+                        await addInvoice({
+                          customerId: cust?.id || 'guest',
+                          customerName: res.customerName,
+                          petName: res.petName,
+                          items: [
+                            {
+                              id: 'inv_item_' + Date.now() + Math.random(),
+                              category: 'Pet Hotel',
+                              name: `Boarding ${res.roomType} (${res.totalNights} malam) - ${res.petName}`,
+                              quantity: res.totalNights,
+                              unitPrice: res.dailyRate,
+                              totalPrice: res.totalCost
+                            }
+                          ],
+                          subtotal: res.totalCost,
+                          discountAmount: 0,
+                          totalAmount: res.totalCost,
+                          paidAmount: 0,
+                          paymentMethod: 'Tunai',
+                          status: 'Belum Dibayar',
+                          loyaltyPointsEarned: 0,
+                          cashierName: 'Staf Pet Hotel'
+                        });
+                        updateHotelStatus(res.id, 'Selesai');
+                        addToast(`Pasien ${res.petName} check-out. Tagihan Rp ${res.totalCost.toLocaleString('id-ID')} diteruskan ke Kasir.`, 'success');
+                      } catch (err: any) {
+                        addToast(err?.message || 'Gagal menerbitkan tagihan pet hotel.', 'error');
+                        setCheckingOutIds((prev) => {
+                          const next = new Set(prev);
+                          next.delete(res.id);
+                          return next;
+                        });
+                      }
                     }}
                     className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-2xs transition-all"
                   >

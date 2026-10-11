@@ -13,6 +13,7 @@ import { PWAInstallPrompt } from './components/layout/PWAInstallPrompt';
 import { QueueDisplay } from './components/common/QueueDisplay';
 import { DoseCalculator } from './components/common/DoseCalculator';
 import { CctvMonitor } from './components/common/CctvMonitor';
+import { ModalPortal } from './components/common/ModalPortal';
 import { DashboardModule } from './components/modules/DashboardModule';
 import { MasterDataModule } from './components/modules/MasterDataModule';
 import { ClinicModule } from './components/modules/ClinicModule';
@@ -35,6 +36,8 @@ import { NotificationsModule } from './components/modules/NotificationsModule';
 import { TenantAdminModule } from './components/modules/TenantAdminModule';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ResetPasswordScreen } from './components/auth/ResetPasswordScreen';
+import { LockScreen } from './components/auth/LockScreen';
+import { useIdleTimer } from './hooks/useIdleTimer';
 import { getRoleInfo } from './utils/roleUtils';
 import {
   CalendarCheck,
@@ -114,8 +117,14 @@ const MainAppContent: React.FC = () => {
     () => new URLSearchParams(window.location.search).get('resetToken')
   );
 
-  const { user, isLoginScreenOpen, closeLoginScreen } = useAuth();
+  const { user, isLoginScreenOpen, closeLoginScreen, isLocked, lockApp } = useAuth();
   const { addToast } = useToast();
+  const { appSettings } = useData();
+
+  // Lock Aplikasi Otomatis — timer cuma aktif kalau sudah login & fiturnya
+  // diaktifkan di Pengaturan Sistem. Berhenti total (tidak dengar event
+  // apa pun) kalau appLockEnabled false, supaya tidak ada overhead diam-diam.
+  useIdleTimer(!!user && !isLoginScreenOpen && appSettings.appLockEnabled, appSettings.appLockTimeoutMinutes, lockApp);
 
   // Single source of truth for role/permission resolution (see usePermissions.ts) —
   // replaces the divergent effectiveRole logic that used to live separately here.
@@ -169,6 +178,11 @@ const MainAppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#F6F1E6] text-[#22242B] font-sans antialiased selection:bg-[#1B2A45] selection:text-[#FFFDF9]">
+      {/* Lock Aplikasi Otomatis — overlay di atas aplikasi, BUKAN ganti
+          seluruh halaman seperti LoginScreen, supaya modal/form yang
+          sedang terbuka di baliknya tidak hilang saat unlock. */}
+      {isLocked && <LockScreen />}
+
       {/* Sidebar Navigation */}
       <Sidebar
         activeModule={activeModule}
@@ -187,9 +201,14 @@ const MainAppContent: React.FC = () => {
         onOpenAI={() => setActiveModule('aiAssistant')}
       />
 
-      {/* Main View Area */}
+      {/* Main View Area — this is the "AREA CONTENT UTAMA": the containing
+          block for every modal/dialog in the app (see .content-area in
+          index.css). It now scrolls internally (h-screen + overflow-y-auto)
+          so its box always matches the visible viewport slice next to the
+          Sidebar and below the Header, which is what keeps a centered modal
+          visible instead of centering somewhere down a long scrolled page. */}
       <main
-        className={`pt-20 pb-12 px-4 md:px-6 transition-all duration-300 ${
+        className={`content-area h-screen overflow-y-auto pt-20 pb-12 px-4 md:px-6 transition-all duration-300 ${
           isCollapsed ? 'ml-16' : 'ml-64'
         }`}
       >
@@ -379,58 +398,73 @@ const MainAppContent: React.FC = () => {
             </motion.div>
           </AnimatePresence>
         </div>
+
+        {/* Modal portal target — stays INSIDE .content-area so anything
+            rendered through <ModalPortal> (used by modals that live outside
+            the content area in the DOM, e.g. ones opened from Sidebar/Header)
+            shares the exact same coordinate system as every other modal. */}
+        <div id="modal-root" className="contents" />
+
+        {/* Global Search Modal */}
+        {isSearchOpen && (
+          <ModalPortal>
+            <GlobalSearchModal
+              isOpen={isSearchOpen}
+              onClose={() => setIsSearchOpen(false)}
+              setActiveModule={setActiveModule}
+            />
+          </ModalPortal>
+        )}
+
+        {/* Dose Calculator Modal */}
+        {showDoseCalcModal && (
+          <ModalPortal>
+            <div
+              className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowDoseCalcModal(false);
+              }}
+            >
+              <div className="max-w-2xl w-full cursor-default max-h-[90vh] overflow-y-auto rounded-2xl" onClick={(e) => e.stopPropagation()}>
+                <DoseCalculator onClose={() => setShowDoseCalcModal(false)} />
+              </div>
+            </div>
+          </ModalPortal>
+        )}
+
+        {/* CCTV Monitor Modal */}
+        {showCctvModal && (
+          <ModalPortal>
+            <div
+              className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowCctvModal(false);
+              }}
+            >
+              <div className="max-w-4xl w-full bg-slate-900 p-4 rounded-2xl border border-slate-800 space-y-3 cursor-default" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-white">
+                  <h3 className="font-bold text-sm flex items-center gap-2">
+                    <Tv className="w-4 h-4 text-sky-400" /> CCTV Real-time Monitoring Pet Hotel & Grooming
+                  </h3>
+                  <button
+                    onClick={() => setShowCctvModal(false)}
+                    className="text-xs px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 font-bold"
+                  >
+                    Tutup Monitor
+                  </button>
+                </div>
+                <CctvMonitor />
+              </div>
+            </div>
+          </ModalPortal>
+        )}
       </main>
 
-      {/* Global Search Modal */}
-      {isSearchOpen && (
-        <GlobalSearchModal
-          isOpen={isSearchOpen}
-          onClose={() => setIsSearchOpen(false)}
-          setActiveModule={setActiveModule}
-        />
-      )}
-
-      {/* Fullscreen TV Queue Display */}
+      {/* Fullscreen TV Queue Display — intentionally a real kiosk display
+          meant to be shown on an external TV at reception, not a page
+          dialog, so it stays a true viewport-covering overlay outside
+          .content-area (matches the LockScreen exception below). */}
       {showQueueDisplay && <QueueDisplay onClose={() => setShowQueueDisplay(false)} />}
-
-      {/* Dose Calculator Modal */}
-      {showDoseCalcModal && (
-        <div 
-          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowDoseCalcModal(false);
-          }}
-        >
-          <div className="max-w-2xl w-full cursor-default max-h-[90vh] overflow-y-auto rounded-2xl" onClick={(e) => e.stopPropagation()}>
-            <DoseCalculator onClose={() => setShowDoseCalcModal(false)} />
-          </div>
-        </div>
-      )}
-
-      {/* CCTV Monitor Modal */}
-      {showCctvModal && (
-        <div 
-          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowCctvModal(false);
-          }}
-        >
-          <div className="max-w-4xl w-full bg-slate-900 p-4 rounded-2xl border border-slate-800 space-y-3 cursor-default" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-white">
-              <h3 className="font-bold text-sm flex items-center gap-2">
-                <Tv className="w-4 h-4 text-sky-400" /> CCTV Real-time Monitoring Pet Hotel & Grooming
-              </h3>
-              <button
-                onClick={() => setShowCctvModal(false)}
-                className="text-xs px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 font-bold"
-              >
-                Tutup Monitor
-              </button>
-            </div>
-            <CctvMonitor />
-          </div>
-        </div>
-      )}
 
       {/* PWA Install Prompt */}
       <PWAInstallPrompt />

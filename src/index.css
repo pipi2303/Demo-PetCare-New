@@ -118,6 +118,45 @@
 .text-sage-dark { color: var(--piki-ink); }
 .border-sage { border-color: var(--piki-hairline); }
 
+/* ==========================================================================
+   Modal / Dialog Containment — keep every modal inside the main content
+   area, never over the persistent Sidebar (<aside>, position:fixed) or
+   Header (<header>, position:fixed).
+   ==========================================================================
+   `.content-area` is the <main> that hosts every module screen (App.tsx).
+   `contain: layout` makes it the CSS containing block for any descendant
+   `position: fixed` element — per the CSS Containment spec this behaves
+   exactly like `transform` would for scoping fixed-position descendants,
+   without any visual side effect (no new compositing layer, no blur/1px
+   shifts). It also forces a new stacking context on `.content-area`, so
+   everything painted inside it — including a modal using a very high
+   z-index — is capped below the Sidebar (z-40) and Header (z-30) in the
+   parent stacking context and can never visually cover them.
+   Practical effect: almost every modal in this app is a plain
+   `fixed inset-0 ...` overlay rendered somewhere inside a module, and
+   modules only ever render inside `.content-area` — so those modals are
+   automatically resized/centered to `.content-area`'s box instead of the
+   browser viewport, with zero changes needed in each modal's own file.
+   The few modals opened from the Sidebar/Header themselves (which sit
+   outside `.content-area` in the DOM) use <ModalPortal> to render into
+   `#modal-root`, a container that lives inside `.content-area`, so they
+   get the exact same containment. */
+.content-area {
+  position: relative;
+  contain: layout;
+}
+
+/* Printing invoices/reports must never be clipped to one screen height by
+   the content-area's internal scroll container — restore normal flow only
+   for print output. */
+@media print {
+  .content-area {
+    height: auto !important;
+    overflow: visible !important;
+    contain: none !important;
+  }
+}
+
 /* Print Optimizations for Quick Print & Invoices */
 @media print {
   body {

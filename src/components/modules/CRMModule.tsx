@@ -163,11 +163,15 @@ export const CRMModule: React.FC = () => {
   const customerVisits = clinicVisits.filter((v) => v.customerId === selectedCustomer?.id);
   const customerInvoices = invoices.filter((inv) => inv.customerId === selectedCustomer?.id);
 
-  const handleAdjustPoints = (e: React.FormEvent) => {
+  const handleAdjustPoints = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) return;
-    adjustCustomerPoints(selectedCustomer.id, pointAdjustment, pointReason);
-    addToast(`Poin loyalitas ${selectedCustomer.name} berhasil disesuaikan (${pointAdjustment > 0 ? '+' : ''}${pointAdjustment})!`, 'success');
+    try {
+      await adjustCustomerPoints(selectedCustomer.id, pointAdjustment, pointReason);
+      addToast(`Poin loyalitas ${selectedCustomer.name} berhasil disesuaikan (${pointAdjustment > 0 ? '+' : ''}${pointAdjustment})!`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyesuaikan poin loyalitas.', 'error');
+    }
   };
 
   const selectedCustomerNotes = customerNotes

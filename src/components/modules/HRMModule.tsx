@@ -208,7 +208,7 @@ export const HRMModule: React.FC = () => {
     setShowSlipModal(true);
   };
 
-  const handleSimulatePayout = (sc: any) => {
+  const handleSimulatePayout = async (sc: any) => {
     if (!canProcessPayroll) {
       addToast('Akun Anda tidak memiliki hak akses untuk mencairkan gaji/komisi staf.', 'error');
       return;
@@ -218,14 +218,24 @@ export const HRMModule: React.FC = () => {
       return;
     }
     setPaidStaffIds((prev) => new Set(prev).add(sc.staffId));
-    // Payout beneran dicatat sebagai pengeluaran kas di modul Finance
-    addCashTransaction({
-      type: 'Keluar',
-      category: 'Payroll & Komisi Staff',
-      amount: sc.totalPayout,
-      description: `Pencairan gaji & komisi ${sc.name} (${sc.role}) - periode ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`
-    });
-    addToast(`Penggajian & komisi bulan ini untuk ${sc.name} senilai Rp ${sc.totalPayout.toLocaleString('id-ID')} berhasil diproses & dicatat di Buku Kas Finance!`, 'success');
+    try {
+      // Payout beneran dicatat sebagai pengeluaran kas di modul Finance
+      await addCashTransaction({
+        type: 'Keluar',
+        category: 'Payroll & Komisi Staff',
+        amount: sc.totalPayout,
+        description: `Pencairan gaji & komisi ${sc.name} (${sc.role}) - periode ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`,
+        operator: 'Manager Keuangan (HRM)'
+      });
+      addToast(`Penggajian & komisi bulan ini untuk ${sc.name} senilai Rp ${sc.totalPayout.toLocaleString('id-ID')} berhasil diproses & dicatat di Buku Kas Finance!`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal mencatat pencairan gaji ke Buku Kas.', 'error');
+      setPaidStaffIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sc.staffId);
+        return next;
+      });
+    }
   };
 
   return (

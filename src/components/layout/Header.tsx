@@ -6,6 +6,7 @@ import { NavModule } from './Sidebar';
 import { getRoleInfo } from '../../utils/roleUtils';
 import { UserRole } from '../../types';
 import { PinConfirmModal } from '../auth/PinConfirmModal';
+import { ChangePinModal } from '../auth/ChangePinModal';
 import {
   Menu,
   Search,
@@ -20,6 +21,7 @@ import {
   ShieldCheck,
   Store,
   LogOut,
+  Lock,
   KeyRound,
   Zap,
   Building2,
@@ -78,12 +80,13 @@ export const Header: React.FC<HeaderProps> = ({
   openPublicBooking,
   onOpenAI,
 }) => {
-  const { user, findAccountEmailByRole, logout, openLoginScreen, activeOwnership } = useAuth();
+  const { user, findAccountEmailByRole, logout, openLoginScreen, activeOwnership, lockApp } = useAuth();
   const { notifications = [], markNotificationRead } = useData();
   const { addToast } = useToast();
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [pinTarget, setPinTarget] = useState<{ role: UserRole; email: string; label: string } | null>(null);
+  const [showChangePinModal, setShowChangePinModal] = useState(false);
 
   // Derive effective role from user role or active ownership
   let userRole: UserRole = 'owner_klinik';
@@ -515,6 +518,28 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   onClick={() => {
                     setShowUserDropdown(false);
+                    lockApp();
+                  }}
+                  className="w-full py-1.5 px-2.5 rounded-lg bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] border border-[#E1D6BE] font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5 text-[#B8905A]" />
+                  <span>Kunci Sekarang</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowUserDropdown(false);
+                    setShowChangePinModal(true);
+                  }}
+                  className="w-full py-1.5 px-2.5 rounded-lg bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] border border-[#E1D6BE] font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-[#B8905A]" />
+                  <span>Ganti PIN Saya</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowUserDropdown(false);
                     logout();
                   }}
                   className="w-full py-1.5 px-2.5 rounded-lg bg-[#101A2C] hover:bg-rose-950/40 text-rose-300 hover:text-rose-200 border border-rose-500/30 font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
@@ -527,6 +552,8 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+
+      {showChangePinModal && <ChangePinModal onClose={() => setShowChangePinModal(false)} />}
 
       {pinTarget && (
         <PinConfirmModal

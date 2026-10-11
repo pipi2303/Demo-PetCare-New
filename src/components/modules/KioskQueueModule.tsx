@@ -59,7 +59,7 @@ export const KioskQueueModule: React.FC = () => {
     addToast(`Pelanggan teridentifikasi: ${cust.name} (${pet?.name || 'Pasien'})`, 'success');
   };
 
-  const handlePrintTicket = () => {
+  const handlePrintTicket = async () => {
     if (!selectedCustomer || !selectedPet) {
       addToast('Pilih pasien terlebih dahulu.', 'error');
       return;
@@ -67,21 +67,26 @@ export const KioskQueueModule: React.FC = () => {
     if (isPrintingTicketRef.current) return;
     isPrintingTicketRef.current = true;
 
-    const newVisit = addClinicVisit({
-      customerId: selectedCustomer.id,
-      customerName: selectedCustomer.name,
-      petId: selectedPet.id,
-      petName: selectedPet.name,
-      petSpecies: selectedPet.species,
-      petBreed: selectedPet.breed,
-      doctorId: onDutyDoctor?.id || 'unassigned',
-      doctorName: onDutyDoctor?.name || 'Menunggu Penugasan Dokter',
-      complaint
-    });
+    try {
+      const newVisit = await addClinicVisit({
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        petId: selectedPet.id,
+        petName: selectedPet.name,
+        petSpecies: selectedPet.species,
+        petBreed: selectedPet.breed,
+        doctorId: onDutyDoctor?.id || 'unassigned',
+        doctorName: onDutyDoctor?.name || 'Menunggu Penugasan Dokter',
+        complaint
+      });
 
-    setPrintedTicket(newVisit);
-    addToast(`Tiket antrean A-${newVisit.queueNo.toString().padStart(3, '0')} berhasil dicetak!`, 'success');
-    isPrintingTicketRef.current = false;
+      setPrintedTicket(newVisit);
+      addToast(`Tiket antrean A-${newVisit.queueNo.toString().padStart(3, '0')} berhasil dicetak!`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal mencetak tiket antrean.', 'error');
+    } finally {
+      isPrintingTicketRef.current = false;
+    }
   };
 
   const handleSendWANotify = async (visit: any) => {

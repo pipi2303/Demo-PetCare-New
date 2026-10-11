@@ -1,0 +1,14 @@
+{
+  "name": "petcare-smoke-test",
+  "version": "1.0.0",
+  "description": "Automated navigation smoke test for PetCare ERP: logs in and clicks through every sidebar module, flagging console errors, failed /api/* requests, and crash markers.",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "smoke": "node smoke.js",
+    "smoke:roles": "node smoke_roles.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.10.0"
+  }
+}

@@ -52,7 +52,7 @@ export const SettingsModule: React.FC = () => {
   const { addToast } = useToast();
   const { branches = [], activeBranchId, doctorBookings = [], appSettings, updateAppSettings } = useData();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'invoice' | 'whatsapp' | 'printer' | 'backup' | 'google_calendar'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'invoice' | 'whatsapp' | 'printer' | 'security' | 'backup' | 'google_calendar'>('profile');
 
   // Google Calendar Integration State in Settings
   const [gcalConfig, setGcalConfig] = useState(loadGoogleCalendarConfig());
@@ -103,55 +103,71 @@ export const SettingsModule: React.FC = () => {
   const [printerIpAddress, setPrinterIpAddress] = useState(appSettings.printerIpAddress);
   const [cutPaperAfterPrint, setCutPaperAfterPrint] = useState<boolean>(appSettings.cutPaperAfterPrint);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  // Lock Aplikasi Otomatis State
+  const [appLockEnabled, setAppLockEnabled] = useState<boolean>(appSettings.appLockEnabled);
+  const [appLockTimeoutMinutes, setAppLockTimeoutMinutes] = useState<number>(appSettings.appLockTimeoutMinutes);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateAppSettings({
-      clinicName,
-      slogan,
-      sipNumber,
-      taxId,
-      clinicPhone,
-      clinicEmail,
-      clinicAddress,
-      operationalHours
-    });
-    addToast('Profil klinik & identitas operasional berhasil diperbarui! Dipakai juga sebagai kop surat laporan PDF resmi.', 'success');
+    try {
+      await updateAppSettings({
+        clinicName,
+        slogan,
+        sipNumber,
+        taxId,
+        clinicPhone,
+        clinicEmail,
+        clinicAddress,
+        operationalHours
+      });
+      addToast('Profil klinik & identitas operasional berhasil diperbarui! Dipakai juga sebagai kop surat laporan PDF resmi.', 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan profil klinik.', 'error');
+    }
   };
 
-  const handleSaveInvoiceSettings = (e: React.FormEvent) => {
+  const handleSaveInvoiceSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateAppSettings({
-      invoicePrefix,
-      invoiceHeader,
-      invoiceFooter,
-      taxRate,
-      enableTax,
-      serviceFeePercent,
-      roundingMode,
-      cashierAutoPrint,
-      // Field printer disimpan bersamaan karena tabnya sendiri tidak punya
-      // tombol Simpan terpisah (lihat TAB 4) — perubahan di sana langsung
-      // diterapkan ke draft lokal, ikut tersimpan saat tab lain disimpan.
-      paperWidth,
-      printerConnection,
-      printerDeviceName,
-      printerIpAddress,
-      cutPaperAfterPrint
-    });
-    addToast('Pengaturan format invoice, PPN & kasir POS berhasil disimpan! Prefix & PPN langsung dipakai di Kasir Pet Shop.', 'success');
+    try {
+      await updateAppSettings({
+        invoicePrefix,
+        invoiceHeader,
+        invoiceFooter,
+        taxRate,
+        enableTax,
+        serviceFeePercent,
+        roundingMode,
+        cashierAutoPrint,
+        // Field printer disimpan bersamaan karena tabnya sendiri tidak punya
+        // tombol Simpan terpisah (lihat TAB 4) — perubahan di sana langsung
+        // diterapkan ke draft lokal, ikut tersimpan saat tab lain disimpan.
+        paperWidth,
+        printerConnection,
+        printerDeviceName,
+        printerIpAddress,
+        cutPaperAfterPrint
+      });
+      addToast('Pengaturan format invoice, PPN & kasir POS berhasil disimpan! Prefix & PPN langsung dipakai di Kasir Pet Shop.', 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan pengaturan invoice.', 'error');
+    }
   };
 
-  const handleSaveWaSettings = (e: React.FormEvent) => {
+  const handleSaveWaSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateAppSettings({
-      waSessionName,
-      waPhoneConnected,
-      waApiKey,
-      autoReminderHMinus1,
-      autoVaccineAlert,
-      autoSendInvoicePdf
-    });
-    addToast('Konfigurasi WhatsApp Gateway & pesan otomatis berhasil disimpan!', 'success');
+    try {
+      await updateAppSettings({
+        waSessionName,
+        waPhoneConnected,
+        waApiKey,
+        autoReminderHMinus1,
+        autoVaccineAlert,
+        autoSendInvoicePdf
+      });
+      addToast('Konfigurasi WhatsApp Gateway & pesan otomatis berhasil disimpan!', 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan konfigurasi WhatsApp.', 'error');
+    }
   };
 
   const handleTestPrint = () => {
@@ -159,6 +175,21 @@ export const SettingsModule: React.FC = () => {
     setTimeout(() => {
       addToast('Uji coba cetak struk thermal berhasil!', 'success');
     }, 1200);
+  };
+
+  const handleSaveSecuritySettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await updateAppSettings({ appLockEnabled, appLockTimeoutMinutes });
+      addToast(
+        appLockEnabled
+          ? `Lock Aplikasi Otomatis aktif — sesi akan terkunci setelah ${appLockTimeoutMinutes} menit tanpa aktivitas.`
+          : 'Lock Aplikasi Otomatis dinonaktifkan.',
+        'success'
+      );
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan pengaturan keamanan.', 'error');
+    }
   };
 
   return (
@@ -182,6 +213,7 @@ export const SettingsModule: React.FC = () => {
           { id: 'invoice', label: 'Format Struk & PPN', icon: Receipt },
           { id: 'whatsapp', label: 'WhatsApp Gateway', icon: Smartphone },
           { id: 'printer', label: 'Printer Thermal', icon: Printer },
+          { id: 'security', label: 'Keamanan & Lock', icon: Lock },
           { id: 'google_calendar', label: 'Google Calendar Sync', icon: CalendarCheck },
           { id: 'backup', label: 'Cadangan & Cloud', icon: HardDrive }
         ]}
@@ -721,6 +753,80 @@ export const SettingsModule: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB: Keamanan & Lock Aplikasi */}
+      {activeTab === 'security' && (
+        <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-6 shadow-2xs space-y-5">
+          <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-4">
+            <div>
+              <h3 className="font-bold text-base text-[#1B2A45] font-display flex items-center gap-2">
+                <Lock className="w-5 h-5 text-[#B8905A]" />
+                Lock Aplikasi Otomatis
+              </h3>
+              <p className="text-xs text-[#6B6656] mt-0.5">
+                Kunci sesi (layar PIN) setelah tidak ada aktivitas mouse/keyboard, supaya data pasien & transaksi
+                tidak terbuka begitu saja saat komputer/kasir ditinggal sebentar.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveSecuritySettings} className="space-y-4 text-xs">
+            <div className="p-4 bg-[#F6F1E6] rounded-xl border border-[#E1D6BE] flex items-center justify-between">
+              <div>
+                <h5 className="font-bold text-[#1B2A45]">Aktifkan Lock Otomatis Saat Idle</h5>
+                <p className="text-[11px] text-[#6B6656]">
+                  Kalau dimatikan, aplikasi tidak akan pernah terkunci otomatis (tombol "Kunci Sekarang" di menu
+                  profil tetap bisa dipakai kapan saja).
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={appLockEnabled}
+                onChange={(e) => setAppLockEnabled(e.target.checked)}
+                className="w-5 h-5 rounded text-[#B8905A] focus:ring-[#B8905A] cursor-pointer"
+              />
+            </div>
+
+            <div className={appLockEnabled ? '' : 'opacity-50 pointer-events-none'}>
+              <label className="font-bold text-[#1B2A45] block mb-1">Durasi Tanpa Aktivitas Sebelum Terkunci</label>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                {[1, 5, 10, 15, 30].map((minutes) => (
+                  <button
+                    key={minutes}
+                    type="button"
+                    onClick={() => setAppLockTimeoutMinutes(minutes)}
+                    className={`py-2.5 rounded-xl border text-center font-bold transition-all cursor-pointer ${
+                      appLockTimeoutMinutes === minutes
+                        ? 'bg-[#1B2A45] text-white border-[#B8905A]'
+                        : 'bg-[#F6F1E6] text-[#1B2A45] border-[#E1D6BE]'
+                    }`}
+                  >
+                    {minutes} Menit
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl text-[11px] text-sky-900 flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+              <p>
+                Membuka kunci hanya menerima PIN milik akun yang sedang login — bukan logout, jadi pekerjaan/form
+                yang sedang dibuka tidak hilang. Semua kejadian kunci/buka dicatat di Audit Log Sistem.
+              </p>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="submit"
+                className="px-6 py-2.5 bg-[#B8905A] hover:bg-[#9E7848] text-[#101A2C] font-extrabold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan Pengaturan Keamanan</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

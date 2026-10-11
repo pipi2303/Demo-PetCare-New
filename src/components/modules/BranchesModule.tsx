@@ -132,40 +132,44 @@ export const BranchesModule: React.FC = () => {
     setShowAddBranchModal(true);
   };
 
-  const handleSaveBranch = (e: React.FormEvent) => {
+  const handleSaveBranch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBranchName || !newBranchCode) {
       addToast('Nama dan Kode Cabang wajib diisi!', 'warning');
       return;
     }
 
-    if (editingBranch) {
-      updateBranch(editingBranch.id, {
-        name: newBranchName,
-        code: newBranchCode.toUpperCase(),
-        address: newBranchAddress || editingBranch.address,
-        phone: newBranchPhone || editingBranch.phone,
-        email: newBranchEmail || editingBranch.email
-      });
-      addToast(`Cabang "${newBranchName}" berhasil diperbarui!`, 'success');
-    } else {
-      const created = addBranch({
-        name: newBranchName,
-        code: newBranchCode.toUpperCase(),
-        address: newBranchAddress || 'Alamat cabang baru',
-        phone: newBranchPhone || '+62 812-0000-0000',
-        email: newBranchEmail || 'cabang@vetcare.id',
-        isActive: true,
-        isMainBranch: false
-      });
-      addToast(`Cabang baru "${created.name}" berhasil didaftarkan!`, 'success');
-    }
+    try {
+      if (editingBranch) {
+        await updateBranch(editingBranch.id, {
+          name: newBranchName,
+          code: newBranchCode.toUpperCase(),
+          address: newBranchAddress || editingBranch.address,
+          phone: newBranchPhone || editingBranch.phone,
+          email: newBranchEmail || editingBranch.email
+        });
+        addToast(`Cabang "${newBranchName}" berhasil diperbarui!`, 'success');
+      } else {
+        const created = await addBranch({
+          name: newBranchName,
+          code: newBranchCode.toUpperCase(),
+          address: newBranchAddress || 'Alamat cabang baru',
+          phone: newBranchPhone || '+62 812-0000-0000',
+          email: newBranchEmail || 'cabang@vetcare.id',
+          isActive: true,
+          isMainBranch: false
+        });
+        addToast(`Cabang baru "${created.name}" berhasil didaftarkan!`, 'success');
+      }
 
-    setShowAddBranchModal(false);
-    resetBranchForm();
+      setShowAddBranchModal(false);
+      resetBranchForm();
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan data cabang.', 'error');
+    }
   };
 
-  const handleDeleteBranch = (branch: Branch) => {
+  const handleDeleteBranch = async (branch: Branch) => {
     if (branch.isMainBranch) {
       addToast('Kantor pusat tidak dapat dihapus.', 'error');
       return;
@@ -175,8 +179,12 @@ export const BranchesModule: React.FC = () => {
       return;
     }
     if (!window.confirm(`Hapus cabang "${branch.name}"? Data terkait cabang ini tidak akan otomatis terhapus.`)) return;
-    deleteBranch(branch.id);
-    addToast(`Cabang "${branch.name}" berhasil dihapus.`, 'success');
+    try {
+      await deleteBranch(branch.id);
+      addToast(`Cabang "${branch.name}" berhasil dihapus.`, 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menghapus cabang.', 'error');
+    }
   };
 
   const handleCreateTransfer = (e: React.FormEvent) => {

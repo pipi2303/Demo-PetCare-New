@@ -300,22 +300,26 @@ export const MasterDataModule: React.FC = () => {
   };
 
   // Customer submit
-  const handleSaveCustomer = (e: React.FormEvent) => {
+  const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerForm.name || !customerForm.phone) {
       addToast('Nama dan No WhatsApp Wajib Diisi!', 'error');
       return;
     }
-    if (editingCustomer) {
-      updateCustomer(editingCustomer.id, customerForm);
-      addToast(`Data pelanggan ${customerForm.name} berhasil diperbarui!`, 'success');
-      setEditingCustomer(null);
-    } else {
-      addCustomer(customerForm);
-      addToast(`Pelanggan baru ${customerForm.name} berhasil ditambahkan!`, 'success');
+    try {
+      if (editingCustomer) {
+        await updateCustomer(editingCustomer.id, customerForm);
+        addToast(`Data pelanggan ${customerForm.name} berhasil diperbarui!`, 'success');
+        setEditingCustomer(null);
+      } else {
+        await addCustomer(customerForm);
+        addToast(`Pelanggan baru ${customerForm.name} berhasil ditambahkan!`, 'success');
+      }
+      setShowAddCustomerModal(false);
+      resetCustomerForm();
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan data pelanggan.', 'error');
     }
-    setShowAddCustomerModal(false);
-    resetCustomerForm();
   };
 
   const resetCustomerForm = () => {
@@ -345,14 +349,18 @@ export const MasterDataModule: React.FC = () => {
   };
 
   const handleDeleteCustomer = (c: Customer) => {
-    confirmAndDelete(`Apakah Anda yakin ingin menghapus pelanggan ${c.name}? Data hewan peliharaan terkait juga akan terpengaruh.`, () => {
-      deleteCustomer(c.id);
-      addToast(`Pelanggan ${c.name} telah dihapus!`, 'success');
+    confirmAndDelete(`Apakah Anda yakin ingin menghapus pelanggan ${c.name}? Data hewan peliharaan terkait juga akan terpengaruh.`, async () => {
+      try {
+        await deleteCustomer(c.id);
+        addToast(`Pelanggan ${c.name} telah dihapus!`, 'success');
+      } catch (err: any) {
+        addToast(err?.message || 'Gagal menghapus pelanggan.', 'error');
+      }
     });
   };
 
   // Pet submit
-  const handleSavePet = (e: React.FormEvent) => {
+  const handleSavePet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!petForm.name || !petForm.customerId) {
       addToast('Nama Hewan dan Pemilik Wajib Dipilih!', 'error');
@@ -361,35 +369,39 @@ export const MasterDataModule: React.FC = () => {
     const owner = customers.find((c) => c.id === petForm.customerId);
     const microchipVal = petForm.microchipNo.trim() || `MC-${Math.floor(100000000000 + Math.random() * 900000000000)}`;
 
-    if (editingPet) {
-      updatePet(editingPet.id, {
-        ...petForm,
-        customerName: owner?.name || 'Pelanggan',
-        microchipNo: microchipVal
-      });
-      addToast(`Data hewan ${petForm.name} berhasil diperbarui!`, 'success');
-      setEditingPet(null);
-    } else {
-      addPet({
-        customerId: petForm.customerId,
-        customerName: owner?.name || 'Pelanggan',
-        name: petForm.name,
-        species: petForm.species,
-        breed: petForm.breed,
-        color: petForm.color,
-        gender: petForm.gender,
-        sterilized: true,
-        birthDate: petForm.birthDate,
-        weightKg: Number(petForm.weightKg),
-        microchipNo: microchipVal,
-        allergies: petForm.allergies,
-        notes: petForm.notes,
-        photoUrl: 'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=600'
-      });
-      addToast(`Pasien hewan ${petForm.name} berhasil terdaftar!`, 'success');
+    try {
+      if (editingPet) {
+        await updatePet(editingPet.id, {
+          ...petForm,
+          customerName: owner?.name || 'Pelanggan',
+          microchipNo: microchipVal
+        });
+        addToast(`Data hewan ${petForm.name} berhasil diperbarui!`, 'success');
+        setEditingPet(null);
+      } else {
+        await addPet({
+          customerId: petForm.customerId,
+          customerName: owner?.name || 'Pelanggan',
+          name: petForm.name,
+          species: petForm.species,
+          breed: petForm.breed,
+          color: petForm.color,
+          gender: petForm.gender,
+          sterilized: true,
+          birthDate: petForm.birthDate,
+          weightKg: Number(petForm.weightKg),
+          microchipNo: microchipVal,
+          allergies: petForm.allergies,
+          notes: petForm.notes,
+          photoUrl: 'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=600'
+        });
+        addToast(`Pasien hewan ${petForm.name} berhasil terdaftar!`, 'success');
+      }
+      setShowAddPetModal(false);
+      resetPetForm();
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan data pasien hewan.', 'error');
     }
-    setShowAddPetModal(false);
-    resetPetForm();
   };
 
   const resetPetForm = () => {
@@ -427,29 +439,37 @@ export const MasterDataModule: React.FC = () => {
   };
 
   const handleDeletePet = (p: Pet) => {
-    confirmAndDelete(`Hapus pasien hewan ${p.name}?`, () => {
-      deletePet(p.id);
-      addToast(`Pasien hewan ${p.name} dihapus!`, 'success');
+    confirmAndDelete(`Hapus pasien hewan ${p.name}?`, async () => {
+      try {
+        await deletePet(p.id);
+        addToast(`Pasien hewan ${p.name} dihapus!`, 'success');
+      } catch (err: any) {
+        addToast(err?.message || 'Gagal menghapus pasien hewan.', 'error');
+      }
     });
   };
 
   // Service submit
-  const handleSaveService = (e: React.FormEvent) => {
+  const handleSaveService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!serviceForm.name || serviceForm.price <= 0) {
       addToast('Nama Layanan dan Tarif Wajib Valid!', 'error');
       return;
     }
-    if (editingService) {
-      updateService(editingService.id, serviceForm);
-      addToast(`Layanan ${serviceForm.name} diperbarui!`, 'success');
-      setEditingService(null);
-    } else {
-      addService(serviceForm);
-      addToast(`Layanan baru ${serviceForm.name} ditambahkan!`, 'success');
+    try {
+      if (editingService) {
+        await updateService(editingService.id, serviceForm);
+        addToast(`Layanan ${serviceForm.name} diperbarui!`, 'success');
+        setEditingService(null);
+      } else {
+        await addService(serviceForm);
+        addToast(`Layanan baru ${serviceForm.name} ditambahkan!`, 'success');
+      }
+      setShowAddServiceModal(false);
+      resetServiceForm();
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal menyimpan data layanan.', 'error');
     }
-    setShowAddServiceModal(false);
-    resetServiceForm();
   };
 
   const resetServiceForm = () => {
@@ -1579,9 +1599,13 @@ export const MasterDataModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              confirmAndDelete(`Hapus layanan ${s.name}?`, () => {
-                                deleteService(s.id);
-                                addToast(`Layanan ${s.name} dihapus!`, 'success');
+                              confirmAndDelete(`Hapus layanan ${s.name}?`, async () => {
+                                try {
+                                  await deleteService(s.id);
+                                  addToast(`Layanan ${s.name} dihapus!`, 'success');
+                                } catch (err: any) {
+                                  addToast(err?.message || 'Gagal menghapus layanan.', 'error');
+                                }
                               });
                             }}
                             className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"

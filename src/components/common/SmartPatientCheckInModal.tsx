@@ -361,7 +361,7 @@ export const SmartPatientCheckInModal: React.FC<SmartPatientCheckInModalProps> =
   };
 
   // Perform Final Smart Check-In -> Triggers 'Menunggu' (Waiting for Doctor)
-  const handleExecuteCheckIn = () => {
+  const handleExecuteCheckIn = async () => {
     if (!selectedPet || !selectedCustomer) {
       addToast('Data pasien tidak lengkap.', 'error');
       return;
@@ -370,59 +370,63 @@ export const SmartPatientCheckInModal: React.FC<SmartPatientCheckInModalProps> =
     const nextQueueNo = clinicVisits.length + 1;
     const finalComplaint = isEmergency ? `[🚨 GAWAT DARURAT] ${complaint}` : complaint;
 
-    // Create the clinic visit with status: 'Menunggu' (Waiting for Doctor)
-    const newVisit: ClinicVisit = addClinicVisit({
-      customerId: selectedCustomer.id,
-      customerName: selectedCustomer.name,
-      petId: selectedPet.id,
-      petName: selectedPet.name,
-      petSpecies: selectedPet.species,
-      petBreed: selectedPet.breed,
-      doctorId: selectedDoctorId,
-      doctorName: selectedDoctorName,
-      complaint: finalComplaint,
-      slaMinutes: isEmergency ? 5 : 20
-    });
+    try {
+      // Create the clinic visit with status: 'Menunggu' (Waiting for Doctor)
+      const newVisit: ClinicVisit = await addClinicVisit({
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        petId: selectedPet.id,
+        petName: selectedPet.name,
+        petSpecies: selectedPet.species,
+        petBreed: selectedPet.breed,
+        doctorId: selectedDoctorId,
+        doctorName: selectedDoctorName,
+        complaint: finalComplaint,
+        slaMinutes: isEmergency ? 5 : 20
+      });
 
-    // Check if there is an existing DoctorBooking for today to auto-complete
-    const todayBooking = doctorBookings.find(
-      (b) => b.petId === selectedPet.id && b.status !== 'Selesai' && b.status !== 'Batal'
-    );
-    if (todayBooking) {
-      updateDoctorBookingStatus(todayBooking.id, 'Selesai');
+      // Check if there is an existing DoctorBooking for today to auto-complete
+      const todayBooking = doctorBookings.find(
+        (b) => b.petId === selectedPet.id && b.status !== 'Selesai' && b.status !== 'Batal'
+      );
+      if (todayBooking) {
+        updateDoctorBookingStatus(todayBooking.id, 'Selesai');
+      }
+
+      // Play chime & speak announcement
+      playBeepSound('success');
+      announceQueueSpeech(`A-${String(nextQueueNo).padStart(2, '0')}`, selectedPet.name, selectedDoctorName);
+
+      // Audit log & notification
+      addAuditLog(
+        'Tambah',
+        'Smart Check-In (QR EMR)',
+        newVisit.visitNo,
+        `Pasien ${selectedPet.name} (${selectedPet.species} - ${selectedCustomer.name}) berhasil check-in mandiri via QR Code ke dokter ${selectedDoctorName} [Status: Menunggu Dokter].`,
+        { severity: isEmergency ? 'Kritis' : 'Info' }
+      );
+
+      addNotification({
+        title: isEmergency ? '🚨 Pasien Darurat Masuk Antrean!' : 'Smart QR Check-in: Pasien Baru',
+        message: `${selectedPet.name} (${selectedPet.species}) telah check-in ke ${selectedDoctorName} [Nomor: A-${String(nextQueueNo).padStart(2, '0')}].`,
+        type: 'Antrean',
+        priority: isEmergency ? 'Tinggi' : 'Sedang'
+      });
+
+      setCheckedInVisit(newVisit);
+      setStep('success');
+
+      if (onCheckInSuccess) {
+        onCheckInSuccess(newVisit);
+      }
+
+      addToast(
+        `Check-in Berhasil! Nomor Antrean: A-${String(nextQueueNo).padStart(2, '0')}. Status EMR & Antrean: Menunggu Dokter.`,
+        'success'
+      );
+    } catch (err: any) {
+      addToast(err?.message || 'Gagal melakukan check-in pasien.', 'error');
     }
-
-    // Play chime & speak announcement
-    playBeepSound('success');
-    announceQueueSpeech(`A-${String(nextQueueNo).padStart(2, '0')}`, selectedPet.name, selectedDoctorName);
-
-    // Audit log & notification
-    addAuditLog(
-      'Tambah',
-      'Smart Check-In (QR EMR)',
-      newVisit.visitNo,
-      `Pasien ${selectedPet.name} (${selectedPet.species} - ${selectedCustomer.name}) berhasil check-in mandiri via QR Code ke dokter ${selectedDoctorName} [Status: Menunggu Dokter].`,
-      { severity: isEmergency ? 'Kritis' : 'Info' }
-    );
-
-    addNotification({
-      title: isEmergency ? '🚨 Pasien Darurat Masuk Antrean!' : 'Smart QR Check-in: Pasien Baru',
-      message: `${selectedPet.name} (${selectedPet.species}) telah check-in ke ${selectedDoctorName} [Nomor: A-${String(nextQueueNo).padStart(2, '0')}].`,
-      type: 'Antrean',
-      priority: isEmergency ? 'Tinggi' : 'Sedang'
-    });
-
-    setCheckedInVisit(newVisit);
-    setStep('success');
-
-    if (onCheckInSuccess) {
-      onCheckInSuccess(newVisit);
-    }
-
-    addToast(
-      `Check-in Berhasil! Nomor Antrean: A-${String(nextQueueNo).padStart(2, '0')}. Status EMR & Antrean: Menunggu Dokter.`,
-      'success'
-    );
   };
 
   // Filtered returning pets list

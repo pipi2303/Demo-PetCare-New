@@ -34,6 +34,13 @@ export interface AuthContextType {
   isLoginScreenOpen: boolean;
   openLoginScreen: () => void;
   closeLoginScreen: () => void;
+  // Lock Aplikasi Otomatis — berbeda dari logout: sesi/token tetap ada,
+  // hanya disembunyikan di balik LockScreen sampai unlock berhasil.
+  isLocked: boolean;
+  lockApp: () => void;
+  unlockApp: (pin: string) => Promise<{ success: boolean; message?: string }>;
+  unlockAppWithPassword: (password: string) => Promise<{ success: boolean; message?: string }>;
+  changePin: (currentPassword: string, newPin: string) => Promise<{ success: boolean; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -99,6 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [isLoginScreenOpen, setIsLoginScreenOpen] = useState<boolean>(false);
+  const [isLocked, setIsLocked] = useState<boolean>(false);
 
   const setActiveBranchId = (branchId: string) => {
     setActiveBranchIdState(branchId);
@@ -260,6 +268,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Lock Aplikasi Otomatis — kunci sesi tanpa logout (token/state tetap).
+  const lockApp = () => {
+    if (!user || isLocked) return;
+    setIsLocked(true);
+    recordSecurityLog('Edit', user.name, `Aplikasi otomatis terkunci (idle) untuk sesi ${user.name} (${user.role}).`, user, 'Info');
+  };
+
+  // Unlock HANYA menerima PIN milik user yang sedang login — verifikasi
+  // memakai endpoint switch-account yang sudah ada, ditarget ke email user
+  // aktif sendiri, jadi PIN staf lain otomatis ditolak server (401).
+  const unlockApp = async (pin: string): Promise<{ success: boolean; message?: string }> => {
+    if (!user) return { success: false, message: 'Tidak ada sesi aktif untuk dibuka.' };
+    const result = await switchAccount(user.email, pin);
+    if (result.success) {
+      setIsLocked(false);
+      recordSecurityLog('Login', user.name, `Aplikasi berhasil dibuka kembali (unlock) oleh ${user.name}.`, user, 'Info');
+    } else {
+      recordSecurityLog('Login', user.name, `Percobaan unlock aplikasi gagal untuk ${user.name} (PIN salah).`, user, 'Warning');
+    }
+    return result;
+  };
+
+  // Unlock alternatif memakai kata sandi akun sendiri (bukan PIN). Tidak
+  // menerbitkan token baru — sesi yang sudah ada tetap dipakai, cuma
+  // dibuka kembali di sisi client.
+  const unlockAppWithPassword = async (password: string): Promise<{ success: boolean; message?: string }> => {
+    if (!user) return { success: false, message: 'Tidak ada sesi aktif untuk dibuka.' };
+    try {
+      const res = await fetch('/api/auth/unlock-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ password })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        recordSecurityLog('Login', user.name, `Percobaan unlock aplikasi gagal untuk ${user.name} (kata sandi salah).`, user, 'Warning');
+        return { success: false, message: data.message || 'Kata sandi tidak sesuai.' };
+      }
+      setIsLocked(false);
+      recordSecurityLog('Login', user.name, `Aplikasi berhasil dibuka kembali (unlock via kata sandi) oleh ${user.name}.`, user, 'Info');
+      return { success: true };
+    } catch (e) {
+      return { success: false, message: 'Tidak dapat terhubung ke server autentikasi. Coba lagi.' };
+    }
+  };
+
+  // Ganti PIN akun yang sedang login. Target email selalu dari sesi
+  // server-side (backend membaca req.session.email, bukan dari body) —
+  // frontend tidak perlu (dan tidak bisa) mengganti PIN akun lain.
+  const changePin = async (currentPassword: string, newPin: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch('/api/auth/change-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ currentPassword, newPin })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        recordSecurityLog('Edit', 'PIN Otorisasi', `Percobaan ganti PIN gagal untuk ${user?.email || 'akun tidak diketahui'}.`, user, 'Warning');
+        return { success: false, message: data.message || 'Gagal mengganti PIN.' };
+      }
+      recordSecurityLog('Edit', 'PIN Otorisasi', `PIN berhasil diganti untuk ${user?.name || user?.email}.`, user, 'Kritis');
+      return { success: true };
+    } catch (e) {
+      return { success: false, message: 'Tidak dapat terhubung ke server autentikasi. Coba lagi.' };
+    }
+  };
+
   // Directory-only lookup (name/email/role, no secrets) so UI can show which
   // persona a "quick switch" button targets before the PIN is entered.
   const findAccountEmailByRole = (role: UserRole): string | null => {
@@ -278,6 +354,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthToken(null);
     setUser(null);
     setIsLoginScreenOpen(true);
+    setIsLocked(false);
   };
 
   const openLoginScreen = () => setIsLoginScreenOpen(true);
@@ -301,7 +378,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         isLoginScreenOpen,
         openLoginScreen,
-        closeLoginScreen
+        closeLoginScreen,
+        isLocked,
+        lockApp,
+        unlockApp,
+        unlockAppWithPassword,
+        changePin
       }}
     >
       {children}

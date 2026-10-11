@@ -1365,5 +1365,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   printerConnection: 'bluetooth',
   printerDeviceName: 'RP-80 Thermal POS Printer',
   printerIpAddress: '192.168.1.188',
-  cutPaperAfterPrint: true
+  cutPaperAfterPrint: true,
+
+  appLockEnabled: true,
+  appLockTimeoutMinutes: 5
 };

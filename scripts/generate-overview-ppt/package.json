@@ -1,0 +1,16 @@
+{
+  "name": "petcare-overview-ppt",
+  "version": "1.0.0",
+  "description": "Generates a PetCare ERP overview slide deck (features, process flow, live app screenshots).",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "capture": "node capture.js",
+    "build": "node build.js",
+    "generate": "npm run capture && npm run build"
+  },
+  "dependencies": {
+    "pptxgenjs": "^4.0.1",
+    "puppeteer-core": "^25.10.0"
+  }
+}

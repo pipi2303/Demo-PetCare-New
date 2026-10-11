@@ -2,40 +2,44 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as Types from '../types';
 import * as Seed from '../data/mockData';
 import { useAuth } from './AuthContext';
+import { api } from '../services/api';
 
 interface DataContextType {
   // Branches & Tenants
   branches: Types.Branch[];
   activeBranchId: string;
   setActiveBranchId: (id: string) => void;
-  addBranch: (b: Omit<Types.Branch, 'id'>) => Types.Branch;
-  updateBranch: (id: string, b: Partial<Types.Branch>) => void;
-  deleteBranch: (id: string) => void;
+  addBranch: (b: Omit<Types.Branch, 'id'>) => Promise<Types.Branch>;
+  updateBranch: (id: string, b: Partial<Types.Branch>) => Promise<void>;
+  deleteBranch: (id: string) => Promise<void>;
   tenants: Types.Tenant[];
-  addTenant: (tenant: Omit<Types.Tenant, 'id' | 'createdAt'>) => Types.Tenant;
+  addTenant: (tenant: Omit<Types.Tenant, 'id' | 'createdAt'>) => Promise<Types.Tenant>;
 
   // App Settings (SettingsModule) — persisten & dipakai lintas modul
   // (invoicePrefix/taxRate untuk faktur & kasir, profil klinik untuk kop
-  // surat PDF resmi).
+  // surat PDF resmi). Sejak Fase 1 migrasi Postgres, disimpan lewat
+  // /api/app-settings, bukan localStorage lagi.
   appSettings: Types.AppSettings;
-  updateAppSettings: (patch: Partial<Types.AppSettings>) => void;
+  updateAppSettings: (patch: Partial<Types.AppSettings>) => Promise<void>;
 
-  // Master Data
+  // Master Data — customers/pets/services sejak Fase 1 disimpan di Postgres
+  // (lihat server/customerService.ts, server/petService.ts,
+  // server/catalogService.ts) bukan localStorage lagi.
   customers: Types.Customer[];
-  addCustomer: (cust: Omit<Types.Customer, 'id' | 'createdAt' | 'loyaltyPoints' | 'totalSpent' | 'petCount'>) => Types.Customer;
-  updateCustomer: (id: string, cust: Partial<Types.Customer>) => void;
-  deleteCustomer: (id: string) => void;
-  adjustCustomerPoints: (customerId: string, amount: number, reason: string) => void;
+  addCustomer: (cust: Omit<Types.Customer, 'id' | 'createdAt' | 'loyaltyPoints' | 'totalSpent' | 'petCount'>) => Promise<Types.Customer>;
+  updateCustomer: (id: string, cust: Partial<Types.Customer>) => Promise<void>;
+  deleteCustomer: (id: string) => Promise<void>;
+  adjustCustomerPoints: (customerId: string, amount: number, reason: string) => Promise<void>;
 
   pets: Types.Pet[];
-  addPet: (pet: Omit<Types.Pet, 'id' | 'createdAt'>) => Types.Pet;
-  updatePet: (id: string, pet: Partial<Types.Pet>) => void;
-  deletePet: (id: string) => void;
+  addPet: (pet: Omit<Types.Pet, 'id' | 'createdAt'>) => Promise<Types.Pet>;
+  updatePet: (id: string, pet: Partial<Types.Pet>) => Promise<void>;
+  deletePet: (id: string) => Promise<void>;
 
   services: Types.ServiceItem[];
-  addService: (srv: Omit<Types.ServiceItem, 'id' | 'code'>) => Types.ServiceItem;
-  updateService: (id: string, srv: Partial<Types.ServiceItem>) => void;
-  deleteService: (id: string) => void;
+  addService: (srv: Omit<Types.ServiceItem, 'id' | 'code'>) => Promise<Types.ServiceItem>;
+  updateService: (id: string, srv: Partial<Types.ServiceItem>) => Promise<void>;
+  deleteService: (id: string) => Promise<void>;
 
   // Bookings
   doctorBookings: Types.DoctorBooking[];
@@ -53,11 +57,11 @@ interface DataContextType {
   hotelBookings: Types.HotelBooking[];
   addHotelBooking: (b: Omit<Types.HotelBooking, 'id' | 'bookingNo'>) => void;
 
-  // Clinic
+  // Clinic — clinicVisits sejak Fase 1 disimpan di Postgres (server/clinicService.ts)
   clinicVisits: Types.ClinicVisit[];
-  addClinicVisit: (v: Omit<Types.ClinicVisit, 'id' | 'visitNo' | 'queueNo' | 'status' | 'queuedAt'>) => Types.ClinicVisit;
-  updateVisitStatus: (id: string, status: Types.VisitStatus) => void;
-  updateClinicVisit: (id: string, updates: Partial<Types.ClinicVisit>) => void;
+  addClinicVisit: (v: Omit<Types.ClinicVisit, 'id' | 'visitNo' | 'queueNo' | 'status' | 'queuedAt'>) => Promise<Types.ClinicVisit>;
+  updateVisitStatus: (id: string, status: Types.VisitStatus) => Promise<void>;
+  updateClinicVisit: (id: string, updates: Partial<Types.ClinicVisit>) => Promise<void>;
 
   soapNotes: Types.SOAPNote[];
   saveSOAPNote: (soap: Omit<Types.SOAPNote, 'id'>) => void;
@@ -159,13 +163,14 @@ interface DataContextType {
   addPurchaseOrder: (po: Omit<Types.PurchaseOrder, 'id' | 'poNo' | 'date' | 'status'>) => void;
   receivePurchaseOrder: (poId: string) => void;
 
-  // Billing & Finance
+  // Billing & Finance — invoices/cashTransactions sejak Fase 1 disimpan di
+  // Postgres (server/invoiceService.ts)
   invoices: Types.Invoice[];
-  addInvoice: (inv: Omit<Types.Invoice, 'id' | 'invoiceNo' | 'date'>) => Types.Invoice;
-  processPayment: (invId: string, method: Types.Invoice['paymentMethod'], pointsRedeemed?: number) => void;
+  addInvoice: (inv: Omit<Types.Invoice, 'id' | 'invoiceNo' | 'date'>) => Promise<Types.Invoice>;
+  processPayment: (invId: string, method: Types.Invoice['paymentMethod'], pointsRedeemed?: number) => Promise<void>;
 
   cashTransactions: Types.CashTransaction[];
-  addCashTransaction: (ct: Omit<Types.CashTransaction, 'id' | 'transNo' | 'date'>) => void;
+  addCashTransaction: (ct: Omit<Types.CashTransaction, 'id' | 'transNo' | 'date'>) => Promise<void>;
 
   // HR & Shifts
   employees: Types.Employee[];
@@ -276,20 +281,46 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return [state, setState];
   }
 
+  // Fase 1 migrasi Postgres: entitas ini sekarang bersumber dari /api/* (lihat
+  // src/services/api.ts), bukan localStorage. Placeholder seed dipakai hanya
+  // sebagai tampilan awal sebelum fetch pertama selesai; begitu server
+  // merespons, state diganti dengan data dari Postgres. Kalau fetch gagal
+  // (server belum siap / offline), data seed lokal tetap dipakai sebagai
+  // fallback supaya UI tidak kosong.
+  function useServerState<T>(endpoint: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+    const [state, setState] = useState<T>(initialValue);
+    useEffect(() => {
+      let active = true;
+      api
+        .get<T>(endpoint)
+        .then((data) => {
+          if (active && data !== undefined && data !== null) setState(data);
+        })
+        .catch((err) => {
+          console.error(`[DataContext] Gagal memuat ${endpoint} dari server, memakai data seed lokal:`, err);
+        });
+      return () => {
+        active = false;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [endpoint]);
+    return [state, setState];
+  }
+
   // Active Context
   const [activeBranchId, setActiveBranchId] = useState<string>('all');
-  const [tenants, setTenants] = useLocalState<Types.Tenant[]>('tenants', Seed.INITIAL_TENANTS);
-  const [branches, setBranches] = useLocalState<Types.Branch[]>('branches', Seed.INITIAL_BRANCHES);
-  const [appSettings, setAppSettings] = useLocalState<Types.AppSettings>('app_settings', Seed.DEFAULT_APP_SETTINGS);
+  const [tenants, setTenants] = useServerState<Types.Tenant[]>('/tenants', Seed.INITIAL_TENANTS);
+  const [branches, setBranches] = useServerState<Types.Branch[]>('/branches', Seed.INITIAL_BRANCHES);
+  const [appSettings, setAppSettings] = useServerState<Types.AppSettings>('/app-settings', Seed.DEFAULT_APP_SETTINGS);
 
   // Entities
-  const [customers, setCustomers] = useLocalState<Types.Customer[]>('customers', Seed.INITIAL_CUSTOMERS);
-  const [pets, setPets] = useLocalState<Types.Pet[]>('pets', Seed.INITIAL_PETS);
-  const [services, setServices] = useLocalState<Types.ServiceItem[]>('services', Seed.INITIAL_SERVICES);
+  const [customers, setCustomers] = useServerState<Types.Customer[]>('/customers', Seed.INITIAL_CUSTOMERS);
+  const [pets, setPets] = useServerState<Types.Pet[]>('/pets', Seed.INITIAL_PETS);
+  const [services, setServices] = useServerState<Types.ServiceItem[]>('/services', Seed.INITIAL_SERVICES);
   const [doctorBookings, setDoctorBookings] = useLocalState<Types.DoctorBooking[]>('doc_bookings', Seed.INITIAL_DOCTOR_BOOKINGS);
   const [groomingBookings, setGroomingBookings] = useLocalState<Types.GroomingBooking[]>('grm_bookings', Seed.INITIAL_GROOMING_BOOKINGS);
   const [hotelBookings, setHotelBookings] = useLocalState<Types.HotelBooking[]>('htl_bookings', Seed.INITIAL_HOTEL_BOOKINGS);
-  const [clinicVisits, setClinicVisits] = useLocalState<Types.ClinicVisit[]>('clinic_visits', Seed.INITIAL_CLINIC_VISITS);
+  const [clinicVisits, setClinicVisits] = useServerState<Types.ClinicVisit[]>('/clinic-visits', Seed.INITIAL_CLINIC_VISITS);
   const [soapNotes, setSoapNotes] = useLocalState<Types.SOAPNote[]>('soap_notes', Seed.INITIAL_SOAP_NOTES);
   const [inpatients, setInpatients] = useLocalState<Types.Inpatient[]>('inpatients', Seed.INITIAL_INPATIENTS);
   const [dischargeNotes, setDischargeNotes] = useLocalState<Types.DischargeNote[]>('discharge_notes', Seed.INITIAL_DISCHARGE_NOTES);
@@ -321,8 +352,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [suppliers, setSuppliers] = useLocalState<Types.Supplier[]>('suppliers', Seed.INITIAL_SUPPLIERS);
   const [purchaseOrders, setPurchaseOrders] = useLocalState<Types.PurchaseOrder[]>('purchase_orders', Seed.INITIAL_PURCHASE_ORDERS);
 
-  const [invoices, setInvoices] = useLocalState<Types.Invoice[]>('invoices', Seed.INITIAL_INVOICES);
-  const [cashTransactions, setCashTransactions] = useLocalState<Types.CashTransaction[]>('cash_transactions', Seed.INITIAL_CASH_TRANSACTIONS);
+  const [invoices, setInvoices] = useServerState<Types.Invoice[]>('/invoices', Seed.INITIAL_INVOICES);
+  const [cashTransactions, setCashTransactions] = useServerState<Types.CashTransaction[]>('/cash-transactions', Seed.INITIAL_CASH_TRANSACTIONS);
 
   const [employees, setEmployees] = useLocalState<Types.Employee[]>('employees', Seed.INITIAL_EMPLOYEES);
   const [absenceRecords, setAbsenceRecords] = useLocalState<Types.AbsenceRecord[]>('absence_records', Seed.INITIAL_ABSENCE_RECORDS);
@@ -405,63 +436,57 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // CRUD Implementations with Comprehensive Audit Logging
-  const addBranch = (b: Omit<Types.Branch, 'id'>): Types.Branch => {
-    const newBranch: Types.Branch = {
-      ...b,
-      id: 'br_' + Date.now(),
-    };
+  // Fase 1 migrasi Postgres: branch/tenant/appSettings/customer/pet/service
+  // di bawah ini memanggil /api/* (src/services/api.ts) dan menunggu respons
+  // server sebelum memperbarui state lokal — beda dari pola optimistic-local
+  // yang masih dipakai entitas localStorage lain di file ini.
+  const addBranch = async (b: Omit<Types.Branch, 'id'>): Promise<Types.Branch> => {
+    const newBranch = await api.post<Types.Branch>('/branches', b);
     setBranches((prev) => [...prev, newBranch]);
     addAuditLog('Tambah', 'Cabang & Multi-Lokasi', newBranch.name, `Cabang baru didaftarkan: ${newBranch.name} (${newBranch.code})`, { severity: 'Kritis' });
     return newBranch;
   };
 
-  const updateBranch = (id: string, bData: Partial<Types.Branch>) => {
+  const updateBranch = async (id: string, bData: Partial<Types.Branch>) => {
     const current = branches.find((b) => b.id === id);
+    await api.put(`/branches/${id}`, bData);
     setBranches((prev) => prev.map((b) => (b.id === id ? { ...b, ...bData } : b)));
     addAuditLog('Edit', 'Cabang & Multi-Lokasi', current?.name || id, `Pembaruan data cabang: ${current?.name || id}`, { severity: 'Warning' });
   };
 
-  const deleteBranch = (id: string) => {
+  const deleteBranch = async (id: string) => {
     const current = branches.find((b) => b.id === id);
     if (current?.isMainBranch) {
       return;
     }
+    await api.del(`/branches/${id}`);
     setBranches((prev) => prev.filter((b) => b.id !== id));
     addAuditLog('Hapus', 'Cabang & Multi-Lokasi', current?.name || id, `Penghapusan cabang: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
-  const addTenant = (tenantData: Omit<Types.Tenant, 'id' | 'createdAt'>): Types.Tenant => {
-    const newTenant: Types.Tenant = {
-      ...tenantData,
-      id: 't_' + Date.now(),
-      createdAt: new Date().toISOString().substring(0, 10),
-    };
+  const addTenant = async (tenantData: Omit<Types.Tenant, 'id' | 'createdAt'>): Promise<Types.Tenant> => {
+    const newTenant = await api.post<Types.Tenant>('/tenants', tenantData);
     setTenants((prev) => [newTenant, ...prev]);
     addAuditLog('Tambah', 'SaaS Multi-Tenant', newTenant.name, `Tenant organisasi baru '${newTenant.name}' didaftarkan (Paket: ${newTenant.plan})`, { severity: 'Kritis' });
     return newTenant;
   };
 
-  const updateAppSettings = (patch: Partial<Types.AppSettings>) => {
-    setAppSettings((prev) => ({ ...prev, ...patch }));
+  const updateAppSettings = async (patch: Partial<Types.AppSettings>) => {
+    const updated = await api.put<Types.AppSettings>('/app-settings', patch);
+    setAppSettings(updated);
     addAuditLog('Edit', 'Pengaturan Sistem', 'Konfigurasi Aplikasi', `Pengaturan sistem diperbarui: ${Object.keys(patch).join(', ')}`, { severity: 'Info' });
   };
 
-  const addCustomer = (custData: Omit<Types.Customer, 'id' | 'createdAt' | 'loyaltyPoints' | 'totalSpent' | 'petCount'>): Types.Customer => {
-    const newCust: Types.Customer = {
-      ...custData,
-      id: 'c_' + Date.now(),
-      loyaltyPoints: 0,
-      totalSpent: 0,
-      petCount: 0,
-      createdAt: new Date().toISOString().substring(0, 10),
-    };
+  const addCustomer = async (custData: Omit<Types.Customer, 'id' | 'createdAt' | 'loyaltyPoints' | 'totalSpent' | 'petCount'>): Promise<Types.Customer> => {
+    const newCust = await api.post<Types.Customer>('/customers', custData);
     setCustomers((prev) => [newCust, ...prev]);
     addAuditLog('Tambah', 'Master Data & CRM', newCust.name, `Registrasi klien/pemilik baru: ${newCust.name} (HP/WA: ${newCust.phone})`, { severity: 'Info' });
     return newCust;
   };
 
-  const updateCustomer = (id: string, custData: Partial<Types.Customer>) => {
+  const updateCustomer = async (id: string, custData: Partial<Types.Customer>) => {
     const current = customers.find((c) => c.id === id);
+    await api.put(`/customers/${id}`, custData);
     setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, ...custData } : c)));
     addAuditLog(
       'Edit',
@@ -476,8 +501,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const deleteCustomer = (id: string) => {
+  const deleteCustomer = async (id: string) => {
     const current = customers.find((c) => c.id === id);
+    await api.del(`/customers/${id}`);
+    // Server-side ON DELETE CASCADE (pets.customer_id -> customers.id) sudah
+    // menghapus pets terkait di Postgres; ini menyamakan state lokal.
     setCustomers((prev) => prev.filter((c) => c.id !== id));
     setPets((prev) => prev.filter((p) => p.customerId !== id));
     addAuditLog(
@@ -489,14 +517,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const addPet = (petData: Omit<Types.Pet, 'id' | 'createdAt'>): Types.Pet => {
-    const newPet: Types.Pet = {
-      ...petData,
-      id: 'p_' + Date.now(),
-      createdAt: new Date().toISOString().substring(0, 10),
-    };
+  const addPet = async (petData: Omit<Types.Pet, 'id' | 'createdAt'>): Promise<Types.Pet> => {
+    const newPet = await api.post<Types.Pet>('/pets', petData);
     setPets((prev) => [newPet, ...prev]);
-    // update petCount on customer
+    // update petCount on customer (server did the same +1 in the same request)
     setCustomers((prev) =>
       prev.map((c) => (c.id === newPet.customerId ? { ...c, petCount: c.petCount + 1 } : c))
     );
@@ -504,8 +528,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newPet;
   };
 
-  const updatePet = (id: string, petData: Partial<Types.Pet>) => {
+  const updatePet = async (id: string, petData: Partial<Types.Pet>) => {
     const current = pets.find((p) => p.id === id);
+    await api.put(`/pets/${id}`, petData);
     setPets((prev) => prev.map((p) => (p.id === id ? { ...p, ...petData } : p)));
     if (current && petData.customerId && petData.customerId !== current.customerId) {
       const oldCustomerId = current.customerId;
@@ -531,8 +556,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const deletePet = (id: string) => {
+  const deletePet = async (id: string) => {
     const current = pets.find((p) => p.id === id);
+    await api.del(`/pets/${id}`);
     setPets((prev) => prev.filter((p) => p.id !== id));
     if (current) {
       setCustomers((prev) =>
@@ -542,11 +568,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Hapus', 'Master Pasien Hewan', current?.name || id, `Penghapusan data pasien hewan peliharaan: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
-  const adjustCustomerPoints = (customerId: string, amount: number, reason: string) => {
+  const adjustCustomerPoints = async (customerId: string, amount: number, reason: string) => {
     const cust = customers.find((c) => c.id === customerId);
     if (!cust) return;
-    const newPoints = Math.max(0, cust.loyaltyPoints + amount);
-    setCustomers((prev) => prev.map((c) => (c.id === customerId ? { ...c, loyaltyPoints: newPoints } : c)));
+    const updated = await api.post<Types.Customer>(`/customers/${customerId}/loyalty-points`, { amount });
+    setCustomers((prev) => prev.map((c) => (c.id === customerId ? updated : c)));
 
     const entry: Types.LoyaltyEntry = {
       id: 'le_' + Date.now(),
@@ -562,34 +588,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       'Edit',
       'CRM & Loyalty Poin',
       cust.name,
-      `Penyesuaian manual poin loyalitas: ${amount >= 0 ? '+' : ''}${amount} poin (Saldo baru: ${newPoints}). Alasan: ${reason}`,
+      `Penyesuaian manual poin loyalitas: ${amount >= 0 ? '+' : ''}${amount} poin (Saldo baru: ${updated.loyaltyPoints}). Alasan: ${reason}`,
       {
         severity: 'Warning',
         previousValue: `Saldo Poin: ${cust.loyaltyPoints}`,
-        newValue: `Saldo Poin: ${newPoints}`
+        newValue: `Saldo Poin: ${updated.loyaltyPoints}`
       }
     );
   };
 
-  const addService = (srvData: Omit<Types.ServiceItem, 'id' | 'code'>): Types.ServiceItem => {
-    const newSrv: Types.ServiceItem = {
-      ...srvData,
-      id: 'srv_' + Date.now(),
-      code: generateUniqueCode('SRV', services.map((s) => s.code))
-    };
+  const addService = async (srvData: Omit<Types.ServiceItem, 'id' | 'code'>): Promise<Types.ServiceItem> => {
+    const newSrv = await api.post<Types.ServiceItem>('/services', srvData);
     setServices((prev) => [...prev, newSrv]);
     addAuditLog('Tambah', 'Katalog Tarif & Layanan', newSrv.name, `Penambahan tarif layanan: ${newSrv.name} (${newSrv.category}) - Rp ${newSrv.price.toLocaleString('id-ID')}`, { severity: 'Info' });
     return newSrv;
   };
 
-  const updateService = (id: string, srvData: Partial<Types.ServiceItem>) => {
+  const updateService = async (id: string, srvData: Partial<Types.ServiceItem>) => {
     const current = services.find((s) => s.id === id);
+    await api.put(`/services/${id}`, srvData);
     setServices((prev) => prev.map((s) => (s.id === id ? { ...s, ...srvData } : s)));
     addAuditLog('Edit', 'Katalog Tarif & Layanan', current?.name || id, `Perubahan konfigurasi tarif layanan katalog: ${current?.name || id}`, { severity: 'Warning' });
   };
 
-  const deleteService = (id: string) => {
+  const deleteService = async (id: string) => {
     const current = services.find((s) => s.id === id);
+    await api.del(`/services/${id}`);
     setServices((prev) => prev.filter((s) => s.id !== id));
     addAuditLog('Hapus', 'Katalog Tarif & Layanan', current?.name || id, `Penghapusan item tarif layanan katalog: ${current?.name || id}`, { severity: 'Kritis' });
   };
@@ -762,39 +786,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Tambah', 'Pet Hotel & Penitipan', newBooking.bookingNo, `Reservasi pet hotel untuk ${newBooking.petName} di kamar ${newBooking.roomNo}`);
   };
 
-  const addClinicVisit = (v: Omit<Types.ClinicVisit, 'id' | 'visitNo' | 'queueNo' | 'status' | 'queuedAt'>): Types.ClinicVisit => {
-    const nextQueue = clinicVisits.filter((cv) => cv.status !== 'Selesai' && cv.status !== 'Batal').length + 1;
-    const newVisit: Types.ClinicVisit = {
-      ...v,
-      id: 'v_' + Date.now(),
-      visitNo: 'VIS-' + Date.now().toString().slice(-6),
-      queueNo: nextQueue,
-      status: 'Menunggu',
-      queuedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-    };
+  const addClinicVisit = async (v: Omit<Types.ClinicVisit, 'id' | 'visitNo' | 'queueNo' | 'status' | 'queuedAt'>): Promise<Types.ClinicVisit> => {
+    const newVisit = await api.post<Types.ClinicVisit>('/clinic-visits', v);
     setClinicVisits((prev) => [...prev, newVisit]);
     addAuditLog('Tambah', 'Poli & Antrean', newVisit.visitNo, `Pendaftaran walk-in antrean poli dokter untuk pasien ${newVisit.petName}`);
     return newVisit;
   };
 
-  const updateVisitStatus = (id: string, status: Types.VisitStatus) => {
-    const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const updateVisitStatus = async (id: string, status: Types.VisitStatus) => {
     const visit = clinicVisits.find((v) => v.id === id);
-    setClinicVisits((prev) =>
-      prev.map((v) => {
-        if (v.id !== id) return v;
-        const updated = { ...v, status };
-        if (status === 'Dipanggil') updated.calledAt = now;
-        if (status === 'Sedang Diperiksa') updated.examinedAt = now;
-        if (status === 'Selesai') updated.completedAt = now;
-        return updated;
-      })
-    );
+    const updatedVisit = await api.post<Types.ClinicVisit>(`/clinic-visits/${id}/status`, { status });
+    setClinicVisits((prev) => prev.map((v) => (v.id === id ? updatedVisit : v)));
     addAuditLog('Edit', 'Poli & Antrean', visit?.visitNo || id, `Status kunjungan poli diubah menjadi: ${status}`);
   };
 
-  const updateClinicVisit = (id: string, updates: Partial<Types.ClinicVisit>) => {
+  const updateClinicVisit = async (id: string, updates: Partial<Types.ClinicVisit>) => {
     const visit = clinicVisits.find((v) => v.id === id);
+    await api.put(`/clinic-visits/${id}`, updates);
     setClinicVisits((prev) =>
       prev.map((v) => (v.id === id ? { ...v, ...updates } : v))
     );
@@ -1305,81 +1313,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Tambah', 'Purchasing & Penerimaan', po.poNo, `Purchase Order ${po.poNo} diterima penuh & stok gudang otomatis bertambah`, { severity: 'Warning' });
   };
 
-  const addInvoice = (invData: Omit<Types.Invoice, 'id' | 'invoiceNo' | 'date'>): Types.Invoice => {
-    const newInv: Types.Invoice = {
-      ...invData,
-      id: 'inv_' + Date.now(),
-      invoiceNo: (appSettings.invoicePrefix || 'INV') + '-' + Date.now().toString().slice(-6),
-      date: new Date().toISOString().substring(0, 10)
-    };
+  const addInvoice = async (invData: Omit<Types.Invoice, 'id' | 'invoiceNo' | 'date'>): Promise<Types.Invoice> => {
+    const newInv = await api.post<Types.Invoice>('/invoices', invData);
     setInvoices((prev) => [newInv, ...prev]);
     addAuditLog('Tambah', 'Kasir POS & Billing', newInv.invoiceNo, `Penerbitan tagihan/faktur baru senilai Rp ${newInv.totalAmount.toLocaleString('id-ID')} untuk ${newInv.customerName}`, { severity: 'Info' });
     return newInv;
   };
 
-  const processPayment = (invId: string, method: Types.Invoice['paymentMethod'], pointsRedeemed: number = 0) => {
+  const processPayment = async (invId: string, method: Types.Invoice['paymentMethod'], pointsRedeemed: number = 0) => {
     const inv = invoices.find((i) => i.id === invId);
     if (!inv) return;
     // Idempotency guard: tanpa ini, klik ganda pada "Konfirmasi Pembayaran"
     // (atau race lain yang memanggil processPayment untuk invoice yang sama)
-    // menghitung ulang kas masuk & poin loyalti dobel untuk satu invoice.
+    // menghitung ulang kas masuk & poin loyalti dobel untuk satu invoice. Guard
+    // yang sesungguhnya sekarang ada di server/invoiceService.ts (dalam satu
+    // transaksi SQL); guard di sini hanya optimisasi supaya UI tidak fetch percuma.
     if (inv.status === 'Lunas') return;
 
-    const pointsEarned = Math.floor(inv.totalAmount / 10000);
+    // Server melakukan SEMUANYA dalam satu transaksi SQL: update invoice,
+    // catat cash_transactions, dan update loyalty/totalSpent/tier customer.
+    const updatedInvoice = await api.post<Types.Invoice>(`/invoices/${invId}/payment`, { method, pointsRedeemed });
+    setInvoices((prev) => prev.map((i) => (i.id === invId ? updatedInvoice : i)));
 
-    setInvoices((prev) =>
-      prev.map((i) =>
-        i.id === invId
-          ? {
-              ...i,
-              status: 'Lunas',
-              paidAmount: i.totalAmount,
-              paymentMethod: method,
-              loyaltyPointsEarned: pointsEarned
-            }
-          : i
-      )
-    );
-
-    // Record Cash Transaction
-    addCashTransaction({
-      type: 'Masuk',
-      category: 'Pelunasan Invoice',
-      amount: inv.totalAmount,
-      description: `Pelunasan ${inv.invoiceNo} (${inv.customerName}) via ${method}`,
-      referenceNo: inv.invoiceNo,
-      operator: inv.cashierName || user?.name || 'Kasir'
-    });
-
-    // Update Customer loyalty points & spent
-    setCustomers((prev) =>
-      prev.map((c) => {
-        if (c.id !== inv.customerId) return c;
-        const newPoints = Math.max(0, c.loyaltyPoints - pointsRedeemed + pointsEarned);
-        const newSpent = c.totalSpent + inv.totalAmount;
-        let tier: Types.MembershipTier = c.membershipTier;
-        if (newSpent >= 10000000) tier = 'Platinum';
-        else if (newSpent >= 5000000) tier = 'Gold';
-
-        return {
-          ...c,
-          loyaltyPoints: newPoints,
-          totalSpent: newSpent,
-          membershipTier: tier
-        };
-      })
-    );
+    // Refresh customer & cash-transactions dari server supaya angka
+    // loyalty/totalSpent/tier & buku kas yang ditampilkan konsisten dengan
+    // hasil transaksi SQL di atas (bukan dihitung ulang di client).
+    try {
+      const [refreshedCustomers, refreshedCash] = await Promise.all([
+        api.get<Types.Customer[]>('/customers'),
+        api.get<Types.CashTransaction[]>('/cash-transactions'),
+      ]);
+      setCustomers(refreshedCustomers);
+      setCashTransactions(refreshedCash);
+    } catch (err) {
+      console.error('[DataContext] Gagal menyegarkan data customer/kas setelah pembayaran:', err);
+    }
 
     addAuditLog('Bayar', 'Kasir POS & Billing', inv.invoiceNo, `Pelunasan transaksi kasir via ${method} sejumlah Rp ${inv.totalAmount.toLocaleString('id-ID')}${pointsRedeemed ? ` (Redeem Poin: ${pointsRedeemed})` : ''}`, { severity: 'Kritis' });
   };
 
-  const addCashTransaction = (ct: Omit<Types.CashTransaction, 'id' | 'transNo' | 'date'>) => {
-    const newCt: Types.CashTransaction = {
-      ...ct,
-      id: 'ct_' + Date.now(),
-      transNo: 'CSH-' + Date.now().toString().slice(-6),
-      date: new Date().toISOString().replace('T', ' ').substring(0, 16)
-    };
+  const addCashTransaction = async (ct: Omit<Types.CashTransaction, 'id' | 'transNo' | 'date'>) => {
+    const newCt = await api.post<Types.CashTransaction>('/cash-transactions', ct);
     setCashTransactions((prev) => [newCt, ...prev]);
     addAuditLog('Tambah', 'Buku Kas & Keuangan', newCt.transNo, `Pencatatan kas operasional [${newCt.type}] senilai Rp ${newCt.amount.toLocaleString('id-ID')} (${newCt.category}): ${newCt.description}`, { severity: 'Kritis' });
   };

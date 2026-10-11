@@ -96,6 +96,13 @@ export interface AppSettings {
   printerDeviceName: string;
   printerIpAddress: string;
   cutPaperAfterPrint: boolean;
+
+  // Lock Aplikasi Otomatis — mengunci sesi (overlay PIN) setelah tidak ada
+  // aktivitas mouse/keyboard selama appLockTimeoutMinutes. Tidak sama
+  // dengan logout: token & state aplikasi tetap utuh, hanya disembunyikan
+  // di balik LockScreen sampai user memasukkan PIN miliknya sendiri.
+  appLockEnabled: boolean;
+  appLockTimeoutMinutes: number;
 }
 
 export type MembershipTier = 'Silver' | 'Gold' | 'Platinum';
