@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { gzipSync } from "zlib";
 import { execFile } from "child_process";
 import { pool } from "./db";
 
@@ -169,7 +170,6 @@ export async function executeBackup(
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
   const raw = await dumpToBuffer();
-  const { gzipSync } = await import("zlib");
   const gzipped = gzipSync(raw);
   fs.writeFileSync(filePath, gzipped);
 

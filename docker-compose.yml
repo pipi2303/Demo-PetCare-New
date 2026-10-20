@@ -38,11 +38,11 @@ services:
       retries: 3
       start_period: 30s
 
-    # No longer needed — Nginx handles external traffic
-    # ports:
-    #   - "3002:3000"
-    expose:
-      - "3000"
+    # Direct access fallback — keeps the app reachable while SSL certs are not
+    # yet provisioned. Once nginx is running with valid certs, operators can
+    # remove this port binding so all traffic routes through Nginx only.
+    ports:
+      - "3002:3000"
 
     volumes:
       - backups:/app/backups
@@ -63,10 +63,18 @@ services:
       BACKUP_DIR: /app/backups
       BACKUP_RCLONE_DEST: ${BACKUP_RCLONE_DEST:-}
 
+  # Nginx reverse proxy with HTTPS — only starts when profile 'https' is active.
+  # Steps to enable:
+  #   1. Place SSL certs in ./nginx/certs/fullchain.pem and privkey.pem
+  #      (e.g. via: certbot certonly --standalone -d your-domain.com)
+  #   2. Set APP_URL and FRONTEND_URL to your domain in Portainer env vars
+  #   3. Start with: docker-compose --profile https up -d
+  #   4. Remove the ports: block above from petcares-demo once verified
   nginx:
     image: nginx:1.27-alpine
     container_name: petcares-nginx
     restart: unless-stopped
+    profiles: ["https"]
     ports:
       - "80:80"
       - "443:443"
