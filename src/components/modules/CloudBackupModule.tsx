@@ -42,7 +42,7 @@ interface BackupSnapshot {
   encryption: string;
   sizeBytes: number;
   sha256Checksum: string;
-  status: 'COMPLETED' | 'VERIFIED_INTECT' | 'FAILED';
+  status: 'COMPLETED' | 'VERIFIED_INTACT' | 'FAILED';
   durationMs: number;
   collectionsSummary: {
     patientsCount: number;

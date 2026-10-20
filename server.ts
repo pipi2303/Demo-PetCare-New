@@ -230,7 +230,7 @@ async function startServer() {
 
   // API Health Endpoint
   app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", service: "PetCare ERP Backend", time: new Date().toISOString() });
+    res.json({ status: "ok", service: "PetCare ERP Backend", version: "1.0.0", time: new Date().toISOString() });
   });
 
   // ==========================================
@@ -690,8 +690,9 @@ async function startServer() {
         }
       });
 
+      const clinicName = process.env.CLINIC_NAME || "PetCare ERP";
       const systemInstruction = `
-You are PetCare AI Assistant - an intelligent veterinary clinical advisor and clinic management assistant for PetCare ERP (Sistem Manajemen Klinik Hewan & ERP).
+You are ${clinicName} AI Assistant - an intelligent veterinary clinical advisor and clinic management assistant for ${clinicName} (Sistem Manajemen Klinik Hewan & ERP).
 You assist veterinarians, clinic owners, nurses, groomers, and pet owners with:
 1. Veterinary clinical diagnostic support, drug dosage recommendations, and triage tips (always include clinical disclaimers).
 2. Operational summaries based on the current live clinic context provided (patient queue, active inpatient board, low stock medicines, daily revenue, care plans).

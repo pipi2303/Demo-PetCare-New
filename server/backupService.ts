@@ -14,7 +14,7 @@ export interface BackupSnapshot {
   encryption: string;
   sizeBytes: number;
   sha256Checksum: string;
-  status: "COMPLETED" | "VERIFIED_INTECT" | "FAILED";
+  status: "COMPLETED" | "VERIFIED_INTACT" | "FAILED";
   durationMs: number;
   collectionsSummary: {
     patientsCount: number;
@@ -101,7 +101,7 @@ function seedInitialBackups() {
       encryption: config.encryptionStandard,
       sizeBytes: 248500 + index * 12300,
       sha256Checksum: sha256,
-      status: "VERIFIED_INTECT",
+      status: "VERIFIED_INTACT",
       durationMs: 1420 + index * 180,
       collectionsSummary: {
         patientsCount: 42 + index * 3,
@@ -188,7 +188,7 @@ export async function executeBackup(
     encryption: config.encryptionStandard,
     sizeBytes,
     sha256Checksum,
-    status: "VERIFIED_INTECT",
+    status: "VERIFIED_INTACT",
     durationMs,
     collectionsSummary: {
       patientsCount: customPayload?.petsCount || 52,
@@ -323,7 +323,7 @@ export function verifySnapshotIntegrity(snapshotId: string) {
     isValid,
     verificationHash: snapshot.sha256Checksum,
   };
-  snapshot.status = isValid ? "VERIFIED_INTECT" : "FAILED";
+  snapshot.status = isValid ? "VERIFIED_INTACT" : "FAILED";
 
   return {
     snapshotId,
