@@ -23,7 +23,7 @@ async function generateUniqueCode(prefix: string): Promise<string> {
 }
 
 export async function listServices() {
-  const { rows } = await pool.query("SELECT * FROM services ORDER BY category ASC, name ASC LIMIT 500");
+  const { rows } = await pool.query("SELECT * FROM services WHERE deleted_at IS NULL ORDER BY category ASC, name ASC LIMIT 500");
   return rows.map(toService);
 }
 
@@ -38,7 +38,7 @@ export async function createService(input: { name: string; category: string; est
 }
 
 export async function updateService(id: string, patch: Record<string, any>) {
-  const { rows: currentRows } = await pool.query("SELECT * FROM services WHERE id = $1", [id]);
+  const { rows: currentRows } = await pool.query("SELECT * FROM services WHERE id = $1 AND deleted_at IS NULL", [id]);
   const current = currentRows[0];
   if (!current) throw new Error("Layanan tidak ditemukan.");
   const next = {
@@ -50,12 +50,12 @@ export async function updateService(id: string, patch: Record<string, any>) {
     is_active: patch.isActive ?? current.is_active,
   };
   const { rows } = await pool.query(
-    `UPDATE services SET name=$1, category=$2, estimated_duration_mins=$3, price=$4, description=$5, is_active=$6 WHERE id=$7 RETURNING *`,
+    `UPDATE services SET name=$1, category=$2, estimated_duration_mins=$3, price=$4, description=$5, is_active=$6 WHERE id=$7 AND deleted_at IS NULL RETURNING *`,
     [next.name, next.category, next.estimated_duration_mins, next.price, next.description, next.is_active, id]
   );
   return toService(rows[0]);
 }
 
 export async function deleteService(id: string) {
-  await pool.query("DELETE FROM services WHERE id = $1", [id]);
+  await pool.query("UPDATE services SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL", [id]);
 }

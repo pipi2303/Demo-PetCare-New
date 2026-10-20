@@ -24,6 +24,7 @@ function toPet(row: any, customerName?: string) {
 const SELECT_WITH_CUSTOMER = `
   SELECT pets.*, customers.name AS customer_name
   FROM pets JOIN customers ON customers.id = pets.customer_id
+  WHERE pets.deleted_at IS NULL AND customers.deleted_at IS NULL
 `;
 
 export async function listPets() {
@@ -50,7 +51,7 @@ export async function createPet(input: { customerId: string; name: string; speci
 
 export async function updatePet(id: string, patch: Record<string, any>) {
   return withTransaction(async (client) => {
-    const { rows: currentRows } = await client.query("SELECT * FROM pets WHERE id = $1", [id]);
+    const { rows: currentRows } = await client.query("SELECT * FROM pets WHERE id = $1 AND deleted_at IS NULL", [id]);
     const current = currentRows[0];
     if (!current) throw new Error("Pasien hewan tidak ditemukan.");
 
@@ -72,7 +73,7 @@ export async function updatePet(id: string, patch: Record<string, any>) {
 
     const { rows } = await client.query(
       `UPDATE pets SET customer_id=$1, name=$2, species=$3, breed=$4, color=$5, gender=$6, sterilized=$7, birth_date=$8, weight_kg=$9, microchip_no=$10, allergies=$11, notes=$12, photo_url=$13
-       WHERE id = $14 RETURNING *`,
+       WHERE id = $14 AND deleted_at IS NULL RETURNING *`,
       [next.customer_id, next.name, next.species, next.breed, next.color, next.gender, next.sterilized, next.birth_date, next.weight_kg, next.microchip_no, next.allergies, next.notes, next.photo_url, id]
     );
 
@@ -88,9 +89,9 @@ export async function updatePet(id: string, patch: Record<string, any>) {
 
 export async function deletePet(id: string) {
   return withTransaction(async (client) => {
-    const { rows: currentRows } = await client.query("SELECT customer_id FROM pets WHERE id = $1", [id]);
+    const { rows: currentRows } = await client.query("SELECT customer_id FROM pets WHERE id = $1 AND deleted_at IS NULL", [id]);
     if (!currentRows[0]) return;
-    await client.query("DELETE FROM pets WHERE id = $1", [id]);
+    await client.query("UPDATE pets SET deleted_at = now() WHERE id = $1", [id]);
     await client.query("UPDATE customers SET pet_count = GREATEST(0, pet_count - 1) WHERE id = $1", [currentRows[0].customer_id]);
   });
 }

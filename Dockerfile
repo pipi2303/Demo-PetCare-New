@@ -20,6 +20,7 @@ ENV PORT=3000
 # of root. The app never writes to /app at runtime (backups/sessions live
 # in Postgres / in-memory, not on the local filesystem), so read-only
 # ownership of the built output is enough.
+RUN mkdir -p /app/backups
 RUN chown -R node:node /app
 USER node
 

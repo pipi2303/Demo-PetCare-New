@@ -273,9 +273,9 @@ async function startServer() {
   // ==========================================
 
   // Get current status & schedule of background auto-backup daemon
-  app.get("/api/backup/status", requireSession, (_req, res) => {
+  app.get("/api/backup/status", requireSession, async (_req, res) => {
     try {
-      const status = getBackupStatus();
+      const status = await getBackupStatus();
       res.json(status);
     } catch (err: any) {
       res.status(500).json({ error: safeMessage(err) });
@@ -283,9 +283,9 @@ async function startServer() {
   });
 
   // Get all snapshot logs and verification history
-  app.get("/api/backup/list", requireSession, (_req, res) => {
+  app.get("/api/backup/list", requireSession, async (_req, res) => {
     try {
-      const list = getAllBackups();
+      const list = await getAllBackups();
       res.json({ backups: list });
     } catch (err: any) {
       res.status(500).json({ error: safeMessage(err) });
@@ -314,9 +314,9 @@ async function startServer() {
   });
 
   // Verify SHA-256 Checksum & payload integrity of a specific snapshot
-  app.post("/api/backup/verify/:id", requireRole(...PRIVILEGED_ROLES), (req, res) => {
+  app.post("/api/backup/verify/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try {
-      const result = verifySnapshotIntegrity(req.params.id);
+      const result = await verifySnapshotIntegrity(req.params.id);
       res.json({ success: true, result });
     } catch (err: any) {
       res.status(404).json({ error: safeMessage(err) });
@@ -324,10 +324,10 @@ async function startServer() {
   });
 
   // Simulate restore from cloud snapshot
-  app.post("/api/backup/restore/:id", requireRole(...PRIVILEGED_ROLES), (req, res) => {
+  app.post("/api/backup/restore/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try {
       const snapshotId = req.params.id;
-      const snapshot = getAllBackups().find((b) => b.id === snapshotId);
+      const snapshot = (await getAllBackups()).find((b) => b.id === snapshotId);
       if (!snapshot) {
         return res.status(404).json({ error: "Snapshot not found" });
       }
@@ -343,10 +343,10 @@ async function startServer() {
   });
 
   // Download snapshot mock file
-  app.get("/api/backup/download/:id", requireRole(...PRIVILEGED_ROLES), (req, res) => {
+  app.get("/api/backup/download/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try {
       const snapshotId = req.params.id;
-      const snapshot = getAllBackups().find((b) => b.id === snapshotId);
+      const snapshot = (await getAllBackups()).find((b) => b.id === snapshotId);
       if (!snapshot) {
         return res.status(404).json({ error: "Snapshot not found" });
       }

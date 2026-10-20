@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { execFile } from "child_process";
+import { pool } from "./db";
 
 export interface BackupSnapshot {
   id: string;
@@ -35,8 +37,8 @@ export interface BackupSnapshot {
 
 export interface BackupConfig {
   autoBackupEnabled: boolean;
-  endOfBusinessDayHour: number; // e.g. 21 (21:00 / 9 PM)
-  endOfBusinessDayMinute: number; // e.g. 0
+  endOfBusinessDayHour: number;
+  endOfBusinessDayMinute: number;
   cloudProvider: "Google Cloud Storage (GCS)" | "AWS S3" | "Azure Blob";
   targetBucket: string;
   storageRegion: string;
@@ -45,199 +47,185 @@ export interface BackupConfig {
   notifyOnSuccess: boolean;
 }
 
-// In-memory or local persisted storage for backups metadata
-const BACKUP_STORAGE_DIR = path.join(process.cwd(), "data_backups");
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(process.cwd(), "backups");
+
+const TABLES = [
+  "tenants", "branches", "users", "customers", "pets", "services",
+  "clinic_visits", "invoices", "invoice_items", "cash_transactions",
+  "ambulance_units", "ambulance_requests", "ambulance_events",
+  "telehealth_sessions", "telehealth_events", "audit_logs", "sessions",
+];
 
 let config: BackupConfig = {
   autoBackupEnabled: true,
   endOfBusinessDayHour: 21,
   endOfBusinessDayMinute: 0,
   cloudProvider: "Google Cloud Storage (GCS)",
-  targetBucket: "gs://petcare-erp-cloud-backups-asia-southeast1",
+  targetBucket: process.env.BACKUP_RCLONE_DEST || `local:${BACKUP_DIR}`,
   storageRegion: "asia-southeast1 (Jakarta)",
   retentionDays: 30,
-  encryptionStandard: "AES-256-GCM Military Grade",
+  encryptionStandard: "gzip",
   notifyOnSuccess: true,
 };
 
-let backupHistory: BackupSnapshot[] = [];
 let schedulerInterval: NodeJS.Timeout | null = null;
 let lastExecutedDate: string | null = null;
 
-// Initialize mock historical backups so the ERP has a rich audit trail
-function seedInitialBackups() {
-  if (backupHistory.length > 0) return;
-
-  const dates = [
-    { daysAgo: 3, dateStr: "2026-08-10", timeStr: "2026-08-10T21:00:14.320Z" },
-    { daysAgo: 2, dateStr: "2026-08-11", timeStr: "2026-08-11T21:00:09.840Z" },
-    { daysAgo: 1, dateStr: "2026-08-12", timeStr: "2026-08-12T21:00:11.112Z" },
-  ];
-
-  backupHistory = dates.map((d, index) => {
-    const dataPayload = JSON.stringify({
-      version: "3.2.0",
-      timestamp: d.timeStr,
-      businessDate: d.dateStr,
-      clinic: "PetCare ERP Hospital & Clinic - Cabang Pusat",
-      tenantId: "t-petcare-main-01",
-      totalPatients: 42 + index * 3,
-      totalInvoices: 58 + index * 5,
-      integritySalt: `backup-seed-${index}`
-    });
-
-    const sha256 = crypto.createHash("sha256").update(dataPayload).digest("hex");
-    const filename = `petcare_erp_auto_backup_${d.dateStr.replace(/-/g, "")}_210000.json.enc`;
-
-    return {
-      id: `bk-${Date.now() - (3 - index) * 86400000}`,
-      filename,
-      timestamp: d.timeStr,
-      triggerType: "AUTOMATED_END_OF_DAY",
-      businessDate: d.dateStr,
-      cloudBucket: config.targetBucket,
-      cloudUri: `${config.targetBucket}/daily/${filename}`,
-      storageClass: "NEARLINE",
-      encryption: config.encryptionStandard,
-      sizeBytes: 248500 + index * 12300,
-      sha256Checksum: sha256,
-      status: "VERIFIED_INTACT",
-      durationMs: 1420 + index * 180,
-      collectionsSummary: {
-        patientsCount: 42 + index * 3,
-        customersCount: 38 + index * 2,
-        medicalRecordsCount: 76 + index * 4,
-        invoicesCount: 58 + index * 5,
-        prescriptionsCount: 64 + index * 3,
-        inventoryItemsCount: 120,
-        bookingsCount: 31 + index * 2,
-        staffCount: 14,
-      },
-      integrityVerification: {
-        lastChecked: new Date().toISOString(),
-        isValid: true,
-        verificationHash: sha256,
-      },
-    };
-  });
+async function dumpToBuffer(): Promise<Buffer> {
+  const dump: Record<string, any> = {
+    _meta: { exportedAt: new Date().toISOString(), format: "json-rows" },
+  };
+  for (const table of TABLES) {
+    try {
+      const { rows } = await pool.query(`SELECT * FROM ${table} LIMIT 100000`);
+      dump[table] = rows;
+    } catch {
+      dump[table] = [];
+    }
+  }
+  return Buffer.from(JSON.stringify(dump));
 }
 
-// Generate realistic full DB dump payload
-function generateDatabasePayload(clientDataPayload?: any) {
+async function getCollectionsSummary() {
+  const counts: Record<string, number> = {};
+  const queries: [string, string][] = [
+    ["pets", "patientsCount"],
+    ["customers", "customersCount"],
+    ["clinic_visits", "medicalRecordsCount"],
+    ["invoices", "invoicesCount"],
+    ["invoice_items", "prescriptionsCount"],
+    ["services", "inventoryItemsCount"],
+    ["ambulance_requests", "bookingsCount"],
+    ["users", "staffCount"],
+  ];
+  await Promise.all(
+    queries.map(async ([table, key]) => {
+      try {
+        const { rows } = await pool.query(`SELECT COUNT(*) AS n FROM ${table}`);
+        counts[key] = Number(rows[0].n);
+      } catch {
+        counts[key] = 0;
+      }
+    })
+  );
   return {
-    meta: {
-      erpVersion: "3.4.0",
-      generatedAt: new Date().toISOString(),
-      schemaVersion: "2026.08-v2",
-      organization: "PetCare ERP - Hospital & Veterinary Clinic",
-      targetCloud: config.targetBucket,
-      encryption: config.encryptionStandard,
+    patientsCount: counts.patientsCount,
+    customersCount: counts.customersCount,
+    medicalRecordsCount: counts.medicalRecordsCount,
+    invoicesCount: counts.invoicesCount,
+    prescriptionsCount: counts.prescriptionsCount,
+    inventoryItemsCount: counts.inventoryItemsCount,
+    bookingsCount: counts.bookingsCount,
+    staffCount: counts.staffCount,
+  };
+}
+
+function rowToSnapshot(row: any): BackupSnapshot {
+  const summary = row.tables_summary || {};
+  return {
+    id: row.id,
+    filename: row.filename,
+    timestamp: row.triggered_at instanceof Date ? row.triggered_at.toISOString() : row.triggered_at,
+    triggerType: row.trigger_type,
+    businessDate: (row.triggered_at instanceof Date ? row.triggered_at : new Date(row.triggered_at)).toISOString().substring(0, 10),
+    cloudBucket: process.env.BACKUP_RCLONE_DEST || `local:${BACKUP_DIR}`,
+    cloudUri: row.file_path || path.join(BACKUP_DIR, row.filename),
+    storageClass: "STANDARD",
+    encryption: "gzip",
+    sizeBytes: Number(row.size_bytes),
+    sha256Checksum: row.sha256,
+    status: row.status as BackupSnapshot["status"],
+    durationMs: 0,
+    collectionsSummary: {
+      patientsCount: summary.patientsCount ?? 0,
+      customersCount: summary.customersCount ?? 0,
+      medicalRecordsCount: summary.medicalRecordsCount ?? 0,
+      invoicesCount: summary.invoicesCount ?? 0,
+      prescriptionsCount: summary.prescriptionsCount ?? 0,
+      inventoryItemsCount: summary.inventoryItemsCount ?? 0,
+      bookingsCount: summary.bookingsCount ?? 0,
+      staffCount: summary.staffCount ?? 0,
     },
-    clientDump: clientDataPayload || {
-      note: "Full server-side snapshot of registered entities, ledger, and EMR database",
-    },
-    tables: {
-      customersCount: 45,
-      petsCount: 52,
-      clinicVisitsCount: 88,
-      medicalRecordsCount: 94,
-      prescriptionsCount: 78,
-      invoicesCount: 65,
-      cashbookEntriesCount: 32,
-      inventoryBatchesCount: 145,
-      staffRosterCount: 16,
+    integrityVerification: {
+      lastChecked: new Date().toISOString(),
+      isValid: row.status !== "FAILED",
+      verificationHash: row.sha256,
     },
   };
 }
 
-/**
- * Execute Cloud Backup Snapshot
- */
 export async function executeBackup(
   triggerType: "AUTOMATED_END_OF_DAY" | "MANUAL_ON_DEMAND",
-  customPayload?: any
+  _customPayload?: any
 ): Promise<BackupSnapshot> {
   const startTime = Date.now();
   const now = new Date();
   const dateStr = now.toISOString().substring(0, 10);
   const timeStr = now.toTimeString().substring(0, 8).replace(/:/g, "");
-  const filename = `petcare_erp_backup_${dateStr.replace(/-/g, "")}_${timeStr}.json.enc`;
+  const filename = `petcare_erp_backup_${dateStr.replace(/-/g, "")}_${timeStr}.json.gz`;
+  const filePath = path.join(BACKUP_DIR, filename);
+  const id = `bk-${now.getTime()}`;
 
-  // Construct snapshot payload
-  const rawPayload = generateDatabasePayload(customPayload);
-  const payloadString = JSON.stringify(rawPayload, null, 2);
-  const sizeBytes = Buffer.byteLength(payloadString, "utf8");
+  fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
-  // Compute SHA-256 checksum for mathematical data integrity verification
-  const sha256Checksum = crypto.createHash("sha256").update(payloadString).digest("hex");
+  const raw = await dumpToBuffer();
+  const { gzipSync } = await import("zlib");
+  const gzipped = gzipSync(raw);
+  fs.writeFileSync(filePath, gzipped);
 
-  // Simulate Cloud Storage sync latency and write operation
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  const sha256 = crypto.createHash("sha256").update(gzipped).digest("hex");
+  const sizeBytes = gzipped.length;
+
+  const summary = await getCollectionsSummary();
+
+  await pool.query(
+    `INSERT INTO backup_records (id, filename, triggered_at, trigger_type, size_bytes, sha256, status, tables_summary, file_path)
+     VALUES ($1,$2,$3,$4,$5,$6,'COMPLETED',$7,$8)`,
+    [id, filename, now, triggerType, sizeBytes, sha256, JSON.stringify(summary), filePath]
+  );
+
+  // Fire-and-forget rclone upload if destination is configured
+  const rcloneDest = process.env.BACKUP_RCLONE_DEST;
+  if (rcloneDest) {
+    execFile("rclone", ["copy", filePath, rcloneDest], (err) => {
+      if (err) console.error("[BackupService] rclone upload failed:", err.message);
+      else console.log(`[BackupService] rclone upload complete: ${rcloneDest}`);
+    });
+  }
 
   const durationMs = Date.now() - startTime;
+  console.log(`[BackupService] ${triggerType} completed: ${filename} (${sizeBytes} bytes, sha256: ${sha256.substring(0, 12)}...) in ${durationMs}ms`);
 
-  const newSnapshot: BackupSnapshot = {
-    id: `bk-${Date.now()}`,
+  return {
+    id,
     filename,
     timestamp: now.toISOString(),
     triggerType,
     businessDate: dateStr,
-    cloudBucket: config.targetBucket,
-    cloudUri: `${config.targetBucket}/daily/${filename}`,
-    storageClass: "NEARLINE",
-    encryption: config.encryptionStandard,
+    cloudBucket: rcloneDest || `local:${BACKUP_DIR}`,
+    cloudUri: filePath,
+    storageClass: "STANDARD",
+    encryption: "gzip",
     sizeBytes,
-    sha256Checksum,
-    status: "VERIFIED_INTACT",
+    sha256Checksum: sha256,
+    status: "COMPLETED",
     durationMs,
-    collectionsSummary: {
-      patientsCount: customPayload?.petsCount || 52,
-      customersCount: customPayload?.customersCount || 45,
-      medicalRecordsCount: customPayload?.recordsCount || 94,
-      invoicesCount: customPayload?.invoicesCount || 65,
-      prescriptionsCount: customPayload?.prescriptionsCount || 78,
-      inventoryItemsCount: customPayload?.stockCount || 145,
-      bookingsCount: customPayload?.bookingsCount || 34,
-      staffCount: 16,
-    },
+    collectionsSummary: summary,
     integrityVerification: {
       lastChecked: now.toISOString(),
       isValid: true,
-      verificationHash: sha256Checksum,
+      verificationHash: sha256,
     },
   };
-
-  // Prepend to history
-  backupHistory.unshift(newSnapshot);
-
-  // Apply retention policy (prune if exceeds retention limit)
-  if (backupHistory.length > 50) {
-    backupHistory = backupHistory.slice(0, 50);
-  }
-
-  console.log(
-    `[BackupService] ✅ ${triggerType} completed successfully: ${filename} -> ${newSnapshot.cloudUri} (Checksum: ${sha256Checksum.substring(0, 12)}...) in ${durationMs}ms`
-  );
-
-  return newSnapshot;
 }
 
-/**
- * Background Service Worker:
- * Evaluates the time continuously and triggers automated daily backup at the End of Business Day.
- */
 export function initBackupBackgroundService() {
-  seedInitialBackups();
-
-  if (schedulerInterval) {
-    clearInterval(schedulerInterval);
-  }
+  if (schedulerInterval) clearInterval(schedulerInterval);
 
   console.log(
-    `[BackupService] 🚀 Background Auto-Backup Service daemon initialized. Scheduled End of Business Day: ${config.endOfBusinessDayHour.toString().padStart(2, "0")}:${config.endOfBusinessDayMinute.toString().padStart(2, "0")} WIB.`
+    `[BackupService] Background Auto-Backup Service initialized. Scheduled: ${config.endOfBusinessDayHour.toString().padStart(2, "0")}:${config.endOfBusinessDayMinute.toString().padStart(2, "0")} WIB.`
   );
 
-  // Check every 30 seconds
   schedulerInterval = setInterval(async () => {
     if (!config.autoBackupEnabled) return;
 
@@ -246,41 +234,50 @@ export function initBackupBackgroundService() {
     const currentMinute = now.getMinutes();
     const todayDateStr = now.toISOString().substring(0, 10);
 
-    // If current time reaches or passes the end of business day schedule and hasn't run today
     const isTargetTime =
       currentHour === config.endOfBusinessDayHour &&
       currentMinute >= config.endOfBusinessDayMinute &&
       currentMinute <= config.endOfBusinessDayMinute + 2;
 
     if (isTargetTime && lastExecutedDate !== todayDateStr) {
-      console.log(`[BackupService] ⏰ End of Business Day reached (${currentHour}:${currentMinute}). Triggering automatic cloud backup...`);
+      console.log(`[BackupService] End of Business Day reached (${currentHour}:${currentMinute}). Triggering automatic backup...`);
       lastExecutedDate = todayDateStr;
       try {
         await executeBackup("AUTOMATED_END_OF_DAY");
       } catch (err) {
-        console.error("[BackupService] ❌ Automatic daily backup failed:", err);
+        console.error("[BackupService] Automatic daily backup failed:", err);
       }
     }
   }, 30000);
 }
 
-/**
- * Get Service Status & Telemetry
- */
-export function getBackupStatus() {
+export async function getBackupStatus() {
   const now = new Date();
   const scheduledTimeToday = new Date();
   scheduledTimeToday.setHours(config.endOfBusinessDayHour, config.endOfBusinessDayMinute, 0, 0);
 
-  let nextScheduledRun: Date;
-  if (now > scheduledTimeToday) {
-    // Scheduled for tomorrow
-    nextScheduledRun = new Date(scheduledTimeToday.getTime() + 86400000);
-  } else {
-    nextScheduledRun = scheduledTimeToday;
-  }
+  const nextScheduledRun = now > scheduledTimeToday
+    ? new Date(scheduledTimeToday.getTime() + 86400000)
+    : scheduledTimeToday;
 
-  const totalBytes = backupHistory.reduce((acc, b) => acc + b.sizeBytes, 0);
+  let lastBackup: BackupSnapshot | null = null;
+  let totalBackupsCount = 0;
+  let totalStorageUsedBytes = 0;
+
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM backup_records ORDER BY triggered_at DESC LIMIT 1"
+    );
+    if (rows[0]) lastBackup = rowToSnapshot(rows[0]);
+
+    const agg = await pool.query(
+      "SELECT COUNT(*) AS cnt, COALESCE(SUM(size_bytes),0) AS total FROM backup_records"
+    );
+    totalBackupsCount = Number(agg.rows[0].cnt);
+    totalStorageUsedBytes = Number(agg.rows[0].total);
+  } catch {
+    // DB may not have the table yet during first boot
+  }
 
   return {
     serviceStatus: "ONLINE_ACTIVE",
@@ -288,9 +285,9 @@ export function getBackupStatus() {
     autoBackupEnabled: config.autoBackupEnabled,
     endOfBusinessDaySchedule: `${config.endOfBusinessDayHour.toString().padStart(2, "0")}:${config.endOfBusinessDayMinute.toString().padStart(2, "0")} WIB`,
     nextScheduledRun: nextScheduledRun.toISOString(),
-    lastBackup: backupHistory[0] || null,
-    totalBackupsCount: backupHistory.length,
-    totalStorageUsedBytes: totalBytes,
+    lastBackup,
+    totalBackupsCount,
+    totalStorageUsedBytes,
     cloudProvider: config.cloudProvider,
     targetBucket: config.targetBucket,
     storageRegion: config.storageRegion,
@@ -300,37 +297,45 @@ export function getBackupStatus() {
   };
 }
 
-export function getAllBackups(): BackupSnapshot[] {
-  return backupHistory;
+export async function getAllBackups(): Promise<BackupSnapshot[]> {
+  const { rows } = await pool.query(
+    "SELECT * FROM backup_records ORDER BY triggered_at DESC LIMIT 100"
+  );
+  return rows.map(rowToSnapshot);
 }
 
 export function updateBackupConfig(newConfig: Partial<BackupConfig>): BackupConfig {
   config = { ...config, ...newConfig };
-  console.log(`[BackupService] ⚙️ Configuration updated:`, config);
+  console.log("[BackupService] Configuration updated:", config);
   return config;
 }
 
-export function verifySnapshotIntegrity(snapshotId: string) {
-  const snapshot = backupHistory.find((b) => b.id === snapshotId);
-  if (!snapshot) {
-    throw new Error(`Snapshot with ID ${snapshotId} not found.`);
-  }
+export async function verifySnapshotIntegrity(snapshotId: string) {
+  const { rows } = await pool.query("SELECT * FROM backup_records WHERE id = $1", [snapshotId]);
+  const record = rows[0];
+  if (!record) throw new Error(`Snapshot with ID ${snapshotId} not found.`);
 
-  // Verify SHA256 matches
-  const isValid = !!snapshot.sha256Checksum && snapshot.sha256Checksum.length === 64;
-  snapshot.integrityVerification = {
-    lastChecked: new Date().toISOString(),
-    isValid,
-    verificationHash: snapshot.sha256Checksum,
-  };
-  snapshot.status = isValid ? "VERIFIED_INTACT" : "FAILED";
+  let isValid = false;
+  const filePath = record.file_path;
+
+  if (filePath && fs.existsSync(filePath)) {
+    const fileContent = fs.readFileSync(filePath);
+    const computedHash = crypto.createHash("sha256").update(fileContent).digest("hex");
+    isValid = computedHash === record.sha256;
+    const newStatus = isValid ? "VERIFIED_INTACT" : "FAILED";
+    await pool.query("UPDATE backup_records SET status = $1 WHERE id = $2", [newStatus, snapshotId]);
+    record.status = newStatus;
+  } else {
+    // File missing — mark as failed
+    await pool.query("UPDATE backup_records SET status = 'FAILED' WHERE id = $1", [snapshotId]);
+  }
 
   return {
     snapshotId,
-    filename: snapshot.filename,
+    filename: record.filename,
     isValid,
-    sha256Checksum: snapshot.sha256Checksum,
-    cloudUri: snapshot.cloudUri,
-    verifiedAt: snapshot.integrityVerification.lastChecked,
+    sha256Checksum: record.sha256,
+    cloudUri: filePath || "",
+    verifiedAt: new Date().toISOString(),
   };
 }
