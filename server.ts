@@ -584,7 +584,7 @@ async function startServer() {
 
   // Server-side audit log — receives security events from the frontend and
   // persists them to Postgres so they cannot be cleared by users.
-  app.post("/api/audit/log", async (req, res) => {
+  app.post("/api/audit/log", requireSession, async (req, res) => {
     try {
       const { userName, userRole, action, module, target, details, severity, branchName } = req.body || {};
       await dbPool.query(
@@ -690,7 +690,10 @@ async function startServer() {
         }
       });
 
-      const clinicName = process.env.CLINIC_NAME || "PetCare ERP";
+      const rawClinicName = process.env.CLINIC_NAME || "PetCare ERP";
+      // Sanitize before embedding in AI system prompt — strip anything that isn't
+      // letters, digits, spaces, hyphens, or ampersands.
+      const clinicName = rawClinicName.replace(/[^\w\s\-&.]/g, "").trim() || "PetCare ERP";
       const systemInstruction = `
 You are ${clinicName} AI Assistant - an intelligent veterinary clinical advisor and clinic management assistant for ${clinicName} (Sistem Manajemen Klinik Hewan & ERP).
 You assist veterinarians, clinic owners, nurses, groomers, and pet owners with:
@@ -1934,6 +1937,14 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   // Reset Queue / Daily Cron endpoint simulation
   app.post("/api/cron/reset-queue", requireRole("admin", "superadmin"), (_req, res) => {
     res.json({ success: true, message: "Queue reset successfully" });
+  });
+
+  // Global error handler — catches errors forwarded by next(err) from async
+  // middleware (e.g. requireSession DB failure). Must have 4 params for Express
+  // to recognise it as an error handler.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    res.status(500).json({ success: false, message: safeMessage(err) });
   });
 
   // Vite middleware for dev or static server for production
