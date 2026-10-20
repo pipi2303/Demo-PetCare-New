@@ -37,7 +37,15 @@ export async function getSession(token: string | undefined | null): Promise<Sess
     await pool.query("DELETE FROM sessions WHERE token = $1", [token]);
     return null;
   }
+  // Sliding window: extend by 12h if less than 1h remains, to prevent mid-use logouts
+  if (row.expires_at.getTime() - Date.now() < 60 * 60 * 1000) {
+    await pool.query("UPDATE sessions SET expires_at = now() + interval '12 hours' WHERE token = $1", [token]);
+  }
   return { email: row.email, role: row.role, ownershipType: row.ownership_type ?? undefined, expiresAt: row.expires_at.getTime() };
+}
+
+export async function destroyAllSessionsForEmail(email: string) {
+  await pool.query("DELETE FROM sessions WHERE email = lower($1)", [email]);
 }
 
 export async function destroySession(token: string | undefined | null) {

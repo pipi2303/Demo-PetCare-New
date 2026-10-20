@@ -27,7 +27,7 @@ const SELECT_WITH_CUSTOMER = `
 `;
 
 export async function listPets() {
-  const { rows } = await pool.query(`${SELECT_WITH_CUSTOMER} ORDER BY pets.created_at DESC`);
+  const { rows } = await pool.query(`${SELECT_WITH_CUSTOMER} ORDER BY pets.created_at DESC LIMIT 500`);
   return rows.map((r) => toPet(r));
 }
 

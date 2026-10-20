@@ -31,7 +31,8 @@ import {
   initSessionService,
   createSession,
   getSession,
-  destroySession
+  destroySession,
+  destroyAllSessionsForEmail
 } from "./server/sessionService";
 import { sendWhatsAppMessage } from "./server/waService";
 import {
@@ -149,6 +150,17 @@ async function startServer() {
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: "Terlalu banyak percobaan PIN. Coba lagi dalam beberapa menit." }
+  });
+
+  // Per-user AI rate limit (10 req/min) — prevents quota exhaustion and cost spikes.
+  // Keyed by session email so it applies per account, not per IP.
+  const aiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 10,
+    keyGenerator: (req) => (req as any).session?.email || req.ip || "unknown",
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: "Terlalu banyak permintaan AI. Coba lagi dalam 1 menit." }
   });
 
   // Postgres schema + fresh-start seed must be ready before any service
@@ -388,7 +400,7 @@ async function startServer() {
       }
       const account = await getAccountInfo(email);
       if (!account) {
-        return res.status(401).json({ success: false, message: "Akun tidak ditemukan." });
+        return res.status(401).json({ success: false, message: "Email atau kata sandi tidak sesuai." });
       }
       const token = await createSession(account.email, account.role, account.ownershipType);
       res.json({ success: true, token, account });
@@ -476,6 +488,7 @@ async function startServer() {
         return res.status(409).json({ success: false, message: "PIN tersebut sudah dipakai akun lain. Pilih PIN yang berbeda." });
       }
       await setPin(email, newPin);
+      await destroyAllSessionsForEmail(email); // invalidate all sessions after PIN change
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ success: false, message: safeMessage(err)});
@@ -562,6 +575,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Tautan reset tidak valid atau sudah kedaluwarsa." });
       }
       await setPassword(email, newPassword);
+      await destroyAllSessionsForEmail(email); // invalidate all sessions after password reset
       res.json({ success: true, message: "Kata sandi berhasil diperbarui. Silakan login dengan kata sandi baru." });
     } catch (err: any) {
       res.status(500).json({ success: false, message: safeMessage(err)});
@@ -656,7 +670,7 @@ async function startServer() {
   });
 
   // Gemini AI Assistant Chat Endpoint
-  app.post("/api/ai/chat", requireSession, async (req, res) => {
+  app.post("/api/ai/chat", requireSession, aiLimiter, async (req, res) => {
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
@@ -712,7 +726,7 @@ ${JSON.stringify(context || {}, null, 2)}
   });
 
   // Gemini AI Medical History to Clinical SOAP Analysis Endpoint
-  app.post("/api/ai/analyze-history-soap", requireSession, async (req, res) => {
+  app.post("/api/ai/analyze-history-soap", requireSession, aiLimiter, async (req, res) => {
     try {
       const { petInfo, unstructuredHistoryText, currentComplaint } = req.body;
 
@@ -985,7 +999,7 @@ Riwayat Alergi: ${allergies}
   }
 
   // Gemini AI-Driven Patient EMR Triage Urgency Analysis Endpoint
-  app.post("/api/ai/triage-analysis", requireSession, async (req, res) => {
+  app.post("/api/ai/triage-analysis", requireSession, aiLimiter, async (req, res) => {
     try {
       const { petInfo, currentVisit, latestSoap, historySummary } = req.body;
       const apiKey = process.env.GEMINI_API_KEY;
@@ -1153,7 +1167,7 @@ Lakukan analisis keparahan gejala dan tentukan Triage Urgency Level secara akura
   }
 
   // Gemini AI-Driven Critical Medical Inventory Forecasting Endpoint
-  app.post("/api/ai/forecast-inventory", requireSession, async (req, res) => {
+  app.post("/api/ai/forecast-inventory", requireSession, aiLimiter, async (req, res) => {
     try {
       const {
         seasonScenario = "pancaroba_hujan",
@@ -1359,7 +1373,7 @@ Please perform the AI-driven clinical forecasting analysis and provide strategic
   }
 
   // Gemini AI-Driven Purchase Order Quantity Suggestion Endpoint (Based on 30-day stock depletion trends & safety stock levels)
-  app.post("/api/ai/suggest-po-quantities", requireSession, async (req, res) => {
+  app.post("/api/ai/suggest-po-quantities", requireSession, aiLimiter, async (req, res) => {
     try {
       const {
         items = [],
@@ -1503,7 +1517,7 @@ Analyze the 30-day depletion rates, safety stock deficits, and recommend optimiz
   }
 
   // Gemini AI-Driven Dashboard Layout Optimization Assistant Endpoint
-  app.post("/api/ai/optimize-layout", requireSession, async (req, res) => {
+  app.post("/api/ai/optimize-layout", requireSession, aiLimiter, async (req, res) => {
     try {
       const {
         userRole = "dokter",

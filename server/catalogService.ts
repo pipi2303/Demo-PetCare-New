@@ -23,7 +23,7 @@ async function generateUniqueCode(prefix: string): Promise<string> {
 }
 
 export async function listServices() {
-  const { rows } = await pool.query("SELECT * FROM services ORDER BY category ASC, name ASC");
+  const { rows } = await pool.query("SELECT * FROM services ORDER BY category ASC, name ASC LIMIT 500");
   return rows.map(toService);
 }
 

@@ -36,7 +36,7 @@ function nowClockLabel(): string {
 }
 
 export async function listClinicVisits() {
-  const { rows } = await pool.query(`${SELECT_VISIT} ORDER BY clinic_visits.queue_no ASC`);
+  const { rows } = await pool.query(`${SELECT_VISIT} ORDER BY clinic_visits.queue_no ASC LIMIT 500`);
   return rows.map(toClinicVisit);
 }
 

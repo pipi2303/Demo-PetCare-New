@@ -44,9 +44,12 @@ function toCashTransaction(row: any) {
 
 export async function listInvoices() {
   const { rows: invoices } = await pool.query(
-    `SELECT invoices.*, customers.name AS customer_name FROM invoices JOIN customers ON customers.id = invoices.customer_id ORDER BY invoices.date DESC`
+    `SELECT invoices.*, customers.name AS customer_name FROM invoices JOIN customers ON customers.id = invoices.customer_id ORDER BY invoices.date DESC LIMIT 500`
   );
-  const { rows: items } = await pool.query("SELECT * FROM invoice_items");
+  const invoiceIds = invoices.map((r) => r.id);
+  const { rows: items } = invoiceIds.length > 0
+    ? await pool.query("SELECT * FROM invoice_items WHERE invoice_id = ANY($1::uuid[])", [invoiceIds])
+    : { rows: [] };
   const itemsByInvoice = new Map<string, any[]>();
   for (const item of items) {
     const list = itemsByInvoice.get(item.invoice_id) || [];
@@ -148,7 +151,7 @@ export async function processPayment(invoiceId: string, method: string, pointsRe
 }
 
 export async function listCashTransactions() {
-  const { rows } = await pool.query("SELECT * FROM cash_transactions ORDER BY occurred_at DESC");
+  const { rows } = await pool.query("SELECT * FROM cash_transactions ORDER BY occurred_at DESC LIMIT 500");
   return rows.map(toCashTransaction);
 }
 

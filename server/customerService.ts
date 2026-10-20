@@ -18,7 +18,7 @@ function toCustomer(row: any) {
 }
 
 export async function listCustomers() {
-  const { rows } = await pool.query("SELECT * FROM customers ORDER BY created_at DESC");
+  const { rows } = await pool.query("SELECT * FROM customers ORDER BY created_at DESC LIMIT 500");
   return rows.map(toCustomer);
 }
 
