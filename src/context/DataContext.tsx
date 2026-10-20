@@ -287,6 +287,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // merespons, state diganti dengan data dari Postgres. Kalau fetch gagal
   // (server belum siap / offline), data seed lokal tetap dipakai sebagai
   // fallback supaya UI tidak kosong.
+  // Incremented on tab focus so all useServerState hooks re-fetch stale data
+  const [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') setRefreshKey(k => k + 1); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   function useServerState<T>(endpoint: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
     const [state, setState] = useState<T>(initialValue);
     useEffect(() => {
@@ -303,7 +311,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         active = false;
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [endpoint]);
+    }, [endpoint, refreshKey]);
     return [state, setState];
   }
 

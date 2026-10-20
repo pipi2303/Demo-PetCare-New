@@ -1,4 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { Component, useState, useEffect } from 'react';
+
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+  state = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      const err = this.state.error as Error;
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-8 text-center">
+          <div className="max-w-md">
+            <h2 className="text-xl font-bold text-red-600 mb-2">Terjadi kesalahan aplikasi</h2>
+            <p className="text-sm text-gray-500 mb-6 font-mono bg-gray-100 p-3 rounded">{err.message}</p>
+            <button
+              onClick={() => this.setState({ error: null })}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold"
+            >
+              Coba Lagi
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import { motion, AnimatePresence } from 'motion/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider, useData } from './context/DataContext';
@@ -474,14 +499,18 @@ const MainAppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <DataProvider>
-          <ToastProvider>
-            <MainAppContent />
-          </ToastProvider>
-        </DataProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <DataProvider>
+            <ToastProvider>
+              <ErrorBoundary>
+                <MainAppContent />
+              </ErrorBoundary>
+            </ToastProvider>
+          </DataProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

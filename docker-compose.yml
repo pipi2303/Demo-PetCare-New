@@ -37,7 +37,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      APP_URL: http://123.176.120.78:3002
+      APP_URL: ${APP_URL:-http://localhost:3002}
       DATABASE_URL: postgres://${POSTGRES_USER:-petcare}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the stack's environment variables — no default is provided}@postgres:5432/${POSTGRES_DB:-petcare}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}

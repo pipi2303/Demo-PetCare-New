@@ -131,6 +131,12 @@ export interface PaymentStatusResult {
 export async function getPaymentStatus(orderId: string): Promise<PaymentStatusResult> {
   const cached = pendingTransactions.get(orderId);
 
+  // Enforce TTL: expired pending transactions are marked "expire" so clients stop polling
+  if (cached && Date.now() - cached.createdAt > PENDING_TTL_MS) {
+    pendingTransactions.delete(orderId);
+    return { status: "expire" };
+  }
+
   const serverKey = process.env.MIDTRANS_SERVER_KEY;
   if (!serverKey) {
     return { status: cached?.status || "not_found" };
