@@ -49,6 +49,7 @@ import {
   transitionAmbulanceRequest,
   transitionTelehealthSession
 } from "./server/operationsService";
+import { closePool, pool as dbPool } from "./server/db";
 import { runMigrations } from "./server/migrate";
 import { seedIfEmpty } from "./server/seed";
 import {
@@ -87,13 +88,22 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Standard security headers (X-Content-Type-Options, X-Frame-Options,
-  // Strict-Transport-Security, etc.). Content-Security-Policy is left off
-  // for now: this app serves its own bundled SPA and enabling a default CSP
-  // without first auditing every inline script/style would risk breaking
-  // the frontend. Revisit once the frontend's script/style sources are
-  // audited.
+  // Standard security headers
   app.use(helmet({ contentSecurityPolicy: false }));
+
+  // CORS — allow requests from FRONTEND_URL (or same origin in production)
+  const allowedOrigin = process.env.FRONTEND_URL || `http://localhost:${PORT}`;
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && (origin === allowedOrigin || process.env.NODE_ENV !== "production")) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    }
+    if (req.method === "OPTIONS") return res.sendStatus(204);
+    next();
+  });
 
   // Structured (JSON) access logging — one line per request with method,
   // path, status, response time, request id. Replaces having no request
@@ -158,35 +168,49 @@ async function startServer() {
   // Persistent server-side operational state for the safety-critical service flows.
   await initOperationsService();
 
+  // Postgres and Node system errors have a `code` property — never expose them to clients.
+  function safeMessage(err: any): string {
+    if (err?.code || err?.severity) return "Terjadi kesalahan sistem. Silakan coba lagi.";
+    return err?.message || "Terjadi kesalahan.";
+  }
+
   // Reads the "Authorization: Bearer <token>" header and attaches the
   // resolved session (email/role) to the request, or responds 401 if the
   // token is missing/expired. Role can never come from the client body.
-  function requireSession(req: express.Request, res: express.Response, next: express.NextFunction) {
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
-    const session = getSession(token);
-    if (!session) {
-      return res.status(401).json({ success: false, message: "Sesi tidak valid atau sudah kedaluwarsa. Silakan login ulang." });
+  async function requireSession(req: express.Request, res: express.Response, next: express.NextFunction) {
+    try {
+      const header = req.headers.authorization || "";
+      const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
+      const session = await getSession(token);
+      if (!session) {
+        return res.status(401).json({ success: false, message: "Sesi tidak valid atau sudah kedaluwarsa. Silakan login ulang." });
+      }
+      (req as any).session = session;
+      next();
+    } catch (err) {
+      next(err);
     }
-    (req as any).session = session;
-    next();
   }
 
   // Like requireSession, but additionally requires the session's role to be
   // one of `allowedRoles`.
   function requireRole(...allowedRoles: string[]) {
-    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-      const header = req.headers.authorization || "";
-      const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
-      const session = getSession(token);
-      if (!session) {
-        return res.status(401).json({ success: false, message: "Sesi tidak valid atau sudah kedaluwarsa. Silakan login ulang." });
+    return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      try {
+        const header = req.headers.authorization || "";
+        const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
+        const session = await getSession(token);
+        if (!session) {
+          return res.status(401).json({ success: false, message: "Sesi tidak valid atau sudah kedaluwarsa. Silakan login ulang." });
+        }
+        if (!allowedRoles.includes(session.role)) {
+          return res.status(403).json({ success: false, message: "Akun Anda tidak memiliki hak akses untuk aksi ini." });
+        }
+        (req as any).session = session;
+        next();
+      } catch (err) {
+        next(err);
       }
-      if (!allowedRoles.includes(session.role)) {
-        return res.status(403).json({ success: false, message: "Akun Anda tidak memiliki hak akses untuk aksi ini." });
-      }
-      (req as any).session = session;
-      next();
     };
   }
 
@@ -209,27 +233,27 @@ async function startServer() {
 
   app.post("/api/operations/ambulance/units", requireRole("owner_klinik", "owner_petcare", "admin", "superadmin"), async (req, res) => {
     try { res.status(201).json({ success: true, data: await registerAmbulanceUnit(req.body || {}, actorFor(req)) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/operations/ambulance/requests", requireRole(...OPERATIONS_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createAmbulanceRequest(req.body || {}, actorFor(req)) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/operations/ambulance/requests/:id/transition", requireRole(...OPERATIONS_ROLES), async (req, res) => {
     try { res.json({ success: true, data: await transitionAmbulanceRequest(req.params.id, req.body?.status, actorFor(req), { unitId: req.body?.unitId, note: req.body?.note }) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/operations/telehealth/sessions", requireRole("owner_klinik", "owner_petcare", "admin", "dokter", "superadmin"), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createTelehealthSession(req.body || {}, actorFor(req)) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/operations/telehealth/sessions/:id/transition", requireRole("owner_klinik", "owner_petcare", "admin", "dokter", "superadmin"), async (req, res) => {
     try { res.json({ success: true, data: await transitionTelehealthSession(req.params.id, req.body?.status, actorFor(req), req.body?.note) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   // ==========================================
@@ -242,7 +266,7 @@ async function startServer() {
       const status = getBackupStatus();
       res.json(status);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: safeMessage(err) });
     }
   });
 
@@ -252,7 +276,7 @@ async function startServer() {
       const list = getAllBackups();
       res.json({ backups: list });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: safeMessage(err) });
     }
   });
 
@@ -263,7 +287,7 @@ async function startServer() {
       const snapshot = await executeBackup("MANUAL_ON_DEMAND", payload);
       res.json({ success: true, snapshot });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to execute backup" });
+      res.status(500).json({ error: safeMessage(err) });
     }
   });
 
@@ -273,7 +297,7 @@ async function startServer() {
       const updated = updateBackupConfig(req.body);
       res.json({ success: true, config: updated });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: safeMessage(err) });
     }
   });
 
@@ -283,7 +307,7 @@ async function startServer() {
       const result = verifySnapshotIntegrity(req.params.id);
       res.json({ success: true, result });
     } catch (err: any) {
-      res.status(404).json({ error: err.message });
+      res.status(404).json({ error: safeMessage(err) });
     }
   });
 
@@ -302,7 +326,7 @@ async function startServer() {
         snapshot,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: safeMessage(err) });
     }
   });
 
@@ -331,7 +355,7 @@ async function startServer() {
       res.setHeader("Content-Type", "application/json");
       res.send(JSON.stringify(dataPayload, null, 2));
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: safeMessage(err) });
     }
   });
 
@@ -366,10 +390,10 @@ async function startServer() {
       if (!account) {
         return res.status(401).json({ success: false, message: "Akun tidak ditemukan." });
       }
-      const token = createSession(account.email, account.role, account.ownershipType);
+      const token = await createSession(account.email, account.role, account.ownershipType);
       res.json({ success: true, token, account });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(500).json({ success: false, message: safeMessage(err)});
     }
   });
 
@@ -390,10 +414,10 @@ async function startServer() {
       if (!account) {
         return res.status(401).json({ success: false, message: "Akun tidak ditemukan." });
       }
-      const token = createSession(account.email, account.role, account.ownershipType);
+      const token = await createSession(account.email, account.role, account.ownershipType);
       res.json({ success: true, token, account });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(500).json({ success: false, message: safeMessage(err)});
     }
   });
 
@@ -420,11 +444,11 @@ async function startServer() {
       // Best-effort cleanup of the old session, if any — not required for
       // the switch to succeed, stale sessions simply expire after their TTL.
       const oldToken = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-      if (oldToken) destroySession(oldToken);
-      const token = createSession(account.email, account.role, account.ownershipType);
+      if (oldToken) await destroySession(oldToken);
+      const token = await createSession(account.email, account.role, account.ownershipType);
       res.json({ success: true, token, account });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(500).json({ success: false, message: safeMessage(err)});
     }
   });
 
@@ -454,7 +478,7 @@ async function startServer() {
       await setPin(email, newPin);
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(500).json({ success: false, message: safeMessage(err)});
     }
   });
 
@@ -475,14 +499,14 @@ async function startServer() {
       }
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(500).json({ success: false, message: safeMessage(err)});
     }
   });
 
   // End the current session (logout).
   app.post("/api/auth/logout", requireSession, (req, res) => {
     const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-    destroySession(token);
+    await destroySession(token);
     res.json({ success: true });
   });
 
@@ -497,7 +521,7 @@ async function startServer() {
       }
 
       const transporter = getMailTransporter();
-      const token = createResetToken(email);
+      const token = await createResetToken(email);
       const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
       const resetLink = `${appUrl}/?resetToken=${token}`;
 
@@ -533,14 +557,29 @@ async function startServer() {
       if (!token || !newPassword || newPassword.length < 6) {
         return res.status(400).json({ success: false, message: "Token tidak valid atau kata sandi baru minimal 6 karakter." });
       }
-      const email = consumeResetToken(token);
+      const email = await consumeResetToken(token);
       if (!email) {
         return res.status(400).json({ success: false, message: "Tautan reset tidak valid atau sudah kedaluwarsa." });
       }
       await setPassword(email, newPassword);
       res.json({ success: true, message: "Kata sandi berhasil diperbarui. Silakan login dengan kata sandi baru." });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(500).json({ success: false, message: safeMessage(err)});
+    }
+  });
+
+  // Server-side audit log — receives security events from the frontend and
+  // persists them to Postgres so they cannot be cleared by users.
+  app.post("/api/audit/log", async (req, res) => {
+    try {
+      const { userName, userRole, action, module, target, details, severity, branchName } = req.body || {};
+      await dbPool.query(
+        "INSERT INTO audit_logs (user_name, user_role, action, module, target, details, severity, branch_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+        [userName || "Sistem", userRole || "system", action || "unknown", module || "Sistem", target || "", details || "", severity || "Info", branchName || null]
+      );
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ success: false });
     }
   });
 
@@ -566,7 +605,7 @@ async function startServer() {
       const result = await sendWhatsAppMessage(phone, message);
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ success: false, simulated: false, message: err.message });
+      res.status(500).json({ success: false, simulated: false, message: safeMessage(err)});
     }
   });
 
@@ -586,7 +625,7 @@ async function startServer() {
       const result = await createQrisCharge(orderId, Number(grossAmount), customerName || "Pelanggan");
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ success: false, simulated: false, message: err.message });
+      res.status(500).json({ success: false, simulated: false, message: safeMessage(err)});
     }
   });
 
@@ -596,7 +635,7 @@ async function startServer() {
       const result = await getPaymentStatus(req.params.orderId);
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ status: "error", message: err.message });
+      res.status(500).json({ status: "error", message: safeMessage(err)});
     }
   });
 
@@ -612,7 +651,7 @@ async function startServer() {
       applyWebhookNotification(body);
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(500).json({ success: false, message: safeMessage(err)});
     }
   });
 
@@ -668,7 +707,7 @@ ${JSON.stringify(context || {}, null, 2)}
       return res.json({ response: response.text });
     } catch (err: any) {
       console.error("AI Chat Error:", err);
-      return res.status(500).json({ error: err.message || "Failed to generate AI response" });
+      return res.status(500).json({ error: safeMessage(err) });
     }
   });
 
@@ -1727,154 +1766,154 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
 
   app.get("/api/tenants", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await listTenants() }); }
-    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/tenants", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createTenant(req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.get("/api/branches", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await listBranches() }); }
-    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/branches", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createBranch(req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.put("/api/branches/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try { res.json({ success: true, data: await updateBranchRecord(req.params.id, req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.delete("/api/branches/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try { await deleteBranchRecord(req.params.id); res.json({ success: true }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.get("/api/app-settings", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await getAppSettings() }); }
-    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.put("/api/app-settings", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try { res.json({ success: true, data: await updateAppSettings(req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.get("/api/customers", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await listCustomers() }); }
-    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/customers", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createCustomer(req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.put("/api/customers/:id", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.json({ success: true, data: await updateCustomerRecord(req.params.id, req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.delete("/api/customers/:id", requireRole(...STAFF_ROLES), async (req, res) => {
     try { await deleteCustomerRecord(req.params.id); res.json({ success: true }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/customers/:id/loyalty-points", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.json({ success: true, data: await adjustCustomerPoints(req.params.id, Number(req.body?.amount) || 0) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.get("/api/pets", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await listPets() }); }
-    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/pets", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createPet(req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.put("/api/pets/:id", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.json({ success: true, data: await updatePetRecord(req.params.id, req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.delete("/api/pets/:id", requireRole(...STAFF_ROLES), async (req, res) => {
     try { await deletePetRecord(req.params.id); res.json({ success: true }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.get("/api/services", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await listServices() }); }
-    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/services", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createService(req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.put("/api/services/:id", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.json({ success: true, data: await updateServiceRecord(req.params.id, req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.delete("/api/services/:id", requireRole(...STAFF_ROLES), async (req, res) => {
     try { await deleteServiceRecord(req.params.id); res.json({ success: true }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.get("/api/clinic-visits", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await listClinicVisits() }); }
-    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/clinic-visits", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createClinicVisit(req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/clinic-visits/:id/status", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.json({ success: true, data: await updateVisitStatus(req.params.id, req.body?.status) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.put("/api/clinic-visits/:id", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.json({ success: true, data: await updateClinicVisit(req.params.id, req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.get("/api/invoices", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await listInvoices() }); }
-    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/invoices", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createInvoice(req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/invoices/:id/payment", requireRole(...STAFF_ROLES), async (req, res) => {
     try {
       const operatorName = (req as any).session?.email || "system";
       res.json({ success: true, data: await processPayment(req.params.id, req.body?.method, Number(req.body?.pointsRedeemed) || 0, operatorName) });
-    } catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    } catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.get("/api/cash-transactions", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await listCashTransactions() }); }
-    catch (error: any) { res.status(500).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/cash-transactions", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createCashTransaction(req.body || {}) }); }
-    catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
   // Reset Queue / Daily Cron endpoint simulation
@@ -1897,9 +1936,19 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`[PetCare ERP] Server running on http://0.0.0.0:${PORT}`);
   });
+
+  async function shutdown(signal: string) {
+    console.log(`[PetCare ERP] ${signal} received, shutting down gracefully...`);
+    server.close(async () => {
+      await closePool();
+      process.exit(0);
+    });
+  }
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 startServer();

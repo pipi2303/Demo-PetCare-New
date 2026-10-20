@@ -45,16 +45,6 @@ function randomPin(): string {
   return String(crypto.randomInt(0, 10000)).padStart(4, "0");
 }
 
-interface ResetTokenEntry {
-  email: string;
-  expiresAt: number;
-}
-
-// Reset tokens are short-lived (30min) and only meaningful for the process
-// that issued them — in-memory is an intentional trade-off, same as
-// server/sessionService.ts, not something that needs a database.
-const resetTokens = new Map<string, ResetTokenEntry>();
-let cleanupInterval: NodeJS.Timeout | null = null;
 
 function hashPassword(plainPassword: string, salt: string = crypto.randomBytes(16).toString("hex")): string {
   const hash = crypto.scryptSync(plainPassword, salt, 64).toString("hex");
@@ -123,9 +113,6 @@ export async function initAuthService() {
       console.log(`[AuthService]   ${c.email} — ${passwordNote} pin=${c.pin}`);
     }
   }
-
-  if (cleanupInterval) clearInterval(cleanupInterval);
-  cleanupInterval = setInterval(cleanupExpiredTokens, 5 * 60 * 1000);
 
   const { rows: countRows } = await pool.query<{ count: string }>("SELECT count(*)::text FROM users");
   console.log(`[AuthService] 🔐 Postgres user/PIN store ready (${countRows[0].count} akun).`);
@@ -212,27 +199,24 @@ export async function getAccountInfo(email: string): Promise<AccountInfo | null>
   };
 }
 
-export function createResetToken(email: string): string {
+export async function createResetToken(email: string): Promise<string> {
   const token = crypto.randomBytes(32).toString("hex");
-  resetTokens.set(token, { email: email.toLowerCase(), expiresAt: Date.now() + RESET_TOKEN_TTL_MS });
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+  await pool.query(
+    "INSERT INTO password_reset_tokens (token, email, expires_at) VALUES ($1, $2, $3)",
+    [token, email.toLowerCase(), expiresAt]
+  );
   return token;
 }
 
-/**
- * Validate and consume a reset token (single use). Returns the associated
- * email if the token is valid and not expired, otherwise null.
- */
-export function consumeResetToken(token: string): string | null {
-  const entry = resetTokens.get(token);
-  if (!entry) return null;
-  resetTokens.delete(token);
-  if (Date.now() > entry.expiresAt) return null;
-  return entry.email;
-}
-
-export function cleanupExpiredTokens() {
-  const now = Date.now();
-  for (const [token, entry] of resetTokens.entries()) {
-    if (now > entry.expiresAt) resetTokens.delete(token);
-  }
+/** Validate and consume a reset token (single use). Returns email if valid, otherwise null. */
+export async function consumeResetToken(token: string): Promise<string | null> {
+  const { rows } = await pool.query<{ email: string; expires_at: Date }>(
+    "DELETE FROM password_reset_tokens WHERE token = $1 RETURNING email, expires_at",
+    [token]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  if (Date.now() > row.expires_at.getTime()) return null;
+  return row.email;
 }

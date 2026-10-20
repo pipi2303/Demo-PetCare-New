@@ -71,6 +71,12 @@ export const recordSecurityLog = (
     };
     logs = [newLog, ...logs];
     localStorage.setItem('petcare_audit_logs', JSON.stringify(logs.slice(0, 500)));
+    // Persist to server so audit trail cannot be cleared by users
+    fetch('/api/audit/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userName: newLog.userName, userRole: newLog.userRole, action: newLog.action, module: newLog.module, target: newLog.target, details: newLog.details, severity: newLog.severity, branchName: newLog.branchName })
+    }).catch(() => {});
   } catch (e) {
     // Ignore storage errors
   }

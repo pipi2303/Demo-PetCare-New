@@ -164,8 +164,8 @@ export async function createAmbulanceRequest(
   if (!input.patientName?.trim() || !input.callerName?.trim() || !input.callerPhone?.trim() || !input.pickupAddress?.trim()) {
     throw new Error("Data pasien, pelapor, telepon, dan lokasi penjemputan wajib diisi.");
   }
-  if (input.latitude !== undefined && (input.latitude < -90 || input.latitude > 90)) throw new Error("Latitude tidak valid.");
-  if (input.longitude !== undefined && (input.longitude < -180 || input.longitude > 180)) throw new Error("Longitude tidak valid.");
+  if (input.latitude !== undefined && (!Number.isFinite(input.latitude) || input.latitude < -90 || input.latitude > 90)) throw new Error("Latitude tidak valid.");
+  if (input.longitude !== undefined && (!Number.isFinite(input.longitude) || input.longitude < -180 || input.longitude > 180)) throw new Error("Longitude tidak valid.");
 
   const createdAt = now();
   const requestNo = `AMB-${createdAt.slice(0, 10).replaceAll("-", "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;

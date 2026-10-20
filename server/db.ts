@@ -12,6 +12,10 @@ export async function query<T extends QueryResultRow = any>(text: string, params
   return pool.query<T>(text, params);
 }
 
+export async function closePool() {
+  await pool.end();
+}
+
 /** Run `fn` inside a single client transaction (BEGIN/COMMIT/ROLLBACK). */
 export async function withTransaction<T>(fn: (client: import("pg").PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
