@@ -50,12 +50,12 @@ interface DataContextType {
   checkInDoctorBooking: (id: string) => void;
 
   groomingBookings: Types.GroomingBooking[];
-  addGroomingBooking: (b: Omit<Types.GroomingBooking, 'id' | 'bookingNo'>) => void;
-  updateGroomingBooking: (id: string, updates: Partial<Types.GroomingBooking>) => void;
-  rescheduleGroomingBooking: (id: string, date: string, timeSlot: string, groomerName?: string) => void;
+  addGroomingBooking: (b: Omit<Types.GroomingBooking, 'id' | 'bookingNo'>) => Promise<void>;
+  updateGroomingBooking: (id: string, updates: Partial<Types.GroomingBooking>) => Promise<void>;
+  rescheduleGroomingBooking: (id: string, date: string, timeSlot: string, groomerName?: string) => Promise<void>;
 
   hotelBookings: Types.HotelBooking[];
-  addHotelBooking: (b: Omit<Types.HotelBooking, 'id' | 'bookingNo'>) => void;
+  addHotelBooking: (b: Omit<Types.HotelBooking, 'id' | 'bookingNo'>) => Promise<void>;
 
   // Clinic — clinicVisits sejak Fase 1 disimpan di Postgres (server/clinicService.ts)
   clinicVisits: Types.ClinicVisit[];
@@ -95,7 +95,7 @@ interface DataContextType {
   addDewormingRecord: (dr: Omit<Types.DewormingRecord, 'id'>) => Types.DewormingRecord;
 
   customerNotes: Types.CustomerNote[];
-  addCustomerNote: (customerId: string, note: string) => Types.CustomerNote;
+  addCustomerNote: (customerId: string, note: string) => Promise<Types.CustomerNote>;
 
   // Inter-branch stock transfer (surat jalan, bukan pemindahan angka stok —
   // lihat catatan di Types.InterBranchTransfer)
@@ -109,10 +109,10 @@ interface DataContextType {
 
   // Pharmacy & Lab
   drugs: Types.Drug[];
-  addDrug: (d: Omit<Types.Drug, 'id' | 'code'>) => void;
-  updateDrug: (id: string, d: Partial<Types.Drug>) => void;
-  deleteDrug: (id: string) => void;
-  dispenseDrug: (drugId: string, qty: number) => void;
+  addDrug: (d: Omit<Types.Drug, 'id' | 'code'>) => Promise<void>;
+  updateDrug: (id: string, d: Partial<Types.Drug>) => Promise<void>;
+  deleteDrug: (id: string) => Promise<void>;
+  dispenseDrug: (drugId: string, qty: number) => Promise<void>;
 
   labTests: Types.LabTest[];
   addLabTest: (lt: Omit<Types.LabTest, 'id' | 'testNo' | 'status' | 'orderedAt'>) => Types.LabTest;
@@ -120,25 +120,25 @@ interface DataContextType {
 
   // Grooming & Hotel Ops
   groomingPackages: Types.GroomingPackage[];
-  addGroomingPackage: (gp: Omit<Types.GroomingPackage, 'id'>) => void;
-  updateGroomingPackage: (id: string, gp: Partial<Types.GroomingPackage>) => void;
-  deleteGroomingPackage: (id: string) => void;
+  addGroomingPackage: (gp: Omit<Types.GroomingPackage, 'id'>) => Promise<void>;
+  updateGroomingPackage: (id: string, gp: Partial<Types.GroomingPackage>) => Promise<void>;
+  deleteGroomingPackage: (id: string) => Promise<void>;
 
   groomingSessions: Types.GroomingSession[];
-  addGroomingSession: (gs: Omit<Types.GroomingSession, 'id' | 'sessionNo'>) => void;
-  updateGroomingStage: (id: string, stage: Types.GroomingStage) => void;
+  addGroomingSession: (gs: Omit<Types.GroomingSession, 'id' | 'sessionNo'>) => Promise<void>;
+  updateGroomingStage: (id: string, stage: Types.GroomingStage) => Promise<void>;
 
   hotelRooms: Types.HotelRoom[];
-  addHotelRoom: (hr: Omit<Types.HotelRoom, 'id'>) => void;
-  updateHotelRoom: (id: string, hr: Partial<Types.HotelRoom>) => void;
-  deleteHotelRoom: (id: string) => void;
+  addHotelRoom: (hr: Omit<Types.HotelRoom, 'id'>) => Promise<void>;
+  updateHotelRoom: (id: string, hr: Partial<Types.HotelRoom>) => Promise<void>;
+  deleteHotelRoom: (id: string) => Promise<void>;
 
   hotelReservations: Types.HotelReservation[];
-  addHotelReservation: (hr: Omit<Types.HotelReservation, 'id' | 'reservationNo'>) => void;
-  updateHotelStatus: (id: string, status: Types.HotelReservation['status']) => void;
+  addHotelReservation: (hr: Omit<Types.HotelReservation, 'id' | 'reservationNo'>) => Promise<void>;
+  updateHotelStatus: (id: string, status: Types.HotelReservation['status']) => Promise<void>;
 
   dailyMonitorings: Types.DailyMonitoring[];
-  addDailyMonitoring: (dm: Omit<Types.DailyMonitoring, 'id'>) => void;
+  addDailyMonitoring: (dm: Omit<Types.DailyMonitoring, 'id'>) => Promise<void>;
 
   // Inventory & Purchasing
   productCategories: Types.ProductCategory[];
@@ -184,9 +184,9 @@ interface DataContextType {
 
   // CRM
   reminders: Types.Reminder[];
-  addReminder: (rem: Omit<Types.Reminder, 'id'>) => void;
-  updateReminderStatus: (id: string, status: Types.Reminder['status']) => void;
-  deleteReminder: (id: string) => void;
+  addReminder: (rem: Omit<Types.Reminder, 'id'>) => Promise<void>;
+  updateReminderStatus: (id: string, status: Types.Reminder['status']) => Promise<void>;
+  deleteReminder: (id: string) => Promise<void>;
   loyaltyEntries: Types.LoyaltyEntry[];
 
   // Care Plan, Telehealth, EForm, Ambulance
@@ -326,8 +326,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [pets, setPets] = useServerState<Types.Pet[]>('/pets', Seed.INITIAL_PETS);
   const [services, setServices] = useServerState<Types.ServiceItem[]>('/services', Seed.INITIAL_SERVICES);
   const [doctorBookings, setDoctorBookings] = useLocalState<Types.DoctorBooking[]>('doc_bookings', Seed.INITIAL_DOCTOR_BOOKINGS);
-  const [groomingBookings, setGroomingBookings] = useLocalState<Types.GroomingBooking[]>('grm_bookings', Seed.INITIAL_GROOMING_BOOKINGS);
-  const [hotelBookings, setHotelBookings] = useLocalState<Types.HotelBooking[]>('htl_bookings', Seed.INITIAL_HOTEL_BOOKINGS);
+  const [groomingBookings, setGroomingBookings] = useServerState<Types.GroomingBooking[]>('/grooming-bookings', Seed.INITIAL_GROOMING_BOOKINGS);
+  const [hotelBookings, setHotelBookings] = useServerState<Types.HotelBooking[]>('/hotel-bookings', Seed.INITIAL_HOTEL_BOOKINGS);
   const [clinicVisits, setClinicVisits] = useServerState<Types.ClinicVisit[]>('/clinic-visits', Seed.INITIAL_CLINIC_VISITS);
   const [soapNotes, setSoapNotes] = useLocalState<Types.SOAPNote[]>('soap_notes', Seed.INITIAL_SOAP_NOTES);
   const [inpatients, setInpatients] = useLocalState<Types.Inpatient[]>('inpatients', Seed.INITIAL_INPATIENTS);
@@ -340,18 +340,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [vacSchedules, setVacSchedules] = useLocalState<Types.VacSchedule[]>('vac_schedules', Seed.INITIAL_VAC_SCHEDULES);
   const [vacHistories, setVacHistories] = useLocalState<Types.VacHistory[]>('vac_histories', Seed.INITIAL_VAC_HISTORIES);
   const [dewormingRecords, setDewormingRecords] = useLocalState<Types.DewormingRecord[]>('deworming_records', []);
-  const [customerNotes, setCustomerNotes] = useLocalState<Types.CustomerNote[]>('customer_notes', []);
+  const [customerNotes, setCustomerNotes] = useServerState<Types.CustomerNote[]>('/customer-notes', []);
   const [interBranchTransfers, setInterBranchTransfers] = useLocalState<Types.InterBranchTransfer[]>('inter_branch_transfers', []);
   const [surgicalProcedures, setSurgicalProcedures] = useLocalState<Types.SurgicalProcedure[]>('surgical_procedures', Seed.INITIAL_SURGICAL_PROCEDURES);
 
-  const [drugs, setDrugs] = useLocalState<Types.Drug[]>('drugs', Seed.INITIAL_DRUGS);
+  const [drugs, setDrugs] = useServerState<Types.Drug[]>('/drugs', Seed.INITIAL_DRUGS);
   const [labTests, setLabTests] = useLocalState<Types.LabTest[]>('lab_tests', Seed.INITIAL_LAB_TESTS);
 
-  const [groomingPackages, setGroomingPackages] = useLocalState<Types.GroomingPackage[]>('grooming_packages', Seed.INITIAL_GROOMING_PACKAGES);
-  const [groomingSessions, setGroomingSessions] = useLocalState<Types.GroomingSession[]>('grooming_sessions', Seed.INITIAL_GROOMING_SESSIONS);
-  const [hotelRooms, setHotelRooms] = useLocalState<Types.HotelRoom[]>('hotel_rooms', Seed.INITIAL_HOTEL_ROOMS);
-  const [hotelReservations, setHotelReservations] = useLocalState<Types.HotelReservation[]>('hotel_reservations', Seed.INITIAL_HOTEL_RESERVATIONS);
-  const [dailyMonitorings, setDailyMonitorings] = useLocalState<Types.DailyMonitoring[]>('daily_monitorings', Seed.INITIAL_DAILY_MONITORING);
+  const [groomingPackages, setGroomingPackages] = useServerState<Types.GroomingPackage[]>('/grooming-packages', Seed.INITIAL_GROOMING_PACKAGES);
+  const [groomingSessions, setGroomingSessions] = useServerState<Types.GroomingSession[]>('/grooming-sessions', Seed.INITIAL_GROOMING_SESSIONS);
+  const [hotelRooms, setHotelRooms] = useServerState<Types.HotelRoom[]>('/hotel-rooms', Seed.INITIAL_HOTEL_ROOMS);
+  const [hotelReservations, setHotelReservations] = useServerState<Types.HotelReservation[]>('/hotel-reservations', Seed.INITIAL_HOTEL_RESERVATIONS);
+  const [dailyMonitorings, setDailyMonitorings] = useServerState<Types.DailyMonitoring[]>('/daily-monitorings', Seed.INITIAL_DAILY_MONITORING);
 
   const [productCategories, setProductCategories] = useServerState<Types.ProductCategory[]>('/product-categories', Seed.INITIAL_PRODUCT_CATEGORIES);
   const [warehouses, setWarehouses] = useServerState<Types.Warehouse[]>('/warehouses', Seed.INITIAL_WAREHOUSES);
@@ -367,7 +367,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [absenceRecords, setAbsenceRecords] = useLocalState<Types.AbsenceRecord[]>('absence_records', Seed.INITIAL_ABSENCE_RECORDS);
   const [leaveRequests, setLeaveRequests] = useLocalState<Types.LeaveRequest[]>('leave_requests', Seed.INITIAL_LEAVE_REQUESTS);
 
-  const [reminders, setReminders] = useLocalState<Types.Reminder[]>('reminders', Seed.INITIAL_REMINDERS);
+  const [reminders, setReminders] = useServerState<Types.Reminder[]>('/reminders', Seed.INITIAL_REMINDERS);
   const [loyaltyEntries, setLoyaltyEntries] = useLocalState<Types.LoyaltyEntry[]>('loyalty_entries', Seed.INITIAL_LOYALTY_ENTRIES);
 
   const [carePlans, setCarePlans] = useLocalState<Types.CarePlan[]>('care_plans', Seed.INITIAL_CARE_PLANS);
@@ -729,67 +729,42 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Tambah', 'Poli & Antrean', newVisit.visitNo, `Check-in pasien ${booking.petName} ke antrean poli dokter ${booking.doctorName}`);
   };
 
-  const addGroomingBooking = (b: Omit<Types.GroomingBooking, 'id' | 'bookingNo'>) => {
-    const newBooking: Types.GroomingBooking = {
-      ...b,
-      id: 'gb_' + Date.now(),
-      bookingNo: 'GRM-' + Date.now().toString().slice(-6),
-    };
+  const addGroomingBooking = async (b: Omit<Types.GroomingBooking, 'id' | 'bookingNo'>): Promise<void> => {
+    const newBooking = await api.post<Types.GroomingBooking>('/grooming-bookings', b);
     setGroomingBookings((prev) => [newBooking, ...prev]);
     addAuditLog('Tambah', 'Grooming Salon', newBooking.bookingNo, `Pemesanan sesi grooming untuk ${newBooking.petName} (${newBooking.packageType})`);
   };
 
-  const updateGroomingBooking = (id: string, updates: Partial<Types.GroomingBooking>) => {
+  const updateGroomingBooking = async (id: string, updates: Partial<Types.GroomingBooking>): Promise<void> => {
     const booking = groomingBookings.find((b) => b.id === id);
-    setGroomingBookings((prev) => prev.map((b) => (b.id === id ? { ...b, ...updates } : b)));
+    const updated = await api.put<Types.GroomingBooking>(`/grooming-bookings/${id}`, updates);
+    setGroomingBookings((prev) => prev.map((b) => (b.id === id ? updated : b)));
     addAuditLog('Edit', 'Grooming Salon', booking?.bookingNo || id, `Pembaruan data grooming booking: ${JSON.stringify(updates)}`);
   };
 
-  const rescheduleGroomingBooking = (id: string, date: string, timeSlot: string, groomerName?: string) => {
+  const rescheduleGroomingBooking = async (id: string, date: string, timeSlot: string, groomerName?: string): Promise<void> => {
     const booking = groomingBookings.find((b) => b.id === id);
     if (!booking) return;
     const oldSlot = `${booking.date} ${booking.timeSlot}`;
     const targetGroomer = groomerName || booking.groomerName;
-
-    setGroomingBookings((prev) =>
-      prev.map((b) => {
-        if (b.id !== id) return b;
-        return {
-          ...b,
-          date,
-          timeSlot,
-          groomerName: targetGroomer,
-          status: b.status === 'Batal' ? 'Terkonfirmasi' : b.status,
-        };
-      })
-    );
-
-    addAuditLog(
-      'Edit',
-      'Grooming Salon',
-      booking.bookingNo,
+    const updated = await api.put<Types.GroomingBooking>(`/grooming-bookings/${id}`, {
+      date, timeSlot, groomerName: targetGroomer,
+      status: booking.status === 'Batal' ? 'Terkonfirmasi' : booking.status,
+    });
+    setGroomingBookings((prev) => prev.map((b) => (b.id === id ? updated : b)));
+    addAuditLog('Edit', 'Grooming Salon', booking.bookingNo,
       `Reschedule grooming ${booking.petName} (${booking.bookingNo}) dari ${oldSlot} ke ${date} jam ${timeSlot} (${targetGroomer})`,
-      {
-        severity: 'Warning',
-        previousValue: oldSlot,
-        newValue: `${date} ${timeSlot} (${targetGroomer})`
-      }
+      { severity: 'Warning', previousValue: oldSlot, newValue: `${date} ${timeSlot} (${targetGroomer})` }
     );
-
     addNotification({
       title: 'Jadwal Grooming Di-reschedule',
       message: `Grooming ${booking.bookingNo} (${booking.petName}) dipindahkan ke ${date} jam ${timeSlot}`,
-      type: 'Booking',
-      priority: 'Sedang'
+      type: 'Booking', priority: 'Sedang',
     });
   };
 
-  const addHotelBooking = (b: Omit<Types.HotelBooking, 'id' | 'bookingNo'>) => {
-    const newBooking: Types.HotelBooking = {
-      ...b,
-      id: 'hb_' + Date.now(),
-      bookingNo: 'HTL-' + Date.now().toString().slice(-6),
-    };
+  const addHotelBooking = async (b: Omit<Types.HotelBooking, 'id' | 'bookingNo'>): Promise<void> => {
+    const newBooking = await api.post<Types.HotelBooking>('/hotel-bookings', b);
     setHotelBookings((prev) => [newBooking, ...prev]);
     addAuditLog('Tambah', 'Pet Hotel & Penitipan', newBooking.bookingNo, `Reservasi pet hotel untuk ${newBooking.petName} di kamar ${newBooking.roomNo}`);
   };
@@ -965,14 +940,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newRecord;
   };
 
-  const addCustomerNote = (customerId: string, note: string): Types.CustomerNote => {
-    const newNote: Types.CustomerNote = {
-      id: 'cn_' + Date.now(),
-      customerId,
-      date: new Date().toISOString().substring(0, 10),
-      note,
-      authorName: user?.name || 'Staf CRM'
-    };
+  const addCustomerNote = async (customerId: string, note: string): Promise<Types.CustomerNote> => {
+    const newNote = await api.post<Types.CustomerNote>('/customer-notes', { customerId, note });
     setCustomerNotes((prev) => [...prev, newNote]);
     addAuditLog('Tambah', 'CRM & Loyalty', customerId, `Catatan interaksi baru ditambahkan untuk pelanggan.`, { severity: 'Info' });
     return newNote;
@@ -1040,50 +1009,43 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Tambah', 'Pemeriksaan Medis (CPPT)', sp.procedureName, `Pencatatan prosedur bedah (${sp.category}) untuk pasien ${sp.petName} oleh ${sp.leadSurgeon}`, { severity: 'Warning' });
   };
 
-  const addDrug = (d: Omit<Types.Drug, 'id' | 'code'>) => {
-    const newDrug: Types.Drug = {
-      ...d,
-      id: 'd_' + Date.now(),
-      code: generateUniqueCode('DRG', drugs.map((dr) => dr.code))
-    };
+  const addDrug = async (d: Omit<Types.Drug, 'id' | 'code'>): Promise<void> => {
+    const newDrug = await api.post<Types.Drug>('/drugs', d);
     setDrugs((prev) => [...prev, newDrug]);
     addAuditLog('Tambah', 'Apotek & Farmasi', newDrug.name, `Penambahan item obat baru: ${newDrug.name} (${newDrug.unit}) - Stok: ${newDrug.stock}`, { severity: 'Info' });
   };
 
-  const updateDrug = (id: string, dData: Partial<Types.Drug>) => {
+  const updateDrug = async (id: string, dData: Partial<Types.Drug>): Promise<void> => {
     const current = drugs.find((d) => d.id === id);
-    setDrugs((prev) => prev.map((d) => (d.id === id ? { ...d, ...dData } : d)));
+    const updated = await api.put<Types.Drug>(`/drugs/${id}`, dData);
+    setDrugs((prev) => prev.map((d) => (d.id === id ? updated : d)));
     addAuditLog('Edit', 'Apotek & Farmasi', current?.name || id, `Pembaruan data/harga/stok obat: ${current?.name || id}`, {
       severity: 'Warning',
       previousValue: current ? JSON.stringify({ unitPrice: current.unitPrice, stock: current.stock }) : undefined,
-      newValue: JSON.stringify(dData)
+      newValue: JSON.stringify(dData),
     });
   };
 
-  const deleteDrug = (id: string) => {
+  const deleteDrug = async (id: string): Promise<void> => {
     const current = drugs.find((d) => d.id === id);
+    await api.del(`/drugs/${id}`);
     setDrugs((prev) => prev.filter((d) => d.id !== id));
     addAuditLog('Hapus', 'Apotek & Farmasi', current?.name || id, `Penghapusan item master obat/vaksin: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
-  const dispenseDrug = (drugId: string, qty: number) => {
+  const dispenseDrug = async (drugId: string, qty: number): Promise<void> => {
     const drug = drugs.find((d) => d.id === drugId);
-    setDrugs((prev) =>
-      prev.map((d) => {
-        if (d.id !== drugId) return d;
-        const newStock = Math.max(0, d.stock - qty);
-        if (newStock <= d.minStock) {
-          addNotification({
-            title: 'Stok Obat Menipis',
-            message: `Stok ${d.name} tersisa ${newStock} ${d.unit} (Minimum ${d.minStock}).`,
-            type: 'Stok',
-            priority: 'Tinggi'
-          });
-        }
-        return { ...d, stock: newStock };
-      })
-    );
-    addAuditLog('Dispense', 'Apotek & Farmasi', drug?.name || drugId, `Dispensing resep obat: ${qty} ${drug?.unit || 'unit'} (Stok sisa: ${drug ? Math.max(0, drug.stock - qty) : 0})`, { severity: 'Warning' });
+    const updated = await api.post<Types.Drug>(`/drugs/${drugId}/dispense`, { quantity: qty });
+    setDrugs((prev) => prev.map((d) => (d.id === drugId ? updated : d)));
+    if (updated.stock <= updated.minStock) {
+      addNotification({
+        title: 'Stok Obat Menipis',
+        message: `Stok ${updated.name} tersisa ${updated.stock} ${updated.unit} (Minimum ${updated.minStock}).`,
+        type: 'Stok', priority: 'Tinggi',
+      });
+    }
+    addAuditLog('Dispense', 'Apotek & Farmasi', drug?.name || drugId,
+      `Dispensing resep obat: ${qty} ${drug?.unit || 'unit'} (Stok sisa: ${updated.stock})`, { severity: 'Warning' });
   };
 
   const addLabTest = (lt: Omit<Types.LabTest, 'id' | 'testNo' | 'status' | 'orderedAt'>) => {
@@ -1117,76 +1079,75 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Edit', 'Laboratorium & Diagnostik', test?.testNo || id, `Penginputan & validasi hasil tes laboratorium: ${test?.testName || id}`, { severity: 'Warning' });
   };
 
-  const addGroomingPackage = (gp: Omit<Types.GroomingPackage, 'id'>) => {
-    const newPkg: Types.GroomingPackage = { ...gp, id: 'pkg_' + Date.now() };
+  const addGroomingPackage = async (gp: Omit<Types.GroomingPackage, 'id'>): Promise<void> => {
+    const newPkg = await api.post<Types.GroomingPackage>('/grooming-packages', gp);
     setGroomingPackages((prev) => [...prev, newPkg]);
     addAuditLog('Tambah', 'Grooming Salon', newPkg.name, `Paket grooming baru ditambahkan: ${newPkg.name} (${newPkg.packageType})`);
   };
 
-  const updateGroomingPackage = (id: string, gpData: Partial<Types.GroomingPackage>) => {
+  const updateGroomingPackage = async (id: string, gpData: Partial<Types.GroomingPackage>): Promise<void> => {
     const current = groomingPackages.find((p) => p.id === id);
-    setGroomingPackages((prev) => prev.map((p) => (p.id === id ? { ...p, ...gpData } : p)));
+    const updated = await api.put<Types.GroomingPackage>(`/grooming-packages/${id}`, gpData);
+    setGroomingPackages((prev) => prev.map((p) => (p.id === id ? updated : p)));
     addAuditLog('Edit', 'Grooming Salon', current?.name || id, `Pembaruan paket & harga grooming: ${current?.name || id}`, { severity: 'Warning' });
   };
 
-  const deleteGroomingPackage = (id: string) => {
+  const deleteGroomingPackage = async (id: string): Promise<void> => {
     const current = groomingPackages.find((p) => p.id === id);
+    await api.del(`/grooming-packages/${id}`);
     setGroomingPackages((prev) => prev.filter((p) => p.id !== id));
     addAuditLog('Hapus', 'Grooming Salon', current?.name || id, `Penghapusan paket grooming: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
-  const addGroomingSession = (gs: Omit<Types.GroomingSession, 'id' | 'sessionNo'>) => {
-    const newSession: Types.GroomingSession = {
-      ...gs,
-      id: 'gs_' + Date.now(),
-      sessionNo: 'GRM-' + Date.now().toString().slice(-6)
-    };
+  const addGroomingSession = async (gs: Omit<Types.GroomingSession, 'id' | 'sessionNo'>): Promise<void> => {
+    const newSession = await api.post<Types.GroomingSession>('/grooming-sessions', gs);
     setGroomingSessions((prev) => [newSession, ...prev]);
     addAuditLog('Tambah', 'Grooming Salon', newSession.sessionNo, `Sesi grooming baru untuk ${newSession.petName} (${newSession.packageType})`);
   };
 
-  const updateGroomingStage = (id: string, stage: Types.GroomingStage) => {
+  const updateGroomingStage = async (id: string, stage: Types.GroomingStage): Promise<void> => {
     const session = groomingSessions.find((s) => s.id === id);
-    setGroomingSessions((prev) => prev.map((s) => (s.id === id ? { ...s, stage } : s)));
+    const updated = await api.put<Types.GroomingSession>(`/grooming-sessions/${id}/stage`, { stage });
+    setGroomingSessions((prev) => prev.map((s) => (s.id === id ? updated : s)));
     addAuditLog('Edit', 'Grooming Salon', session?.sessionNo || id, `Tahapan pengerjaan grooming diubah menjadi: ${stage}`);
   };
 
-  const addHotelRoom = (room: Omit<Types.HotelRoom, 'id'>) => {
-    const newRoom: Types.HotelRoom = { ...room, id: 'room_' + Date.now() };
+  const addHotelRoom = async (room: Omit<Types.HotelRoom, 'id'>): Promise<void> => {
+    const newRoom = await api.post<Types.HotelRoom>('/hotel-rooms', room);
     setHotelRooms((prev) => [...prev, newRoom]);
     addAuditLog('Tambah', 'Pet Hotel & Penitipan', newRoom.roomNo, `Kamar/kandang hotel baru ditambahkan: ${newRoom.roomNo} (${newRoom.roomType})`);
   };
 
-  const updateHotelRoom = (id: string, roomData: Partial<Types.HotelRoom>) => {
+  const updateHotelRoom = async (id: string, roomData: Partial<Types.HotelRoom>): Promise<void> => {
     const current = hotelRooms.find((r) => r.id === id);
-    setHotelRooms((prev) => prev.map((r) => (r.id === id ? { ...r, ...roomData } : r)));
+    const updated = await api.put<Types.HotelRoom>(`/hotel-rooms/${id}`, roomData);
+    setHotelRooms((prev) => prev.map((r) => (r.id === id ? updated : r)));
     addAuditLog('Edit', 'Pet Hotel & Penitipan', current?.roomNo || id, `Pembaruan data kamar/kandang: ${current?.roomNo || id}`, { severity: 'Warning' });
   };
 
-  const deleteHotelRoom = (id: string) => {
+  const deleteHotelRoom = async (id: string): Promise<void> => {
     const current = hotelRooms.find((r) => r.id === id);
+    await api.del(`/hotel-rooms/${id}`);
     setHotelRooms((prev) => prev.filter((r) => r.id !== id));
     addAuditLog('Hapus', 'Pet Hotel & Penitipan', current?.roomNo || id, `Penghapusan kamar/kandang: ${current?.roomNo || id}`, { severity: 'Kritis' });
   };
 
-  const addHotelReservation = (hr: Omit<Types.HotelReservation, 'id' | 'reservationNo'>) => {
-    const newRes: Types.HotelReservation = {
-      ...hr,
-      id: 'hr_' + Date.now(),
-      reservationNo: 'HTL-' + Date.now().toString().slice(-6)
-    };
+  const addHotelReservation = async (hr: Omit<Types.HotelReservation, 'id' | 'reservationNo'>): Promise<void> => {
+    const newRes = await api.post<Types.HotelReservation>('/hotel-reservations', hr);
     setHotelReservations((prev) => [newRes, ...prev]);
     addAuditLog('Tambah', 'Pet Hotel & Penitipan', newRes.reservationNo, `Reservasi pet hotel baru untuk ${newRes.petName} di kandang ${newRes.roomNo}`);
   };
 
-  const updateHotelStatus = (id: string, status: Types.HotelReservation['status']) => {
+  const updateHotelStatus = async (id: string, status: Types.HotelReservation['status']): Promise<void> => {
     const res = hotelReservations.find((r) => r.id === id);
-    setHotelReservations((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+    const updated = await api.put<Types.HotelReservation>(`/hotel-reservations/${id}/status`, { status });
+    setHotelReservations((prev) => prev.map((r) => (r.id === id ? updated : r)));
     addAuditLog('Edit', 'Pet Hotel & Penitipan', res?.reservationNo || id, `Status pet hotel diubah menjadi: ${status}`);
   };
 
-  const addDailyMonitoring = (dm: Omit<Types.DailyMonitoring, 'id'>) => {
-    setDailyMonitorings((prev) => [{ ...dm, id: 'dm_' + Date.now() }, ...prev]);
+  const addDailyMonitoring = async (dm: Omit<Types.DailyMonitoring, 'id'>): Promise<void> => {
+    const newDm = await api.post<Types.DailyMonitoring>('/daily-monitorings', dm);
+    setDailyMonitorings((prev) => [newDm, ...prev]);
     addAuditLog('Tambah', 'Monitoring Pasien', dm.petName, `Pencatatan monitoring harian: Suhu ${dm.temperatureC ?? '-'}°C oleh ${dm.staffName}`);
   };
 
@@ -1372,15 +1333,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Tambah', 'SDM & Cuti', lr.employeeName, `Pengajuan cuti: ${lr.leaveType} (${lr.startDate} s/d ${lr.endDate})`);
   };
 
-  const addReminder = (rem: Omit<Types.Reminder, 'id'>) => {
-    setReminders((prev) => [{ ...rem, id: 'rem_' + Date.now() }, ...prev]);
+  const addReminder = async (rem: Omit<Types.Reminder, 'id'>): Promise<void> => {
+    const newRem = await api.post<Types.Reminder>('/reminders', rem);
+    setReminders((prev) => [newRem, ...prev]);
   };
 
-  const updateReminderStatus = (id: string, status: Types.Reminder['status']) => {
-    setReminders((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+  const updateReminderStatus = async (id: string, status: Types.Reminder['status']): Promise<void> => {
+    const updated = await api.put<Types.Reminder>(`/reminders/${id}/status`, { status });
+    setReminders((prev) => prev.map((r) => (r.id === id ? updated : r)));
   };
 
-  const deleteReminder = (id: string) => {
+  const deleteReminder = async (id: string): Promise<void> => {
+    await api.del(`/reminders/${id}`);
     setReminders((prev) => prev.filter((r) => r.id !== id));
   };
 

@@ -57,6 +57,9 @@ const TABLES = [
   "telehealth_sessions", "telehealth_events", "audit_logs", "sessions",
   "product_categories", "warehouses", "stock_items", "stock_movements",
   "suppliers", "purchase_orders", "employees",
+  "drugs", "grooming_packages", "grooming_bookings", "grooming_sessions",
+  "hotel_rooms", "hotel_reservations", "hotel_bookings", "daily_monitorings",
+  "reminders", "customer_notes",
 ];
 
 let config: BackupConfig = {

@@ -8,6 +8,22 @@ import {
   listPurchaseOrders, createPurchaseOrder, updatePurchaseOrderStatus, receivePurchaseOrder,
 } from "./server/inventoryService";
 import { listEmployees, createEmployee, updateEmployee, deleteEmployee } from "./server/employeeService";
+import { listDrugs, createDrug, updateDrug, deleteDrug, dispenseDrug } from "./server/drugService";
+import {
+  listGroomingPackages, createGroomingPackage, updateGroomingPackage, deleteGroomingPackage,
+  listGroomingBookings, createGroomingBooking, updateGroomingBooking,
+  listGroomingSessions, createGroomingSession, updateGroomingStage,
+} from "./server/groomingService";
+import {
+  listHotelRooms, createHotelRoom, updateHotelRoom, deleteHotelRoom,
+  listHotelReservations, createHotelReservation, updateHotelReservationStatus,
+  listHotelBookings, createHotelBooking,
+  listDailyMonitorings, createDailyMonitoring,
+} from "./server/hotelService";
+import {
+  listReminders, createReminder, updateReminderStatus, deleteReminder,
+  listCustomerNotes, createCustomerNote,
+} from "./server/crmService";
 import express from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -2040,6 +2056,150 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   app.delete("/api/employees/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try { await deleteEmployee(req.params.id); res.json({ success: true }); }
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  // ── Drugs ──────────────────────────────────────────────────────────────────
+  app.get("/api/drugs", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listDrugs() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/drugs", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createDrug(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/drugs/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateDrug(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/drugs/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteDrug(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/drugs/:id/dispense", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await dispenseDrug(req.params.id, Number(req.body?.quantity) || 0) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  // ── Grooming ───────────────────────────────────────────────────────────────
+  app.get("/api/grooming-packages", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listGroomingPackages() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/grooming-packages", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createGroomingPackage(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/grooming-packages/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateGroomingPackage(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/grooming-packages/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteGroomingPackage(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/grooming-bookings", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listGroomingBookings() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/grooming-bookings", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createGroomingBooking(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/grooming-bookings/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateGroomingBooking(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/grooming-sessions", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listGroomingSessions() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/grooming-sessions", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createGroomingSession(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/grooming-sessions/:id/stage", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateGroomingStage(req.params.id, req.body?.stage) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  // ── Hotel ──────────────────────────────────────────────────────────────────
+  app.get("/api/hotel-rooms", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listHotelRooms() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/hotel-rooms", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createHotelRoom(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/hotel-rooms/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateHotelRoom(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/hotel-rooms/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteHotelRoom(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/hotel-reservations", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listHotelReservations() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/hotel-reservations", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createHotelReservation(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/hotel-reservations/:id/status", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateHotelReservationStatus(req.params.id, req.body?.status) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/hotel-bookings", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listHotelBookings() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/hotel-bookings", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createHotelBooking(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/daily-monitorings", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listDailyMonitorings() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/daily-monitorings", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createDailyMonitoring(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  // ── CRM minor ──────────────────────────────────────────────────────────────
+  app.get("/api/reminders", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listReminders() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/reminders", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createReminder(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/reminders/:id/status", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateReminderStatus(req.params.id, req.body?.status) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/reminders/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { await deleteReminder(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/customer-notes", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listCustomerNotes() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/customer-notes", requireRole(...STAFF_ROLES), async (req, res) => {
+    try {
+      const authorName = (req as any).session?.name || "Staf CRM";
+      res.status(201).json({ success: true, data: await createCustomerNote({ ...req.body, authorName }) });
+    } catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
 
   // Global error handler — catches errors forwarded by next(err) from async
