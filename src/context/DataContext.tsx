@@ -100,7 +100,7 @@ interface DataContextType {
   // Inter-branch stock transfer (surat jalan, bukan pemindahan angka stok —
   // lihat catatan di Types.InterBranchTransfer)
   interBranchTransfers: Types.InterBranchTransfer[];
-  addInterBranchTransfer: (t: Omit<Types.InterBranchTransfer, 'id' | 'transferNo' | 'date' | 'status'>) => Types.InterBranchTransfer;
+  addInterBranchTransfer: (t: Omit<Types.InterBranchTransfer, 'id' | 'transferNo' | 'date' | 'status'>) => Promise<Types.InterBranchTransfer>;
   markInterBranchTransferReceived: (id: string) => void;
 
   // Surgeries
@@ -953,9 +953,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // sebagai jejak audit fisik barang berpindah lokasi cabang. Sebelumnya
   // ini cuma useState lokal di BranchesModule.tsx yang hilang saat reload
   // dan tidak pernah memanggil addStockMovement sama sekali.
-  const addInterBranchTransfer = (
+  const addInterBranchTransfer = async (
     t: Omit<Types.InterBranchTransfer, 'id' | 'transferNo' | 'date' | 'status'>
-  ): Types.InterBranchTransfer => {
+  ): Promise<Types.InterBranchTransfer> => {
     const newTransfer: Types.InterBranchTransfer = {
       ...t,
       id: 'ibt_' + Date.now(),
@@ -965,7 +965,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setInterBranchTransfers((prev) => [newTransfer, ...prev]);
 
-    addStockMovement({
+    await addStockMovement({
       itemId: t.stockItemId,
       itemName: t.itemName,
       type: 'Transfer',
@@ -1603,6 +1603,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         drugs,
         addDrug,
         updateDrug,
+        deleteDrug,
         dispenseDrug,
         labTests,
         addLabTest,
