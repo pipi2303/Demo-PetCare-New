@@ -60,6 +60,12 @@ const TABLES = [
   "drugs", "grooming_packages", "grooming_bookings", "grooming_sessions",
   "hotel_rooms", "hotel_reservations", "hotel_bookings", "daily_monitorings",
   "reminders", "customer_notes",
+  "medical_records", "soap_notes", "inpatients", "discharge_notes",
+  "lab_tests", "surgical_procedures",
+  "vac_schedules", "vac_histories", "deworming_records",
+  "pre_consult_forms", "referral_letters", "visit_surveys",
+  "doc_bookings", "care_plans",
+  "absence_records", "leave_requests",
 ];
 
 let config: BackupConfig = {

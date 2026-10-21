@@ -10,6 +10,19 @@ import {
 import { listEmployees, createEmployee, updateEmployee, deleteEmployee } from "./server/employeeService";
 import { listDrugs, createDrug, updateDrug, deleteDrug, dispenseDrug } from "./server/drugService";
 import {
+  listMedicalRecords, createMedicalRecord,
+  listSoapNotes, upsertSoapNote,
+  listInpatients, createInpatient, updateInpatientStatus,
+  listDischargeNotes, createDischargeNote,
+  listLabTests, createLabTest, updateLabResult,
+  listSurgicalProcedures, createSurgicalProcedure,
+} from "./server/medicalService";
+import { listVacSchedules, createVacSchedule, updateVacScheduleStatus, listVacHistories, createVacHistory, listDewormingRecords, createDewormingRecord } from "./server/vaccineService";
+import { listPreConsultForms, createPreConsultForm, updatePreConsultStatus, listReferralLetters, createReferralLetter, listVisitSurveys, createVisitSurvey } from "./server/clinicalFormsService";
+import { listCarePlans, createCarePlan, toggleCarePlanTask } from "./server/carePlanService";
+import { listDoctorBookings, createDoctorBooking, updateDoctorBooking, updateDoctorBookingStatus } from "./server/doctorBookingService";
+import { listAbsenceRecords, createAbsenceRecord, listLeaveRequests, createLeaveRequest, updateLeaveRequestStatus } from "./server/hrService";
+import {
   listGroomingPackages, createGroomingPackage, updateGroomingPackage, deleteGroomingPackage,
   listGroomingBookings, createGroomingBooking, updateGroomingBooking,
   listGroomingSessions, createGroomingSession, updateGroomingStage,
@@ -267,6 +280,19 @@ async function startServer() {
 
   app.get("/api/operations", requireRole(...OPERATIONS_ROLES), async (_req, res) => {
     res.json({ success: true, data: await listOperations() });
+  });
+  // Individual read endpoints so DataContext can use useServerState for each.
+  app.get("/api/ambulance-units", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: (await listOperations()).ambulanceUnits }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.get("/api/ambulance-requests", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: (await listOperations()).ambulanceRequests }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.get("/api/telehealth-sessions", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: (await listOperations()).telehealthSessions }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
   });
 
   app.post("/api/operations/ambulance/units", requireRole("owner_klinik", "owner_petcare", "admin", "superadmin"), async (req, res) => {
@@ -2055,6 +2081,183 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   });
   app.delete("/api/employees/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try { await deleteEmployee(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  // ── Medical Records (Phase 4) ──────────────────────────────────────────────
+  app.get("/api/medical-records", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listMedicalRecords() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/medical-records", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createMedicalRecord(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/soap-notes", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listSoapNotes() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/soap-notes", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await upsertSoapNote(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/inpatients", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listInpatients() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/inpatients", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createInpatient(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/inpatients/:id/status", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateInpatientStatus(req.params.id, req.body?.status) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/discharge-notes", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listDischargeNotes() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/discharge-notes", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createDischargeNote(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/lab-tests", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listLabTests() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/lab-tests", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createLabTest(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/lab-tests/:id/result", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateLabResult(req.params.id, req.body?.results, req.body?.notes) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/surgical-procedures", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listSurgicalProcedures() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/surgical-procedures", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createSurgicalProcedure(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/vac-schedules", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listVacSchedules() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/vac-schedules", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createVacSchedule(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/vac-schedules/:id/status", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateVacScheduleStatus(req.params.id, req.body?.status) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/vac-histories", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listVacHistories() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/vac-histories", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createVacHistory(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/deworming-records", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listDewormingRecords() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/deworming-records", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createDewormingRecord(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/pre-consult-forms", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listPreConsultForms() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/pre-consult-forms", requireSession, async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createPreConsultForm(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/pre-consult-forms/:id/status", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updatePreConsultStatus(req.params.id, req.body?.status) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/referral-letters", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listReferralLetters() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/referral-letters", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createReferralLetter(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/visit-surveys", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listVisitSurveys() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/visit-surveys", requireSession, async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createVisitSurvey(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/care-plans", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listCarePlans() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/care-plans", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createCarePlan(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/care-plans/:id/tasks/:taskId/toggle", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await toggleCarePlanTask(req.params.id, req.params.taskId) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/doc-bookings", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listDoctorBookings() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/doc-bookings", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createDoctorBooking(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/doc-bookings/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateDoctorBooking(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/doc-bookings/:id/status", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateDoctorBookingStatus(req.params.id, req.body?.status) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/absence-records", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listAbsenceRecords() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/absence-records", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createAbsenceRecord(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/leave-requests", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listLeaveRequests() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/leave-requests", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createLeaveRequest(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/leave-requests/:id/status", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateLeaveRequestStatus(req.params.id, req.body?.status) }); }
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
 

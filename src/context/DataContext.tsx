@@ -43,11 +43,11 @@ interface DataContextType {
 
   // Bookings
   doctorBookings: Types.DoctorBooking[];
-  addDoctorBooking: (b: Omit<Types.DoctorBooking, 'id' | 'bookingNo' | 'createdAt'>) => Types.DoctorBooking;
-  updateDoctorBooking: (id: string, updates: Partial<Types.DoctorBooking>) => void;
-  rescheduleDoctorBooking: (id: string, date: string, timeSlot: string, doctorId?: string, doctorName?: string) => void;
-  updateDoctorBookingStatus: (id: string, status: Types.DoctorBooking['status']) => void;
-  checkInDoctorBooking: (id: string) => void;
+  addDoctorBooking: (b: Omit<Types.DoctorBooking, 'id' | 'bookingNo' | 'createdAt'>) => Promise<Types.DoctorBooking>;
+  updateDoctorBooking: (id: string, updates: Partial<Types.DoctorBooking>) => Promise<void>;
+  rescheduleDoctorBooking: (id: string, date: string, timeSlot: string, doctorId?: string, doctorName?: string) => Promise<void>;
+  updateDoctorBookingStatus: (id: string, status: Types.DoctorBooking['status']) => Promise<void>;
+  checkInDoctorBooking: (id: string) => Promise<void>;
 
   groomingBookings: Types.GroomingBooking[];
   addGroomingBooking: (b: Omit<Types.GroomingBooking, 'id' | 'bookingNo'>) => Promise<void>;
@@ -64,35 +64,35 @@ interface DataContextType {
   updateClinicVisit: (id: string, updates: Partial<Types.ClinicVisit>) => Promise<void>;
 
   soapNotes: Types.SOAPNote[];
-  saveSOAPNote: (soap: Omit<Types.SOAPNote, 'id'>) => void;
+  saveSOAPNote: (soap: Omit<Types.SOAPNote, 'id'>) => Promise<void>;
 
   inpatients: Types.Inpatient[];
-  addInpatient: (inp: Omit<Types.Inpatient, 'id' | 'inpatientNo' | 'status' | 'admittedAt'>) => void;
-  updateInpatientStatus: (id: string, status: Types.Inpatient['status']) => void;
+  addInpatient: (inp: Omit<Types.Inpatient, 'id' | 'inpatientNo' | 'status' | 'admittedAt'>) => Promise<void>;
+  updateInpatientStatus: (id: string, status: Types.Inpatient['status']) => Promise<void>;
 
   dischargeNotes: Types.DischargeNote[];
-  addDischargeNote: (dn: Omit<Types.DischargeNote, 'id' | 'createdAt'>) => void;
+  addDischargeNote: (dn: Omit<Types.DischargeNote, 'id' | 'createdAt'>) => Promise<void>;
 
   medicalRecords: Types.MedicalRecord[];
-  addMedicalRecord: (mr: Omit<Types.MedicalRecord, 'id'>) => void;
+  addMedicalRecord: (mr: Omit<Types.MedicalRecord, 'id'>) => Promise<void>;
 
   preConsultForms: Types.PreConsultForm[];
-  addPreConsultForm: (pcf: Omit<Types.PreConsultForm, 'id' | 'status' | 'createdAt'>) => void;
-  updatePreConsultStatus: (id: string, status: 'Menunggu' | 'Digunakan') => void;
+  addPreConsultForm: (pcf: Omit<Types.PreConsultForm, 'id' | 'status' | 'createdAt'>) => Promise<void>;
+  updatePreConsultStatus: (id: string, status: 'Menunggu' | 'Digunakan') => Promise<void>;
 
   referralLetters: Types.ReferralLetter[];
-  addReferralLetter: (rl: Omit<Types.ReferralLetter, 'id' | 'referralNo' | 'createdAt'>) => void;
+  addReferralLetter: (rl: Omit<Types.ReferralLetter, 'id' | 'referralNo' | 'createdAt'>) => Promise<void>;
 
   visitSurveys: Types.VisitSurvey[];
-  addVisitSurvey: (vs: Omit<Types.VisitSurvey, 'id' | 'createdAt'>) => void;
+  addVisitSurvey: (vs: Omit<Types.VisitSurvey, 'id' | 'createdAt'>) => Promise<void>;
 
   // Vaccines
   vacSchedules: Types.VacSchedule[];
-  addVacSchedule: (vs: Omit<Types.VacSchedule, 'id'>) => void;
+  addVacSchedule: (vs: Omit<Types.VacSchedule, 'id'>) => Promise<void>;
   vacHistories: Types.VacHistory[];
-  addVacHistory: (vh: Omit<Types.VacHistory, 'id'>) => void;
+  addVacHistory: (vh: Omit<Types.VacHistory, 'id'>) => Promise<void>;
   dewormingRecords: Types.DewormingRecord[];
-  addDewormingRecord: (dr: Omit<Types.DewormingRecord, 'id'>) => Types.DewormingRecord;
+  addDewormingRecord: (dr: Omit<Types.DewormingRecord, 'id'>) => Promise<Types.DewormingRecord>;
 
   customerNotes: Types.CustomerNote[];
   addCustomerNote: (customerId: string, note: string) => Promise<Types.CustomerNote>;
@@ -105,7 +105,7 @@ interface DataContextType {
 
   // Surgeries
   surgicalProcedures: Types.SurgicalProcedure[];
-  addSurgicalProcedure: (sp: Omit<Types.SurgicalProcedure, 'id' | 'procedureNo'>) => void;
+  addSurgicalProcedure: (sp: Omit<Types.SurgicalProcedure, 'id' | 'procedureNo'>) => Promise<void>;
 
   // Pharmacy & Lab
   drugs: Types.Drug[];
@@ -115,8 +115,8 @@ interface DataContextType {
   dispenseDrug: (drugId: string, qty: number) => Promise<void>;
 
   labTests: Types.LabTest[];
-  addLabTest: (lt: Omit<Types.LabTest, 'id' | 'testNo' | 'status' | 'orderedAt'>) => Types.LabTest;
-  updateLabResult: (id: string, results: Types.LabTest['results'], notes?: string) => void;
+  addLabTest: (lt: Omit<Types.LabTest, 'id' | 'testNo' | 'status' | 'orderedAt'>) => Promise<Types.LabTest>;
+  updateLabResult: (id: string, results: Types.LabTest['results'], notes?: string) => Promise<void>;
 
   // Grooming & Hotel Ops
   groomingPackages: Types.GroomingPackage[];
@@ -178,9 +178,9 @@ interface DataContextType {
   updateEmployee: (id: string, e: Partial<Types.Employee>) => Promise<void>;
   deleteEmployee: (id: string) => Promise<void>;
   absenceRecords: Types.AbsenceRecord[];
-  addAbsenceRecord: (ab: Omit<Types.AbsenceRecord, 'id'>) => void;
+  addAbsenceRecord: (ab: Omit<Types.AbsenceRecord, 'id'>) => Promise<void>;
   leaveRequests: Types.LeaveRequest[];
-  addLeaveRequest: (lr: Omit<Types.LeaveRequest, 'id'>) => void;
+  addLeaveRequest: (lr: Omit<Types.LeaveRequest, 'id'>) => Promise<void>;
 
   // CRM
   reminders: Types.Reminder[];
@@ -191,8 +191,8 @@ interface DataContextType {
 
   // Care Plan, Telehealth, EForm, Ambulance
   carePlans: Types.CarePlan[];
-  addCarePlan: (cp: Omit<Types.CarePlan, 'id' | 'planNo'>) => Types.CarePlan;
-  toggleCarePlanTask: (planId: string, taskId: string) => void;
+  addCarePlan: (cp: Omit<Types.CarePlan, 'id' | 'planNo'>) => Promise<Types.CarePlan>;
+  toggleCarePlanTask: (planId: string, taskId: string) => Promise<void>;
 
   telehealthSessions: Types.TelehealthSession[];
   addTelehealthSession: (th: Omit<Types.TelehealthSession, 'id' | 'sessionNo' | 'meetingUrl'>) => Types.TelehealthSession;
@@ -325,27 +325,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [customers, setCustomers] = useServerState<Types.Customer[]>('/customers', Seed.INITIAL_CUSTOMERS);
   const [pets, setPets] = useServerState<Types.Pet[]>('/pets', Seed.INITIAL_PETS);
   const [services, setServices] = useServerState<Types.ServiceItem[]>('/services', Seed.INITIAL_SERVICES);
-  const [doctorBookings, setDoctorBookings] = useLocalState<Types.DoctorBooking[]>('doc_bookings', Seed.INITIAL_DOCTOR_BOOKINGS);
+  const [doctorBookings, setDoctorBookings] = useServerState<Types.DoctorBooking[]>('/doc-bookings', Seed.INITIAL_DOCTOR_BOOKINGS);
   const [groomingBookings, setGroomingBookings] = useServerState<Types.GroomingBooking[]>('/grooming-bookings', Seed.INITIAL_GROOMING_BOOKINGS);
   const [hotelBookings, setHotelBookings] = useServerState<Types.HotelBooking[]>('/hotel-bookings', Seed.INITIAL_HOTEL_BOOKINGS);
   const [clinicVisits, setClinicVisits] = useServerState<Types.ClinicVisit[]>('/clinic-visits', Seed.INITIAL_CLINIC_VISITS);
-  const [soapNotes, setSoapNotes] = useLocalState<Types.SOAPNote[]>('soap_notes', Seed.INITIAL_SOAP_NOTES);
-  const [inpatients, setInpatients] = useLocalState<Types.Inpatient[]>('inpatients', Seed.INITIAL_INPATIENTS);
-  const [dischargeNotes, setDischargeNotes] = useLocalState<Types.DischargeNote[]>('discharge_notes', Seed.INITIAL_DISCHARGE_NOTES);
-  const [medicalRecords, setMedicalRecords] = useLocalState<Types.MedicalRecord[]>('medical_records', Seed.INITIAL_MEDICAL_RECORDS);
-  const [preConsultForms, setPreConsultForms] = useLocalState<Types.PreConsultForm[]>('pre_consult_forms', Seed.INITIAL_PRE_CONSULT_FORMS);
-  const [referralLetters, setReferralLetters] = useLocalState<Types.ReferralLetter[]>('referral_letters', Seed.INITIAL_REFERRAL_LETTERS);
-  const [visitSurveys, setVisitSurveys] = useLocalState<Types.VisitSurvey[]>('visit_surveys', Seed.INITIAL_VISIT_SURVEYS);
+  const [soapNotes, setSoapNotes] = useServerState<Types.SOAPNote[]>('/soap-notes', Seed.INITIAL_SOAP_NOTES);
+  const [inpatients, setInpatients] = useServerState<Types.Inpatient[]>('/inpatients', Seed.INITIAL_INPATIENTS);
+  const [dischargeNotes, setDischargeNotes] = useServerState<Types.DischargeNote[]>('/discharge-notes', Seed.INITIAL_DISCHARGE_NOTES);
+  const [medicalRecords, setMedicalRecords] = useServerState<Types.MedicalRecord[]>('/medical-records', Seed.INITIAL_MEDICAL_RECORDS);
+  const [preConsultForms, setPreConsultForms] = useServerState<Types.PreConsultForm[]>('/pre-consult-forms', Seed.INITIAL_PRE_CONSULT_FORMS);
+  const [referralLetters, setReferralLetters] = useServerState<Types.ReferralLetter[]>('/referral-letters', Seed.INITIAL_REFERRAL_LETTERS);
+  const [visitSurveys, setVisitSurveys] = useServerState<Types.VisitSurvey[]>('/visit-surveys', Seed.INITIAL_VISIT_SURVEYS);
 
-  const [vacSchedules, setVacSchedules] = useLocalState<Types.VacSchedule[]>('vac_schedules', Seed.INITIAL_VAC_SCHEDULES);
-  const [vacHistories, setVacHistories] = useLocalState<Types.VacHistory[]>('vac_histories', Seed.INITIAL_VAC_HISTORIES);
-  const [dewormingRecords, setDewormingRecords] = useLocalState<Types.DewormingRecord[]>('deworming_records', []);
+  const [vacSchedules, setVacSchedules] = useServerState<Types.VacSchedule[]>('/vac-schedules', Seed.INITIAL_VAC_SCHEDULES);
+  const [vacHistories, setVacHistories] = useServerState<Types.VacHistory[]>('/vac-histories', Seed.INITIAL_VAC_HISTORIES);
+  const [dewormingRecords, setDewormingRecords] = useServerState<Types.DewormingRecord[]>('/deworming-records', []);
   const [customerNotes, setCustomerNotes] = useServerState<Types.CustomerNote[]>('/customer-notes', []);
   const [interBranchTransfers, setInterBranchTransfers] = useLocalState<Types.InterBranchTransfer[]>('inter_branch_transfers', []);
-  const [surgicalProcedures, setSurgicalProcedures] = useLocalState<Types.SurgicalProcedure[]>('surgical_procedures', Seed.INITIAL_SURGICAL_PROCEDURES);
+  const [surgicalProcedures, setSurgicalProcedures] = useServerState<Types.SurgicalProcedure[]>('/surgical-procedures', Seed.INITIAL_SURGICAL_PROCEDURES);
 
   const [drugs, setDrugs] = useServerState<Types.Drug[]>('/drugs', Seed.INITIAL_DRUGS);
-  const [labTests, setLabTests] = useLocalState<Types.LabTest[]>('lab_tests', Seed.INITIAL_LAB_TESTS);
+  const [labTests, setLabTests] = useServerState<Types.LabTest[]>('/lab-tests', Seed.INITIAL_LAB_TESTS);
 
   const [groomingPackages, setGroomingPackages] = useServerState<Types.GroomingPackage[]>('/grooming-packages', Seed.INITIAL_GROOMING_PACKAGES);
   const [groomingSessions, setGroomingSessions] = useServerState<Types.GroomingSession[]>('/grooming-sessions', Seed.INITIAL_GROOMING_SESSIONS);
@@ -364,20 +364,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [cashTransactions, setCashTransactions] = useServerState<Types.CashTransaction[]>('/cash-transactions', Seed.INITIAL_CASH_TRANSACTIONS);
 
   const [employees, setEmployees] = useServerState<Types.Employee[]>('/employees', Seed.INITIAL_EMPLOYEES);
-  const [absenceRecords, setAbsenceRecords] = useLocalState<Types.AbsenceRecord[]>('absence_records', Seed.INITIAL_ABSENCE_RECORDS);
-  const [leaveRequests, setLeaveRequests] = useLocalState<Types.LeaveRequest[]>('leave_requests', Seed.INITIAL_LEAVE_REQUESTS);
+  const [absenceRecords, setAbsenceRecords] = useServerState<Types.AbsenceRecord[]>('/absence-records', Seed.INITIAL_ABSENCE_RECORDS);
+  const [leaveRequests, setLeaveRequests] = useServerState<Types.LeaveRequest[]>('/leave-requests', Seed.INITIAL_LEAVE_REQUESTS);
 
   const [reminders, setReminders] = useServerState<Types.Reminder[]>('/reminders', Seed.INITIAL_REMINDERS);
   const [loyaltyEntries, setLoyaltyEntries] = useLocalState<Types.LoyaltyEntry[]>('loyalty_entries', Seed.INITIAL_LOYALTY_ENTRIES);
 
-  const [carePlans, setCarePlans] = useLocalState<Types.CarePlan[]>('care_plans', Seed.INITIAL_CARE_PLANS);
-  const [telehealthSessions, setTelehealthSessions] = useLocalState<Types.TelehealthSession[]>('telehealth_sessions', Seed.INITIAL_TELEHEALTH_SESSIONS);
+  const [carePlans, setCarePlans] = useServerState<Types.CarePlan[]>('/care-plans', Seed.INITIAL_CARE_PLANS);
+  const [telehealthSessions, setTelehealthSessions] = useServerState<Types.TelehealthSession[]>('/telehealth-sessions', Seed.INITIAL_TELEHEALTH_SESSIONS);
   const [eFormTemplates, setEFormTemplates] = useLocalState<Types.EFormTemplate[]>('eform_templates', Seed.INITIAL_EFORM_TEMPLATES);
   const [eFormSubmissions, setEFormSubmissions] = useLocalState<Types.EFormSubmission[]>('eform_submissions', Seed.INITIAL_EFORM_SUBMISSIONS);
   const [informedConsents, setInformedConsents] = useLocalState<Types.InformedConsentRecord[]>('informed_consents', []);
 
-  const [ambulanceUnits, setAmbulanceUnits] = useLocalState<Types.AmbulanceUnit[]>('ambulance_units', Seed.INITIAL_AMBULANCE_UNITS);
-  const [ambulanceRequests, setAmbulanceRequests] = useLocalState<Types.AmbulanceRequest[]>('ambulance_requests', Seed.INITIAL_AMBULANCE_REQUESTS);
+  const [ambulanceUnits, setAmbulanceUnits] = useServerState<Types.AmbulanceUnit[]>('/ambulance-units', Seed.INITIAL_AMBULANCE_UNITS);
+  const [ambulanceRequests, setAmbulanceRequests] = useServerState<Types.AmbulanceRequest[]>('/ambulance-requests', Seed.INITIAL_AMBULANCE_REQUESTS);
 
   const [systemGroups, setSystemGroups] = useLocalState<Types.SystemGroup[]>('system_groups', Seed.INITIAL_SYSTEM_GROUPS);
   const [customerTierGroups, setCustomerTierGroups] = useLocalState<Types.CustomerTierGroup[]>('customer_tier_groups', Seed.INITIAL_CUSTOMER_TIER_GROUPS);
@@ -626,107 +626,67 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Hapus', 'Katalog Tarif & Layanan', current?.name || id, `Penghapusan item tarif layanan katalog: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
-  const addDoctorBooking = (b: Omit<Types.DoctorBooking, 'id' | 'bookingNo' | 'createdAt'>): Types.DoctorBooking => {
-    const newBooking: Types.DoctorBooking = {
-      ...b,
-      id: 'db_' + Date.now(),
-      bookingNo: 'DOC-' + new Date().toISOString().replace(/[-:]/g, '').substring(0, 8) + '-' + Math.floor(100 + Math.random() * 900),
-      createdAt: new Date().toISOString().substring(0, 10),
-    };
+  const addDoctorBooking = async (b: Omit<Types.DoctorBooking, 'id' | 'bookingNo' | 'createdAt'>): Promise<Types.DoctorBooking> => {
+    const newBooking = await api.post<Types.DoctorBooking>('/doc-bookings', b);
     setDoctorBookings((prev) => [newBooking, ...prev]);
     addAuditLog('Tambah', 'Booking & Antrean', newBooking.bookingNo, `Reservasi konsultasi dokter ${newBooking.doctorName} untuk pasien ${newBooking.petName} (${newBooking.timeSlot})`);
     addNotification({
       title: 'Booking Dokter Baru',
       message: `${newBooking.customerName} membuat booking untuk ${newBooking.petName} pada jam ${newBooking.timeSlot}`,
-      type: 'Booking',
-      priority: 'Sedang'
+      type: 'Booking', priority: 'Sedang',
     });
     return newBooking;
   };
 
-  const updateDoctorBooking = (id: string, updates: Partial<Types.DoctorBooking>) => {
+  const updateDoctorBooking = async (id: string, updates: Partial<Types.DoctorBooking>): Promise<void> => {
     const booking = doctorBookings.find((b) => b.id === id);
-    setDoctorBookings((prev) => prev.map((b) => (b.id === id ? { ...b, ...updates } : b)));
+    const updated = await api.put<Types.DoctorBooking>(`/doc-bookings/${id}`, updates);
+    setDoctorBookings((prev) => prev.map((b) => (b.id === id ? updated : b)));
     addAuditLog('Edit', 'Booking & Antrean', booking?.bookingNo || id, `Pembaruan data booking: ${JSON.stringify(updates)}`);
   };
 
-  const rescheduleDoctorBooking = (id: string, date: string, timeSlot: string, doctorId?: string, doctorName?: string) => {
+  const rescheduleDoctorBooking = async (id: string, date: string, timeSlot: string, doctorId?: string, doctorName?: string): Promise<void> => {
     const booking = doctorBookings.find((b) => b.id === id);
     if (!booking) return;
     const oldSlot = `${booking.date} ${booking.timeSlot}`;
-    const oldDoctor = booking.doctorName;
     const targetDoctorName = doctorName || booking.doctorName;
     const targetDoctorId = doctorId || booking.doctorId;
-
-    setDoctorBookings((prev) =>
-      prev.map((b) => {
-        if (b.id !== id) return b;
-        return {
-          ...b,
-          date,
-          timeSlot,
-          doctorId: targetDoctorId,
-          doctorName: targetDoctorName,
-          status: b.status === 'Batal' ? 'Terkonfirmasi' : b.status,
-        };
-      })
+    const updated = await api.put<Types.DoctorBooking>(`/doc-bookings/${id}`, {
+      date, timeSlot, doctorId: targetDoctorId, doctorName: targetDoctorName,
+      status: booking.status === 'Batal' ? 'Terkonfirmasi' : booking.status,
+    });
+    setDoctorBookings((prev) => prev.map((b) => (b.id === id ? updated : b)));
+    addAuditLog('Edit', 'Booking & Antrean', booking.bookingNo,
+      `Reschedule booking pasien ${booking.petName} (${booking.bookingNo}) dari ${oldSlot} (${booking.doctorName}) ke ${date} jam ${timeSlot} (${targetDoctorName})`,
+      { severity: 'Warning', previousValue: `${oldSlot} - ${booking.doctorName}`, newValue: `${date} ${timeSlot} - ${targetDoctorName}` }
     );
-
-    addAuditLog(
-      'Edit',
-      'Booking & Antrean',
-      booking.bookingNo,
-      `Reschedule booking pasien ${booking.petName} (${booking.bookingNo}) dari ${oldSlot} (${oldDoctor}) ke ${date} jam ${timeSlot} (${targetDoctorName})`,
-      {
-        severity: 'Warning',
-        previousValue: `${oldSlot} - ${oldDoctor}`,
-        newValue: `${date} ${timeSlot} - ${targetDoctorName}`
-      }
-    );
-
     addNotification({
       title: 'Jadwal Booking Di-reschedule',
       message: `Booking ${booking.bookingNo} (${booking.petName}) berhasil dipindahkan ke ${date} jam ${timeSlot}`,
-      type: 'Booking',
-      priority: 'Sedang'
+      type: 'Booking', priority: 'Sedang',
     });
   };
 
-  const updateDoctorBookingStatus = (id: string, status: Types.DoctorBooking['status']) => {
+  const updateDoctorBookingStatus = async (id: string, status: Types.DoctorBooking['status']): Promise<void> => {
     const booking = doctorBookings.find((b) => b.id === id);
-    setDoctorBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status } : b)));
+    const updated = await api.put<Types.DoctorBooking>(`/doc-bookings/${id}/status`, { status });
+    setDoctorBookings((prev) => prev.map((b) => (b.id === id ? updated : b)));
     addAuditLog('Edit', 'Booking & Antrean', booking?.bookingNo || id, `Status jadwal booking diubah menjadi: ${status}`);
   };
 
-  const checkInDoctorBooking = (id: string) => {
+  const checkInDoctorBooking = async (id: string): Promise<void> => {
     const booking = doctorBookings.find((b) => b.id === id);
     if (!booking) return;
-
-    updateDoctorBookingStatus(id, 'Selesai');
-
-    // Create a new clinic visit
-    const nextQueue = clinicVisits.filter((v) => v.status !== 'Selesai' && v.status !== 'Batal').length + 1;
+    await updateDoctorBookingStatus(id, 'Selesai');
     const pet = pets.find((p) => p.id === booking.petId);
-
-    const newVisit: Types.ClinicVisit = {
-      id: 'v_' + Date.now(),
-      visitNo: 'VIS-' + new Date().toISOString().replace(/[-:]/g, '').substring(0, 8) + '-' + String(nextQueue).padStart(2, '0'),
-      queueNo: nextQueue,
-      customerId: booking.customerId,
-      customerName: booking.customerName,
-      petId: booking.petId,
-      petName: booking.petName,
-      petSpecies: booking.petSpecies,
-      petBreed: pet?.breed || 'Umum',
-      doctorId: booking.doctorId,
-      doctorName: booking.doctorName,
-      complaint: booking.complaint,
-      status: 'Menunggu',
-      queuedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-    };
-
-    setClinicVisits((prev) => [...prev, newVisit]);
-    addAuditLog('Tambah', 'Poli & Antrean', newVisit.visitNo, `Check-in pasien ${booking.petName} ke antrean poli dokter ${booking.doctorName}`);
+    await addClinicVisit({
+      customerId: booking.customerId, customerName: booking.customerName,
+      petId: booking.petId, petName: booking.petName,
+      petSpecies: booking.petSpecies, petBreed: pet?.breed || 'Umum',
+      doctorId: booking.doctorId, doctorName: booking.doctorName,
+      complaint: booking.complaint, branchId: booking.branchId,
+    });
+    addAuditLog('Tambah', 'Poli & Antrean', booking.bookingNo, `Check-in pasien ${booking.petName} ke antrean poli dokter ${booking.doctorName}`);
   };
 
   const addGroomingBooking = async (b: Omit<Types.GroomingBooking, 'id' | 'bookingNo'>): Promise<void> => {
@@ -800,141 +760,100 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const saveSOAPNote = (soapData: Omit<Types.SOAPNote, 'id'>) => {
-    const existing = soapNotes.find((s) => s.visitId === soapData.visitId);
-    let soapId = existing?.id;
-    if (existing) {
-      setSoapNotes((prev) => prev.map((s) => (s.id === existing.id ? { ...s, ...soapData } : s)));
-    } else {
-      soapId = 'soap_' + Date.now();
-      setSoapNotes((prev) => [...prev, { ...soapData, id: soapId! }]);
-    }
-
-    // Auto create MedicalRecord entry
-    const newMr: Types.MedicalRecord = {
-      id: 'mr_' + Date.now(),
-      petId: soapData.petId,
-      date: soapData.date,
-      type: 'Kunjungan',
+  const saveSOAPNote = async (soapData: Omit<Types.SOAPNote, 'id'>): Promise<void> => {
+    const saved = await api.post<Types.SOAPNote>('/soap-notes', soapData);
+    setSoapNotes((prev) => {
+      const existing = prev.find((s) => s.visitId === soapData.visitId);
+      return existing ? prev.map((s) => (s.id === existing.id ? saved : s)) : [saved, ...prev];
+    });
+    // Side effect: create a medical record entry for the visit
+    const newMr = await api.post<Types.MedicalRecord>('/medical-records', {
+      petId: soapData.petId, date: soapData.date, type: 'Kunjungan',
       title: `SOAP: ${soapData.workingDiagnosis}`,
       description: `Rencana Terapi: ${soapData.medicationPlan}`,
-      performedBy: soapData.doctorName
-    };
+      performedBy: soapData.doctorName,
+    });
     setMedicalRecords((prev) => [newMr, ...prev]);
-
-    // If pet weight updated, update pet entity
+    // Side effect: update pet weight if measured
     if (soapData.weightKg) {
+      await api.put(`/pets/${soapData.petId}`, { weightKg: soapData.weightKg });
       setPets((prev) => prev.map((p) => (p.id === soapData.petId ? { ...p, weightKg: soapData.weightKg } : p)));
     }
-
-    addAuditLog(
-      'Tambah',
-      'Pemeriksaan Klinis (SOAP)',
-      soapData.visitId,
+    addAuditLog('Tambah', 'Pemeriksaan Klinis (SOAP)', soapData.visitId,
       `Pencatatan rekam SOAP: ${soapData.workingDiagnosis} | Terapi: ${soapData.medicationPlan || 'Sesuai resep'}`,
-      { severity: 'Warning' }
-    );
+      { severity: 'Warning' });
   };
 
-  const addInpatient = (inp: Omit<Types.Inpatient, 'id' | 'inpatientNo' | 'status' | 'admittedAt'>) => {
-    const newInp: Types.Inpatient = {
-      ...inp,
-      id: 'ip_' + Date.now(),
-      inpatientNo: 'INP-' + Date.now().toString().slice(-6),
-      status: 'Stabil',
-      admittedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
-    };
+  const addInpatient = async (inp: Omit<Types.Inpatient, 'id' | 'inpatientNo' | 'status' | 'admittedAt'>): Promise<void> => {
+    const newInp = await api.post<Types.Inpatient>('/inpatients', inp);
     setInpatients((prev) => [newInp, ...prev]);
     addAuditLog('Tambah', 'Rawat Inap', newInp.inpatientNo, `Admisi rawat inap untuk pasien ${newInp.petName} di kandang ${newInp.cageNo}`, { severity: 'Warning' });
   };
 
-  const updateInpatientStatus = (id: string, status: Types.Inpatient['status']) => {
+  const updateInpatientStatus = async (id: string, status: Types.Inpatient['status']): Promise<void> => {
     const current = inpatients.find((i) => i.id === id);
-    setInpatients((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
+    const updated = await api.put<Types.Inpatient>(`/inpatients/${id}/status`, { status });
+    setInpatients((prev) => prev.map((i) => (i.id === id ? updated : i)));
     addAuditLog('Edit', 'Rawat Inap', current?.inpatientNo || id, `Status kondisi rawat inap diperbarui menjadi: ${status}`, { severity: 'Warning' });
   };
 
-  const addDischargeNote = (dn: Omit<Types.DischargeNote, 'id' | 'createdAt'>) => {
-    const newDn: Types.DischargeNote = {
-      ...dn,
-      id: 'dn_' + Date.now(),
-      createdAt: new Date().toISOString().substring(0, 10)
-    };
+  const addDischargeNote = async (dn: Omit<Types.DischargeNote, 'id' | 'createdAt'>): Promise<void> => {
+    const newDn = await api.post<Types.DischargeNote>('/discharge-notes', dn);
     setDischargeNotes((prev) => [newDn, ...prev]);
     addAuditLog('Tambah', 'Rawat Inap', newDn.petName, `Penerbitan resume medis kepulangan rawat inap untuk ${newDn.petName}`, { severity: 'Warning' });
   };
 
-  const addMedicalRecord = (mr: Omit<Types.MedicalRecord, 'id'>) => {
-    const newMr = { ...mr, id: 'mr_' + Date.now() };
+  const addMedicalRecord = async (mr: Omit<Types.MedicalRecord, 'id'>): Promise<void> => {
+    const newMr = await api.post<Types.MedicalRecord>('/medical-records', mr);
     setMedicalRecords((prev) => [newMr, ...prev]);
     addAuditLog('Tambah', 'Rekam Medis (EMR)', mr.title, `Pencatatan rekam medis baru (${mr.type}) untuk pasien ID ${mr.petId}`);
   };
 
-  const addPreConsultForm = (pcf: Omit<Types.PreConsultForm, 'id' | 'status' | 'createdAt'>) => {
-    const newForm: Types.PreConsultForm = {
-      ...pcf,
-      id: 'pcf_' + Date.now(),
-      status: 'Menunggu',
-      createdAt: new Date().toISOString().substring(0, 16)
-    };
+  const addPreConsultForm = async (pcf: Omit<Types.PreConsultForm, 'id' | 'status' | 'createdAt'>): Promise<void> => {
+    const newForm = await api.post<Types.PreConsultForm>('/pre-consult-forms', pcf);
     setPreConsultForms((prev) => [newForm, ...prev]);
     addAuditLog('Tambah', 'Pre-Konsultasi', newForm.petName, `Formulir pra-konsultasi mandiri diisi untuk ${newForm.petName}`);
   };
 
-  const updatePreConsultStatus = (id: string, status: 'Menunggu' | 'Digunakan') => {
-    setPreConsultForms((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
+  const updatePreConsultStatus = async (id: string, status: 'Menunggu' | 'Digunakan'): Promise<void> => {
+    const updated = await api.put<Types.PreConsultForm>(`/pre-consult-forms/${id}/status`, { status });
+    setPreConsultForms((prev) => prev.map((p) => (p.id === id ? updated : p)));
     addAuditLog('Edit', 'Pre-Konsultasi', id, `Status formulir pra-konsultasi diubah menjadi: ${status}`);
   };
 
-  const addReferralLetter = (rl: Omit<Types.ReferralLetter, 'id' | 'referralNo' | 'createdAt'>) => {
-    const newLetter: Types.ReferralLetter = {
-      ...rl,
-      id: 'rl_' + Date.now(),
-      referralNo: 'REF-' + Date.now().toString().slice(-6),
-      createdAt: new Date().toISOString().substring(0, 10)
-    };
+  const addReferralLetter = async (rl: Omit<Types.ReferralLetter, 'id' | 'referralNo' | 'createdAt'>): Promise<void> => {
+    const newLetter = await api.post<Types.ReferralLetter>('/referral-letters', rl);
     setReferralLetters((prev) => [newLetter, ...prev]);
     addAuditLog('Tambah', 'Surat Rujukan Medis', newLetter.referralNo, `Penerbitan rujukan medis pasien ${newLetter.petName} ke ${newLetter.destinationClinic}`, { severity: 'Warning' });
   };
 
-  const addVisitSurvey = (vs: Omit<Types.VisitSurvey, 'id' | 'createdAt'>) => {
-    const newSurvey: Types.VisitSurvey = {
-      ...vs,
-      id: 'vs_' + Date.now(),
-      createdAt: new Date().toISOString().substring(0, 10)
-    };
+  const addVisitSurvey = async (vs: Omit<Types.VisitSurvey, 'id' | 'createdAt'>): Promise<void> => {
+    const newSurvey = await api.post<Types.VisitSurvey>('/visit-surveys', vs);
     setVisitSurveys((prev) => [newSurvey, ...prev]);
   };
 
-  const addVacSchedule = (vs: Omit<Types.VacSchedule, 'id'>) => {
-    setVacSchedules((prev) => [{ ...vs, id: 'vs_' + Date.now() }, ...prev]);
+  const addVacSchedule = async (vs: Omit<Types.VacSchedule, 'id'>): Promise<void> => {
+    const newVs = await api.post<Types.VacSchedule>('/vac-schedules', vs);
+    setVacSchedules((prev) => [newVs, ...prev]);
     addAuditLog('Tambah', 'Jadwal Vaksinasi', vs.vaccineName, `Penjadwalan vaksinasi ${vs.vaccineName} untuk pasien ${vs.petName}`);
   };
 
-  const addVacHistory = (vh: Omit<Types.VacHistory, 'id'>) => {
-    const newHistory = { ...vh, id: 'vh_' + Date.now() };
+  const addVacHistory = async (vh: Omit<Types.VacHistory, 'id'>): Promise<void> => {
+    // Server atomically: creates history + marks schedule done + creates medical record
+    const newHistory = await api.post<Types.VacHistory>('/vac-histories', vh);
     setVacHistories((prev) => [newHistory, ...prev]);
-
-    // Auto mark schedule completed
-    setVacSchedules((prev) =>
-      prev.map((s) => (s.petId === vh.petId && s.vaccineName.includes(vh.vaccineName) ? { ...s, status: 'Selesai' } : s))
-    );
-
-    // Auto add medical record
-    addMedicalRecord({
-      petId: vh.petId,
-      date: vh.givenDate,
-      type: 'Vaksinasi',
-      title: `Vaksinasi: ${vh.vaccineName}`,
-      description: `Sertifikat No: ${vh.certificateNo}, Batch: ${vh.batchNumber}`,
-      performedBy: vh.doctorName
-    });
-
+    // Refresh schedules and medical records from server to reflect side effects
+    const [freshSchedules, freshMR] = await Promise.all([
+      api.get<Types.VacSchedule[]>('/vac-schedules'),
+      api.get<Types.MedicalRecord[]>('/medical-records'),
+    ]);
+    setVacSchedules(freshSchedules);
+    setMedicalRecords(freshMR);
     addAuditLog('Tambah', 'Vaksinasi & Paspor', vh.vaccineName, `Pemberian vaksin ${vh.vaccineName} (Batch: ${vh.batchNumber}) & penerbitan sertifikat ${vh.certificateNo}`, { severity: 'Warning' });
   };
 
-  const addDewormingRecord = (dr: Omit<Types.DewormingRecord, 'id'>): Types.DewormingRecord => {
-    const newRecord: Types.DewormingRecord = { ...dr, id: 'dw_' + Date.now() };
+  const addDewormingRecord = async (dr: Omit<Types.DewormingRecord, 'id'>): Promise<Types.DewormingRecord> => {
+    const newRecord = await api.post<Types.DewormingRecord>('/deworming-records', dr);
     setDewormingRecords((prev) => [newRecord, ...prev]);
     addAuditLog('Tambah', 'Vaksinasi & Paspor', dr.medicineName, `Pemberian obat cacing/anti-parasit ${dr.medicineName} untuk pasien, jadwal ulang berikutnya ${dr.nextDueDate}`, { severity: 'Info' });
     return newRecord;
@@ -987,25 +906,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const addSurgicalProcedure = (sp: Omit<Types.SurgicalProcedure, 'id' | 'procedureNo'>) => {
-    const procedureNo = 'SURG-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(10 + Math.random() * 90);
-    const newSurg: Types.SurgicalProcedure = {
-      ...sp,
-      id: 'sp_' + Date.now(),
-      procedureNo
-    };
+  const addSurgicalProcedure = async (sp: Omit<Types.SurgicalProcedure, 'id' | 'procedureNo'>): Promise<void> => {
+    const newSurg = await api.post<Types.SurgicalProcedure>('/surgical-procedures', sp);
     setSurgicalProcedures((prev) => [newSurg, ...prev]);
-
-    // Auto add medical record
-    addMedicalRecord({
-      petId: sp.petId,
-      date: sp.date,
-      type: 'Tindakan',
+    // Side effect: auto-create medical record
+    await addMedicalRecord({
+      petId: sp.petId, date: sp.date, type: 'Tindakan',
       title: `Operasi Bedah: ${sp.procedureName}`,
       description: `Kategori: ${sp.category} | Dokter: ${sp.leadSurgeon} | Anestesi: ${sp.anesthesiaProtocol}`,
-      performedBy: sp.leadSurgeon
+      performedBy: sp.leadSurgeon,
     });
-
     addAuditLog('Tambah', 'Pemeriksaan Medis (CPPT)', sp.procedureName, `Pencatatan prosedur bedah (${sp.category}) untuk pasien ${sp.petName} oleh ${sp.leadSurgeon}`, { severity: 'Warning' });
   };
 
@@ -1048,34 +958,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Dispensing resep obat: ${qty} ${drug?.unit || 'unit'} (Stok sisa: ${updated.stock})`, { severity: 'Warning' });
   };
 
-  const addLabTest = (lt: Omit<Types.LabTest, 'id' | 'testNo' | 'status' | 'orderedAt'>) => {
-    const newTest: Types.LabTest = {
-      ...lt,
-      id: 'lt_' + Date.now(),
-      testNo: 'LAB-' + Date.now().toString().slice(-6),
-      status: 'Dalam Proses',
-      orderedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
-    };
+  const addLabTest = async (lt: Omit<Types.LabTest, 'id' | 'testNo' | 'status' | 'orderedAt'>): Promise<Types.LabTest> => {
+    const newTest = await api.post<Types.LabTest>('/lab-tests', lt);
     setLabTests((prev) => [newTest, ...prev]);
     addAuditLog('Tambah', 'Laboratorium & Diagnostik', newTest.testNo, `Order pemeriksaan laboratorium: ${newTest.testName} untuk pasien ${newTest.petName}`);
     return newTest;
   };
 
-  const updateLabResult = (id: string, results: Types.LabTest['results'], notes?: string) => {
+  const updateLabResult = async (id: string, results: Types.LabTest['results'], notes?: string): Promise<void> => {
     const test = labTests.find((lt) => lt.id === id);
-    setLabTests((prev) =>
-      prev.map((lt) =>
-        lt.id === id
-          ? {
-              ...lt,
-              status: 'Selesai',
-              completedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-              results,
-              notes: notes || lt.notes
-            }
-          : lt
-      )
-    );
+    const updated = await api.put<Types.LabTest>(`/lab-tests/${id}/result`, { results, notes });
+    setLabTests((prev) => prev.map((lt) => (lt.id === id ? updated : lt)));
     addAuditLog('Edit', 'Laboratorium & Diagnostik', test?.testNo || id, `Penginputan & validasi hasil tes laboratorium: ${test?.testName || id}`, { severity: 'Warning' });
   };
 
@@ -1323,13 +1216,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Hapus', 'SDM & Akses Karyawan', current?.name || id, `Penonaktifan akun karyawan & pencabutan seluruh akses sistem: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
-  const addAbsenceRecord = (ab: Omit<Types.AbsenceRecord, 'id'>) => {
-    setAbsenceRecords((prev) => [{ ...ab, id: 'ab_' + Date.now() }, ...prev]);
+  const addAbsenceRecord = async (ab: Omit<Types.AbsenceRecord, 'id'>): Promise<void> => {
+    const newAb = await api.post<Types.AbsenceRecord>('/absence-records', ab);
+    setAbsenceRecords((prev) => [newAb, ...prev]);
     addAuditLog('Tambah', 'SDM & Presensi', ab.employeeName, `Pencatatan presensi karyawan: ${ab.status} (${ab.date})`);
   };
 
-  const addLeaveRequest = (lr: Omit<Types.LeaveRequest, 'id'>) => {
-    setLeaveRequests((prev) => [{ ...lr, id: 'lr_' + Date.now() }, ...prev]);
+  const addLeaveRequest = async (lr: Omit<Types.LeaveRequest, 'id'>): Promise<void> => {
+    const newLr = await api.post<Types.LeaveRequest>('/leave-requests', lr);
+    setLeaveRequests((prev) => [newLr, ...prev]);
     addAuditLog('Tambah', 'SDM & Cuti', lr.employeeName, `Pengajuan cuti: ${lr.leaveType} (${lr.startDate} s/d ${lr.endDate})`);
   };
 
@@ -1348,38 +1243,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setReminders((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const addCarePlan = (cp: Omit<Types.CarePlan, 'id' | 'planNo'>): Types.CarePlan => {
-    const newPlan: Types.CarePlan = {
-      ...cp,
-      id: 'cp_' + Date.now(),
-      planNo: 'CP-' + Date.now().toString().slice(-6)
-    };
+  const addCarePlan = async (cp: Omit<Types.CarePlan, 'id' | 'planNo'>): Promise<Types.CarePlan> => {
+    const newPlan = await api.post<Types.CarePlan>('/care-plans', cp);
     setCarePlans((prev) => [newPlan, ...prev]);
     addAuditLog('Tambah', 'Care Plan & Tindakan', newPlan.planNo, `Pembuatan rencana perawatan medis terpadu untuk pasien ${newPlan.petName}`);
     return newPlan;
   };
 
-  const toggleCarePlanTask = (planId: string, taskId: string) => {
-    setCarePlans((prev) =>
-      prev.map((plan) => {
-        if (plan.id !== planId) return plan;
-        const updatedTasks = plan.tasks.map((task) => {
-          if (task.id !== taskId) return task;
-          const isCompleted = !task.isCompleted;
-          return {
-            ...task,
-            isCompleted,
-            completedAt: isCompleted ? new Date().toISOString().replace('T', ' ').substring(0, 16) : undefined
-          };
-        });
-        const allDone = updatedTasks.every((t) => t.isCompleted);
-        return {
-          ...plan,
-          tasks: updatedTasks,
-          status: allDone ? 'Selesai' : plan.status
-        };
-      })
-    );
+  const toggleCarePlanTask = async (planId: string, taskId: string): Promise<void> => {
+    const updated = await api.post<Types.CarePlan>(`/care-plans/${planId}/tasks/${taskId}/toggle`, {});
+    setCarePlans((prev) => prev.map((p) => (p.id === planId ? updated : p)));
   };
 
   const addTelehealthSession = (th: Omit<Types.TelehealthSession, 'id' | 'sessionNo' | 'meetingUrl'>): Types.TelehealthSession => {
