@@ -142,26 +142,26 @@ interface DataContextType {
 
   // Inventory & Purchasing
   productCategories: Types.ProductCategory[];
-  addProductCategory: (name: string) => void;
-  deleteProductCategory: (id: string) => void;
+  addProductCategory: (name: string) => Promise<void>;
+  deleteProductCategory: (id: string) => Promise<void>;
 
   warehouses: Types.Warehouse[];
-  addWarehouse: (name: string) => void;
-  deleteWarehouse: (id: string) => void;
+  addWarehouse: (name: string) => Promise<void>;
+  deleteWarehouse: (id: string) => Promise<void>;
 
   stockItems: Types.StockItem[];
-  addStockItem: (si: Omit<Types.StockItem, 'id' | 'sku'> & { sku?: string }) => Types.StockItem;
-  updateStockItem: (id: string, si: Partial<Types.StockItem>) => void;
+  addStockItem: (si: Omit<Types.StockItem, 'id' | 'sku'> & { sku?: string }) => Promise<Types.StockItem>;
+  updateStockItem: (id: string, si: Partial<Types.StockItem>) => Promise<void>;
   stockMovements: Types.StockMovement[];
-  addStockMovement: (sm: Omit<Types.StockMovement, 'id' | 'date'>) => void;
+  addStockMovement: (sm: Omit<Types.StockMovement, 'id' | 'date'>) => Promise<void>;
 
   suppliers: Types.Supplier[];
-  addSupplier: (s: Omit<Types.Supplier, 'id' | 'code'>) => void;
-  updateSupplier: (id: string, s: Partial<Types.Supplier>) => void;
-  deleteSupplier: (id: string) => void;
+  addSupplier: (s: Omit<Types.Supplier, 'id' | 'code'>) => Promise<void>;
+  updateSupplier: (id: string, s: Partial<Types.Supplier>) => Promise<void>;
+  deleteSupplier: (id: string) => Promise<void>;
   purchaseOrders: Types.PurchaseOrder[];
-  addPurchaseOrder: (po: Omit<Types.PurchaseOrder, 'id' | 'poNo' | 'date' | 'status'>) => void;
-  receivePurchaseOrder: (poId: string) => void;
+  addPurchaseOrder: (po: Omit<Types.PurchaseOrder, 'id' | 'poNo' | 'date' | 'status'>) => Promise<void>;
+  receivePurchaseOrder: (poId: string) => Promise<void>;
 
   // Billing & Finance — invoices/cashTransactions sejak Fase 1 disimpan di
   // Postgres (server/invoiceService.ts)
@@ -174,9 +174,9 @@ interface DataContextType {
 
   // HR & Shifts
   employees: Types.Employee[];
-  addEmployee: (e: Omit<Types.Employee, 'id' | 'nik'>) => void;
-  updateEmployee: (id: string, e: Partial<Types.Employee>) => void;
-  deleteEmployee: (id: string) => void;
+  addEmployee: (e: Omit<Types.Employee, 'id' | 'nik'>) => Promise<void>;
+  updateEmployee: (id: string, e: Partial<Types.Employee>) => Promise<void>;
+  deleteEmployee: (id: string) => Promise<void>;
   absenceRecords: Types.AbsenceRecord[];
   addAbsenceRecord: (ab: Omit<Types.AbsenceRecord, 'id'>) => void;
   leaveRequests: Types.LeaveRequest[];
@@ -353,17 +353,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [hotelReservations, setHotelReservations] = useLocalState<Types.HotelReservation[]>('hotel_reservations', Seed.INITIAL_HOTEL_RESERVATIONS);
   const [dailyMonitorings, setDailyMonitorings] = useLocalState<Types.DailyMonitoring[]>('daily_monitorings', Seed.INITIAL_DAILY_MONITORING);
 
-  const [productCategories, setProductCategories] = useLocalState<Types.ProductCategory[]>('product_categories', Seed.INITIAL_PRODUCT_CATEGORIES);
-  const [warehouses, setWarehouses] = useLocalState<Types.Warehouse[]>('warehouses', Seed.INITIAL_WAREHOUSES);
-  const [stockItems, setStockItems] = useLocalState<Types.StockItem[]>('stock_items', Seed.INITIAL_STOCK_ITEMS);
-  const [stockMovements, setStockMovements] = useLocalState<Types.StockMovement[]>('stock_movements', Seed.INITIAL_STOCK_MOVEMENTS);
-  const [suppliers, setSuppliers] = useLocalState<Types.Supplier[]>('suppliers', Seed.INITIAL_SUPPLIERS);
-  const [purchaseOrders, setPurchaseOrders] = useLocalState<Types.PurchaseOrder[]>('purchase_orders', Seed.INITIAL_PURCHASE_ORDERS);
+  const [productCategories, setProductCategories] = useServerState<Types.ProductCategory[]>('/product-categories', Seed.INITIAL_PRODUCT_CATEGORIES);
+  const [warehouses, setWarehouses] = useServerState<Types.Warehouse[]>('/warehouses', Seed.INITIAL_WAREHOUSES);
+  const [stockItems, setStockItems] = useServerState<Types.StockItem[]>('/stock-items', Seed.INITIAL_STOCK_ITEMS);
+  const [stockMovements, setStockMovements] = useServerState<Types.StockMovement[]>('/stock-movements', Seed.INITIAL_STOCK_MOVEMENTS);
+  const [suppliers, setSuppliers] = useServerState<Types.Supplier[]>('/suppliers', Seed.INITIAL_SUPPLIERS);
+  const [purchaseOrders, setPurchaseOrders] = useServerState<Types.PurchaseOrder[]>('/purchase-orders', Seed.INITIAL_PURCHASE_ORDERS);
 
   const [invoices, setInvoices] = useServerState<Types.Invoice[]>('/invoices', Seed.INITIAL_INVOICES);
   const [cashTransactions, setCashTransactions] = useServerState<Types.CashTransaction[]>('/cash-transactions', Seed.INITIAL_CASH_TRANSACTIONS);
 
-  const [employees, setEmployees] = useLocalState<Types.Employee[]>('employees', Seed.INITIAL_EMPLOYEES);
+  const [employees, setEmployees] = useServerState<Types.Employee[]>('/employees', Seed.INITIAL_EMPLOYEES);
   const [absenceRecords, setAbsenceRecords] = useLocalState<Types.AbsenceRecord[]>('absence_records', Seed.INITIAL_ABSENCE_RECORDS);
   const [leaveRequests, setLeaveRequests] = useLocalState<Types.LeaveRequest[]>('leave_requests', Seed.INITIAL_LEAVE_REQUESTS);
 
@@ -1190,59 +1190,56 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Tambah', 'Monitoring Pasien', dm.petName, `Pencatatan monitoring harian: Suhu ${dm.temperatureC ?? '-'}°C oleh ${dm.staffName}`);
   };
 
-  const addProductCategory = (name: string) => {
+  const addProductCategory = async (name: string): Promise<void> => {
     const trimmed = name.trim();
-    if (!trimmed || productCategories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) return;
-    setProductCategories((prev) => [...prev, { id: 'cat_' + Date.now(), name: trimmed }]);
+    if (!trimmed) return;
+    const newCat = await api.post<Types.ProductCategory>('/product-categories', { name: trimmed });
+    setProductCategories((prev) => [...prev, newCat]);
     addAuditLog('Tambah', 'Master Data', trimmed, `Kategori produk baru ditambahkan: ${trimmed}`);
   };
 
-  const deleteProductCategory = (id: string) => {
+  const deleteProductCategory = async (id: string): Promise<void> => {
     const current = productCategories.find((c) => c.id === id);
+    await api.del(`/product-categories/${id}`);
     setProductCategories((prev) => prev.filter((c) => c.id !== id));
     addAuditLog('Hapus', 'Master Data', current?.name || id, `Kategori produk dihapus: ${current?.name || id}`, { severity: 'Warning' });
   };
 
-  const addWarehouse = (name: string) => {
+  const addWarehouse = async (name: string): Promise<void> => {
     const trimmed = name.trim();
-    if (!trimmed || warehouses.some((w) => w.name.toLowerCase() === trimmed.toLowerCase())) return;
-    setWarehouses((prev) => [...prev, { id: 'wh_' + Date.now(), name: trimmed }]);
+    if (!trimmed) return;
+    const newWh = await api.post<Types.Warehouse>('/warehouses', { name: trimmed });
+    setWarehouses((prev) => [...prev, newWh]);
     addAuditLog('Tambah', 'Master Data', trimmed, `Gudang/lokasi baru ditambahkan: ${trimmed}`);
   };
 
-  const deleteWarehouse = (id: string) => {
+  const deleteWarehouse = async (id: string): Promise<void> => {
     const current = warehouses.find((w) => w.id === id);
+    await api.del(`/warehouses/${id}`);
     setWarehouses((prev) => prev.filter((w) => w.id !== id));
     addAuditLog('Hapus', 'Master Data', current?.name || id, `Gudang/lokasi dihapus: ${current?.name || id}`, { severity: 'Warning' });
   };
 
-  const addStockItem = (si: Omit<Types.StockItem, 'id' | 'sku'> & { sku?: string }) => {
-    const newItem: Types.StockItem = {
-      ...si,
-      id: 'si_' + Date.now(),
-      sku: si.sku || 'SKU-' + Math.floor(1000 + Math.random() * 9000)
-    };
+  const addStockItem = async (si: Omit<Types.StockItem, 'id' | 'sku'> & { sku?: string }): Promise<Types.StockItem> => {
+    const newItem = await api.post<Types.StockItem>('/stock-items', si);
     setStockItems((prev) => [...prev, newItem]);
     addAuditLog('Tambah', 'Inventaris & Gudang', newItem.name, `Penambahan item stok gudang baru: ${newItem.name} (SKU: ${newItem.sku})`, { severity: 'Info' });
     return newItem;
   };
 
-  const updateStockItem = (id: string, siData: Partial<Types.StockItem>) => {
+  const updateStockItem = async (id: string, siData: Partial<Types.StockItem>): Promise<void> => {
     const current = stockItems.find((s) => s.id === id);
-    setStockItems((prev) => prev.map((s) => (s.id === id ? { ...s, ...siData } : s)));
+    const updated = await api.put<Types.StockItem>(`/stock-items/${id}`, siData);
+    setStockItems((prev) => prev.map((s) => (s.id === id ? updated : s)));
     addAuditLog('Edit', 'Inventaris & Gudang', current?.name || id, `Pembaruan item inventaris gudang: ${current?.name || id}`, {
       severity: 'Warning',
       previousValue: current ? JSON.stringify({ stock: current.stock, purchasePrice: current.purchasePrice, sellingPrice: current.sellingPrice }) : undefined,
-      newValue: JSON.stringify(siData)
+      newValue: JSON.stringify(siData),
     });
   };
 
-  const addStockMovement = (sm: Omit<Types.StockMovement, 'id' | 'date'>) => {
-    const newMov: Types.StockMovement = {
-      ...sm,
-      id: 'sm_' + Date.now(),
-      date: new Date().toISOString().substring(0, 10)
-    };
+  const addStockMovement = async (sm: Omit<Types.StockMovement, 'id' | 'date'>): Promise<void> => {
+    const newMov = await api.post<Types.StockMovement>('/stock-movements', sm);
     setStockMovements((prev) => [newMov, ...prev]);
     addAuditLog(
       newMov.type === 'Opname' ? 'Edit' : 'Tambah',
@@ -1253,71 +1250,46 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const addSupplier = (sup: Omit<Types.Supplier, 'id' | 'code'>) => {
-    const newSup: Types.Supplier = {
-      ...sup,
-      id: 'sup_' + Date.now(),
-      code: generateUniqueCode('SUP', suppliers.map((s) => s.code))
-    };
+  const addSupplier = async (sup: Omit<Types.Supplier, 'id' | 'code'>): Promise<void> => {
+    const newSup = await api.post<Types.Supplier>('/suppliers', sup);
     setSuppliers((prev) => [...prev, newSup]);
     addAuditLog('Tambah', 'Purchasing & Vendor', newSup.name, `Vendor supplier baru didaftarkan: ${newSup.name} (${newSup.phone})`);
   };
 
-  const updateSupplier = (id: string, sData: Partial<Types.Supplier>) => {
+  const updateSupplier = async (id: string, sData: Partial<Types.Supplier>): Promise<void> => {
     const current = suppliers.find((s) => s.id === id);
-    setSuppliers((prev) => prev.map((s) => (s.id === id ? { ...s, ...sData } : s)));
+    const updated = await api.put<Types.Supplier>(`/suppliers/${id}`, sData);
+    setSuppliers((prev) => prev.map((s) => (s.id === id ? updated : s)));
     addAuditLog('Edit', 'Purchasing & Vendor', current?.name || id, `Pembaruan data vendor supplier: ${current?.name || id}`, { severity: 'Warning' });
   };
 
-  const deleteSupplier = (id: string) => {
+  const deleteSupplier = async (id: string): Promise<void> => {
     const current = suppliers.find((s) => s.id === id);
+    await api.del(`/suppliers/${id}`);
     setSuppliers((prev) => prev.filter((s) => s.id !== id));
     addAuditLog('Hapus', 'Purchasing & Vendor', current?.name || id, `Penghapusan vendor supplier: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
-  const addPurchaseOrder = (po: Omit<Types.PurchaseOrder, 'id' | 'poNo' | 'date' | 'status'>) => {
-    const newPo: Types.PurchaseOrder = {
-      ...po,
-      id: 'po_' + Date.now(),
-      poNo: 'PO-' + Date.now().toString().slice(-6),
-      date: new Date().toISOString().substring(0, 10),
-      status: 'Draft'
-    };
+  const addPurchaseOrder = async (po: Omit<Types.PurchaseOrder, 'id' | 'poNo' | 'date' | 'status'>): Promise<void> => {
+    const newPo = await api.post<Types.PurchaseOrder>('/purchase-orders', po);
     setPurchaseOrders((prev) => [newPo, ...prev]);
     addAuditLog('Tambah', 'Purchasing & PO', newPo.poNo, `Pembuatan Purchase Order baru ke ${newPo.supplierName} senilai Rp ${newPo.totalAmount.toLocaleString('id-ID')}`, { severity: 'Warning' });
   };
 
-  const receivePurchaseOrder = (poId: string) => {
+  const receivePurchaseOrder = async (poId: string): Promise<void> => {
     const po = purchaseOrders.find((p) => p.id === poId);
     if (!po) return;
-
-    setPurchaseOrders((prev) => prev.map((p) => (p.id === poId ? { ...p, status: 'Diterima' } : p)));
-
-    // Update stock items. Quick PO (reorder cepat) menulis itemName sebagai
-    // "Nama Barang [SKU]", sedangkan PO manual menulis nama polos apa adanya
-    // — cocokkan dengan SKU di dalam kurung dulu, baru fallback ke nama
-    // persis, supaya kedua sumber PO tetap menambah stok saat diterima.
-    po.items.forEach((item) => {
-      const skuMatch = item.itemName.match(/\[([^\]]+)\]\s*$/);
-      const sku = skuMatch ? skuMatch[1].trim() : null;
-      const nameWithoutSku = item.itemName.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
-      const stock = stockItems.find(
-        (s) => (sku && s.sku === sku) || s.name === item.itemName || s.name === nameWithoutSku
-      );
-      if (stock) {
-        updateStockItem(stock.id, { stock: stock.stock + item.quantity });
-        addStockMovement({
-          itemId: stock.id,
-          itemName: stock.name,
-          type: 'Masuk',
-          quantity: item.quantity,
-          toWarehouse: stock.warehouse,
-          referenceNo: po.poNo,
-          operator: user?.name || 'Staf Logistik'
-        });
-      }
-    });
-
+    // Server atomically: marks PO received, bumps stock, records movements.
+    await api.post(`/purchase-orders/${poId}/receive`, {});
+    // Refresh stock data from server to reflect accurate quantities.
+    const [freshStock, freshMovements, freshPOs] = await Promise.all([
+      api.get<Types.StockItem[]>('/stock-items'),
+      api.get<Types.StockMovement[]>('/stock-movements'),
+      api.get<Types.PurchaseOrder[]>('/purchase-orders'),
+    ]);
+    setStockItems(freshStock);
+    setStockMovements(freshMovements);
+    setPurchaseOrders(freshPOs);
     addAuditLog('Tambah', 'Purchasing & Penerimaan', po.poNo, `Purchase Order ${po.poNo} diterima penuh & stok gudang otomatis bertambah`, { severity: 'Warning' });
   };
 
@@ -1366,28 +1338,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Tambah', 'Buku Kas & Keuangan', newCt.transNo, `Pencatatan kas operasional [${newCt.type}] senilai Rp ${newCt.amount.toLocaleString('id-ID')} (${newCt.category}): ${newCt.description}`, { severity: 'Kritis' });
   };
 
-  const addEmployee = (emp: Omit<Types.Employee, 'id' | 'nik'>) => {
-    const newEmp: Types.Employee = {
-      ...emp,
-      id: 'e_' + Date.now(),
-      nik: generateUniqueCode('EMP', employees.map((e) => e.nik))
-    };
+  const addEmployee = async (emp: Omit<Types.Employee, 'id' | 'nik'>): Promise<void> => {
+    const newEmp = await api.post<Types.Employee>('/employees', emp);
     setEmployees((prev) => [...prev, newEmp]);
     addAuditLog('Tambah', 'SDM & Akses Karyawan', newEmp.name, `Pendaftaran akun karyawan baru: ${newEmp.name} (Peran: ${newEmp.role}, NIK: ${newEmp.nik})`, { severity: 'Kritis' });
   };
 
-  const updateEmployee = (id: string, empData: Partial<Types.Employee>) => {
+  const updateEmployee = async (id: string, empData: Partial<Types.Employee>): Promise<void> => {
     const current = employees.find((e) => e.id === id);
-    setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, ...empData } : e)));
+    const updated = await api.put<Types.Employee>(`/employees/${id}`, empData);
+    setEmployees((prev) => prev.map((e) => (e.id === id ? updated : e)));
     addAuditLog('Edit', 'SDM & Akses Karyawan', current?.name || id, `Pembaruan konfigurasi data/gaji/hak akses karyawan: ${current?.name || id}`, {
       severity: 'Kritis',
       previousValue: current ? JSON.stringify({ role: current.role, baseSalary: current.baseSalary, status: current.status }) : undefined,
-      newValue: JSON.stringify(empData)
+      newValue: JSON.stringify(empData),
     });
   };
 
-  const deleteEmployee = (id: string) => {
+  const deleteEmployee = async (id: string): Promise<void> => {
     const current = employees.find((e) => e.id === id);
+    await api.del(`/employees/${id}`);
     setEmployees((prev) => prev.filter((e) => e.id !== id));
     addAuditLog('Hapus', 'SDM & Akses Karyawan', current?.name || id, `Penonaktifan akun karyawan & pencabutan seluruh akses sistem: ${current?.name || id}`, { severity: 'Kritis' });
   };

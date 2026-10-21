@@ -1,4 +1,13 @@
 import "dotenv/config";
+import {
+  listProductCategories, createProductCategory, deleteProductCategory,
+  listWarehouses, createWarehouse, deleteWarehouse,
+  listStockItems, createStockItem, updateStockItem,
+  listStockMovements, createStockMovement,
+  listSuppliers, createSupplier, updateSupplier, deleteSupplier,
+  listPurchaseOrders, createPurchaseOrder, updatePurchaseOrderStatus, receivePurchaseOrder,
+} from "./server/inventoryService";
+import { listEmployees, createEmployee, updateEmployee, deleteEmployee } from "./server/employeeService";
 import express from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -1928,6 +1937,109 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   // Reset Queue / Daily Cron endpoint simulation
   app.post("/api/cron/reset-queue", requireRole("admin", "superadmin"), (_req, res) => {
     res.json({ success: true, message: "Queue reset successfully" });
+  });
+
+  // ── Inventory ──────────────────────────────────────────────────────────────
+  app.get("/api/product-categories", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listProductCategories() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/product-categories", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createProductCategory(req.body?.name || "") }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/product-categories/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteProductCategory(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/warehouses", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listWarehouses() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/warehouses", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createWarehouse(req.body?.name || "") }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/warehouses/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteWarehouse(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/stock-items", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listStockItems() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/stock-items", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createStockItem(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/stock-items/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateStockItem(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/stock-movements", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listStockMovements() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/stock-movements", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createStockMovement(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/suppliers", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listSuppliers() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/suppliers", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createSupplier(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/suppliers/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateSupplier(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/suppliers/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteSupplier(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/purchase-orders", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listPurchaseOrders() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/purchase-orders", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createPurchaseOrder(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/purchase-orders/:id/status", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updatePurchaseOrderStatus(req.params.id, req.body?.status) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/purchase-orders/:id/receive", requireRole(...STAFF_ROLES), async (req, res) => {
+    try {
+      const operator = (req as any).session?.name || "Staf Logistik";
+      res.json({ success: true, data: await receivePurchaseOrder(req.params.id, operator) });
+    } catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  // ── Employees ──────────────────────────────────────────────────────────────
+  app.get("/api/employees", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listEmployees() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/employees", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createEmployee(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/employees/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateEmployee(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/employees/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteEmployee(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
 
   // Global error handler — catches errors forwarded by next(err) from async
