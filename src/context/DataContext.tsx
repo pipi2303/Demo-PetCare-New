@@ -195,9 +195,9 @@ interface DataContextType {
   toggleCarePlanTask: (planId: string, taskId: string) => Promise<void>;
 
   telehealthSessions: Types.TelehealthSession[];
-  addTelehealthSession: (th: Omit<Types.TelehealthSession, 'id' | 'sessionNo' | 'meetingUrl'>) => Types.TelehealthSession;
-  updateTelehealthStatus: (id: string, status: Types.TelehealthSession['status']) => void;
-  updateTelehealthSession: (id: string, updates: Partial<Types.TelehealthSession>) => void;
+  addTelehealthSession: (th: Omit<Types.TelehealthSession, 'id' | 'sessionNo' | 'meetingUrl'>) => Promise<Types.TelehealthSession>;
+  updateTelehealthStatus: (id: string, status: Types.TelehealthSession['status']) => Promise<void>;
+  updateTelehealthSession: (id: string, updates: Partial<Types.TelehealthSession>) => Promise<void>;
 
   eFormTemplates: Types.EFormTemplate[];
   addEFormTemplate: (t: Omit<Types.EFormTemplate, 'id'>) => Promise<void>;
@@ -209,12 +209,12 @@ interface DataContextType {
   addInformedConsent: (ic: Omit<Types.InformedConsentRecord, 'id'>) => Promise<Types.InformedConsentRecord>;
 
   ambulanceUnits: Types.AmbulanceUnit[];
-  addAmbulanceUnit: (u: Omit<Types.AmbulanceUnit, 'id'>) => void;
-  updateAmbulanceUnit: (id: string, u: Partial<Types.AmbulanceUnit>) => void;
-  deleteAmbulanceUnit: (id: string) => void;
+  addAmbulanceUnit: (u: Omit<Types.AmbulanceUnit, 'id'>) => Promise<void>;
+  updateAmbulanceUnit: (id: string, u: Partial<Types.AmbulanceUnit>) => Promise<void>;
+  deleteAmbulanceUnit: (id: string) => Promise<void>;
   ambulanceRequests: Types.AmbulanceRequest[];
-  addAmbulanceRequest: (ar: Omit<Types.AmbulanceRequest, 'id' | 'requestNo' | 'requestedAt' | 'status'>) => Types.AmbulanceRequest;
-  updateAmbulanceStatus: (id: string, status: Types.AmbulanceRequest['status'], unitCode?: string) => void;
+  addAmbulanceRequest: (ar: Omit<Types.AmbulanceRequest, 'id' | 'requestNo' | 'requestedAt' | 'status'>) => Promise<Types.AmbulanceRequest>;
+  updateAmbulanceStatus: (id: string, status: Types.AmbulanceRequest['status'], unitCode?: string) => Promise<void>;
 
   // Grup Akses & Tier Membership (Master Data)
   systemGroups: Types.SystemGroup[];
@@ -1244,25 +1244,58 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCarePlans((prev) => prev.map((p) => (p.id === planId ? updated : p)));
   };
 
-  const addTelehealthSession = (th: Omit<Types.TelehealthSession, 'id' | 'sessionNo' | 'meetingUrl'>): Types.TelehealthSession => {
-    const newTh: Types.TelehealthSession = {
-      ...th,
-      id: 'th_' + Date.now(),
-      sessionNo: 'TH-' + Date.now().toString().slice(-6),
-      meetingUrl: 'https://meet.petcare.id/th-' + Date.now().toString().slice(-6)
-    };
+  // Maps backend telehealth status → frontend display status
+  const thStatusToFrontend = (s: string): Types.TelehealthSession['status'] => {
+    if (s === 'in_progress') return 'Berlangsung';
+    if (s === 'completed') return 'Selesai';
+    if (s === 'cancelled' || s === 'no_show') return 'Dibatalkan';
+    return 'Menunggu'; // scheduled, waiting_room
+  };
+  // Maps frontend status → backend transition target
+  const thStatusToBackend = (s: Types.TelehealthSession['status']): string => {
+    if (s === 'Berlangsung') return 'in_progress';
+    if (s === 'Selesai') return 'completed';
+    if (s === 'Dibatalkan') return 'cancelled';
+    return 'waiting_room';
+  };
+  // Converts server TelehealthRecord shape → frontend TelehealthSession type
+  const mapThRecord = (r: any): Types.TelehealthSession => ({
+    id: r.id, sessionNo: r.sessionNo,
+    customerId: r.customerId ?? "", customerName: r.customerName ?? "",
+    petId: r.petId ?? "", petName: r.petName ?? r.patientName ?? "",
+    doctorName: r.doctorName ?? "", date: r.date ?? r.scheduledAt?.substring(0, 10) ?? "",
+    timeSlot: r.timeSlot ?? r.scheduledAt?.substring(11, 16) ?? "",
+    durationMinutes: r.durationMinutes ?? 30, type: (r.type as any) || 'Konsultasi',
+    complaint: r.complaint ?? "", fee: r.fee ?? 0,
+    status: thStatusToFrontend(r.status),
+    meetingUrl: r.meetingUrl ?? `https://meet.petcare.id/${r.sessionNo}`,
+    notes: r.notes, diagnosis: r.diagnosis, prescription: r.prescription,
+    operationId: r.id, consentAcceptedAt: r.consentAcceptedAt,
+  });
+
+  const addTelehealthSession = async (th: Omit<Types.TelehealthSession, 'id' | 'sessionNo' | 'meetingUrl'>): Promise<Types.TelehealthSession> => {
+    const raw = await api.post<any>('/operations/telehealth/sessions', {
+      ...th, patientName: th.petName, customerId: th.customerId,
+      doctorId: th.doctorName, scheduledAt: th.date && th.timeSlot ? `${th.date}T${th.timeSlot}:00.000Z` : undefined,
+      consentAcceptedAt: th.consentAcceptedAt || new Date().toISOString(),
+    });
+    const newTh = mapThRecord(raw);
     setTelehealthSessions((prev) => [newTh, ...prev]);
     addAuditLog('Tambah', 'Telehealth & Konsultasi', newTh.sessionNo, `Jadwal telekonsultasi baru untuk ${newTh.petName} dengan dokter ${newTh.doctorName}`);
     return newTh;
   };
 
-  const updateTelehealthStatus = (id: string, status: Types.TelehealthSession['status']) => {
-    setTelehealthSessions((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
+  const updateTelehealthStatus = async (id: string, status: Types.TelehealthSession['status']): Promise<void> => {
+    const raw = await api.post<any>(`/operations/telehealth/sessions/${id}/transition`, { status: thStatusToBackend(status) });
+    const updated = mapThRecord(raw);
+    setTelehealthSessions((prev) => prev.map((t) => (t.id === id ? updated : t)));
     addAuditLog('Edit', 'Telehealth & Konsultasi', id, `Status telekonsultasi diubah menjadi: ${status}`);
   };
 
-  const updateTelehealthSession = (id: string, updates: Partial<Types.TelehealthSession>) => {
-    setTelehealthSessions((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+  const updateTelehealthSession = async (id: string, updates: Partial<Types.TelehealthSession>): Promise<void> => {
+    const raw = await api.put<any>(`/operations/telehealth/sessions/${id}`, updates);
+    const updated = mapThRecord(raw);
+    setTelehealthSessions((prev) => prev.map((t) => (t.id === id ? updated : t)));
     addAuditLog('Edit', 'Telehealth & Konsultasi', id, `Pembaruan data telekonsultasi: ${id}`);
   };
 
@@ -1300,41 +1333,94 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newConsent;
   };
 
-  const addAmbulanceUnit = (u: Omit<Types.AmbulanceUnit, 'id'>) => {
-    const newUnit: Types.AmbulanceUnit = { ...u, id: 'au_' + Date.now() };
-    setAmbulanceUnits((prev) => [...prev, newUnit]);
-    addAuditLog('Tambah', 'Ambulans Emergency', newUnit.vehicleName, `Armada ambulans baru didaftarkan: ${newUnit.vehicleName} (${newUnit.plateNo})`);
+  // Maps backend ambulance unit status → frontend status
+  const auStatusToFrontend = (s: string): Types.AmbulanceUnit['status'] => {
+    if (s === 'assigned') return 'Bertugas';
+    if (s === 'maintenance') return 'Maintenance';
+    return 'Tersedia';
+  };
+  const auStatusToBackend = (s: Types.AmbulanceUnit['status']) => {
+    if (s === 'Bertugas') return 'assigned';
+    if (s === 'Maintenance') return 'maintenance';
+    return 'available';
+  };
+  const mapAuRecord = (r: any): Types.AmbulanceUnit => ({
+    id: r.id, code: r.code, vehicleName: r.vehicleName ?? "", plateNo: r.plateNo ?? "",
+    status: auStatusToFrontend(r.status), currentDriver: r.currentDriver ?? "",
+    currentParamedic: r.currentParamedic ?? "", equipmentStatus: r.equipmentStatus ?? "",
+  });
+
+  // Maps backend ambulance request status → frontend status
+  const arStatusToFrontend = (s: string): Types.AmbulanceRequest['status'] => {
+    if (s === 'en_route') return 'Menuju Lokasi';
+    if (s === 'arrived') return 'Penjemputan';
+    if (s === 'patient_onboard' || s === 'at_clinic') return 'Perjalanan';
+    if (s === 'handed_over' || s === 'closed') return 'Completed';
+    if (s === 'cancelled') return 'Cancelled';
+    return 'Menunggu';
+  };
+  const arStatusToBackend = (s: Types.AmbulanceRequest['status']) => {
+    if (s === 'Menuju Lokasi') return 'en_route';
+    if (s === 'Penjemputan') return 'arrived';
+    if (s === 'Perjalanan') return 'patient_onboard';
+    if (s === 'Completed') return 'closed';
+    if (s === 'Cancelled') return 'cancelled';
+    return null; // Menunggu = no transition
+  };
+  const mapArRecord = (r: any): Types.AmbulanceRequest => ({
+    id: r.id, requestNo: r.requestNo,
+    customerName: r.customerName ?? r.callerName ?? "", customerPhone: r.customerPhone ?? r.callerPhone ?? "",
+    petName: r.petName ?? r.patientName ?? "", petSpecies: r.petSpecies ?? "",
+    urgency: (r.urgency === 'emergency' ? 'Emergency' : r.urgency === 'urgent' ? 'Urgent' : 'Normal') as any,
+    pickupAddress: r.pickupAddress ?? "", destination: r.destination ?? "",
+    assignedUnitCode: r.assignedUnitCode ?? "",
+    status: arStatusToFrontend(r.status),
+    requestedAt: r.createdAt ? r.createdAt.replace('T', ' ').substring(0, 16) : "",
+    notes: r.notes, operationId: r.id,
+  });
+
+  const addAmbulanceUnit = async (u: Omit<Types.AmbulanceUnit, 'id'>): Promise<void> => {
+    const raw = await api.post<any>('/operations/ambulance/units', { ...u, status: auStatusToBackend(u.status) });
+    setAmbulanceUnits((prev) => [...prev, mapAuRecord(raw)]);
+    addAuditLog('Tambah', 'Ambulans Emergency', u.vehicleName, `Armada ambulans baru didaftarkan: ${u.vehicleName} (${u.plateNo})`);
   };
 
-  const updateAmbulanceUnit = (id: string, uData: Partial<Types.AmbulanceUnit>) => {
+  const updateAmbulanceUnit = async (id: string, uData: Partial<Types.AmbulanceUnit>): Promise<void> => {
     const current = ambulanceUnits.find((u) => u.id === id);
-    setAmbulanceUnits((prev) => prev.map((u) => (u.id === id ? { ...u, ...uData } : u)));
+    const raw = await api.put<any>(`/operations/ambulance/units/${id}`, {
+      ...uData, status: uData.status ? auStatusToBackend(uData.status) : undefined,
+    });
+    setAmbulanceUnits((prev) => prev.map((u) => (u.id === id ? mapAuRecord(raw) : u)));
     addAuditLog('Edit', 'Ambulans Emergency', current?.vehicleName || id, `Pembaruan data armada ambulans: ${current?.vehicleName || id}`, { severity: 'Warning' });
   };
 
-  const deleteAmbulanceUnit = (id: string) => {
+  const deleteAmbulanceUnit = async (id: string): Promise<void> => {
     const current = ambulanceUnits.find((u) => u.id === id);
+    await api.del(`/operations/ambulance/units/${id}`);
     setAmbulanceUnits((prev) => prev.filter((u) => u.id !== id));
     addAuditLog('Hapus', 'Ambulans Emergency', current?.vehicleName || id, `Penghapusan armada ambulans: ${current?.vehicleName || id}`, { severity: 'Kritis' });
   };
 
-  const addAmbulanceRequest = (ar: Omit<Types.AmbulanceRequest, 'id' | 'requestNo' | 'requestedAt' | 'status'>): Types.AmbulanceRequest => {
-    const newAr: Types.AmbulanceRequest = {
-      ...ar,
-      id: 'ar_' + Date.now(),
-      requestNo: 'AMB-REQ-' + Date.now().toString().slice(-6),
-      requestedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      status: 'Menunggu'
-    };
+  const addAmbulanceRequest = async (ar: Omit<Types.AmbulanceRequest, 'id' | 'requestNo' | 'requestedAt' | 'status'>): Promise<Types.AmbulanceRequest> => {
+    const raw = await api.post<any>('/operations/ambulance/requests', {
+      ...ar, urgency: ar.urgency?.toLowerCase(),
+      patientName: ar.petName, callerName: ar.customerName, callerPhone: ar.customerPhone,
+    });
+    const newAr = mapArRecord(raw);
     setAmbulanceRequests((prev) => [newAr, ...prev]);
     addAuditLog('Tambah', 'Ambulans Emergency', newAr.requestNo, `Permintaan penjemputan darurat ambulans untuk ${newAr.petName} (Urgensi: ${newAr.urgency})`, { severity: 'Warning' });
     return newAr;
   };
 
-  const updateAmbulanceStatus = (id: string, status: Types.AmbulanceRequest['status'], unitCode?: string) => {
-    setAmbulanceRequests((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status, assignedUnitCode: unitCode || r.assignedUnitCode } : r))
-    );
+  const updateAmbulanceStatus = async (id: string, status: Types.AmbulanceRequest['status'], unitCode?: string): Promise<void> => {
+    const backendStatus = arStatusToBackend(status);
+    if (!backendStatus) return; // 'Menunggu' has no transition
+    const unit = unitCode ? ambulanceUnits.find((u) => u.code === unitCode) : undefined;
+    const raw = await api.post<any>(`/operations/ambulance/requests/${id}/transition`, {
+      status: backendStatus, unitId: unit?.id,
+    });
+    const updated = mapArRecord(raw);
+    setAmbulanceRequests((prev) => prev.map((r) => (r.id === id ? updated : r)));
     addAuditLog('Edit', 'Ambulans Emergency', id, `Status armada ambulans diperbarui menjadi: ${status}${unitCode ? ` (Unit: ${unitCode})` : ''}`);
   };
 

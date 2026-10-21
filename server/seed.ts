@@ -204,4 +204,18 @@ export async function seedIfEmpty() {
     }
     console.log(`[Seed] cash_transactions: ${INITIAL_CASH_TRANSACTIONS.length} baris.`);
   }
+
+  if (await isEmpty("ambulance_units")) {
+    const fleet = [
+      { code: "AMB-01", vehicleName: "Ambulans Unit 1", plateNo: "B 1234 AMB", currentDriver: "Ahmad Sopir", currentParamedic: "Budi Paramedik", equipmentStatus: "Lengkap" },
+      { code: "AMB-02", vehicleName: "Ambulans Unit 2", plateNo: "B 5678 AMB", currentDriver: "Citra Sopir", currentParamedic: "Dian Paramedik", equipmentStatus: "Lengkap" },
+    ];
+    for (const u of fleet) {
+      await pool.query(
+        "INSERT INTO ambulance_units (code, status, vehicle_name, plate_no, current_driver, current_paramedic, equipment_status) VALUES ($1,'available',$2,$3,$4,$5,$6)",
+        [u.code, u.vehicleName, u.plateNo, u.currentDriver, u.currentParamedic, u.equipmentStatus]
+      );
+    }
+    console.log(`[Seed] ambulance_units: ${fleet.length} armada.`);
+  }
 }

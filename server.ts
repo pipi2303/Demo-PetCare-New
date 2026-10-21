@@ -97,8 +97,12 @@ import {
   initOperationsService,
   listOperations,
   registerAmbulanceUnit,
+  updateAmbulanceUnit,
+  deleteAmbulanceUnit,
   transitionAmbulanceRequest,
-  transitionTelehealthSession
+  createTelehealthSession,
+  transitionTelehealthSession,
+  updateTelehealthSession,
 } from "./server/operationsService";
 import { closePool, pool as dbPool } from "./server/db";
 import { runMigrations } from "./server/migrate";
@@ -310,6 +314,14 @@ async function startServer() {
     try { res.status(201).json({ success: true, data: await registerAmbulanceUnit(req.body || {}, actorFor(req)) }); }
     catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
+  app.put("/api/operations/ambulance/units/:id", requireRole("owner_klinik", "owner_petcare", "admin", "superadmin"), async (req, res) => {
+    try { res.json({ success: true, data: await updateAmbulanceUnit(req.params.id, req.body || {}) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
+  });
+  app.delete("/api/operations/ambulance/units/:id", requireRole("owner_klinik", "owner_petcare", "admin", "superadmin"), async (req, res) => {
+    try { await deleteAmbulanceUnit(req.params.id); res.json({ success: true }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
+  });
 
   app.post("/api/operations/ambulance/requests", requireRole(...OPERATIONS_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createAmbulanceRequest(req.body || {}, actorFor(req)) }); }
@@ -328,6 +340,10 @@ async function startServer() {
 
   app.post("/api/operations/telehealth/sessions/:id/transition", requireRole("owner_klinik", "owner_petcare", "admin", "dokter", "superadmin"), async (req, res) => {
     try { res.json({ success: true, data: await transitionTelehealthSession(req.params.id, req.body?.status, actorFor(req), req.body?.note) }); }
+    catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
+  });
+  app.put("/api/operations/telehealth/sessions/:id", requireRole("owner_klinik", "owner_petcare", "admin", "dokter", "superadmin"), async (req, res) => {
+    try { res.json({ success: true, data: await updateTelehealthSession(req.params.id, req.body || {}) }); }
     catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 

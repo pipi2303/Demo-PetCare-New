@@ -57,7 +57,13 @@ function now() {
 }
 
 function toAmbulanceUnit(row: any): AmbulanceUnitRecord {
-  return { id: row.id, code: row.code, status: row.status, updatedAt: row.updated_at.toISOString() };
+  return {
+    id: row.id, code: row.code, status: row.status,
+    vehicleName: row.vehicle_name ?? "", plateNo: row.plate_no ?? "",
+    currentDriver: row.current_driver ?? "", currentParamedic: row.current_paramedic ?? "",
+    equipmentStatus: row.equipment_status ?? "",
+    updatedAt: row.updated_at.toISOString(),
+  };
 }
 
 function toEvent(row: any): OperationEvent {
@@ -66,37 +72,39 @@ function toEvent(row: any): OperationEvent {
 
 function toAmbulanceRequest(row: any, events: OperationEvent[]): AmbulanceRequestRecord {
   return {
-    id: row.id,
-    requestNo: row.request_no,
-    patientName: row.patient_name,
-    callerName: row.caller_name,
-    callerPhone: row.caller_phone,
-    urgency: row.urgency,
+    id: row.id, requestNo: row.request_no,
+    patientName: row.patient_name, callerName: row.caller_name,
+    callerPhone: row.caller_phone, urgency: row.urgency,
     pickupAddress: row.pickup_address,
-    latitude: row.latitude ?? undefined,
-    longitude: row.longitude ?? undefined,
-    notes: row.notes ?? undefined,
-    status: row.status,
+    latitude: row.latitude ?? undefined, longitude: row.longitude ?? undefined,
+    notes: row.notes ?? undefined, status: row.status,
     assignedUnitId: row.assigned_unit_id ?? undefined,
-    createdAt: row.created_at.toISOString(),
-    updatedAt: row.updated_at.toISOString(),
+    // Extended frontend fields
+    customerName: row.customer_name ?? "", customerPhone: row.customer_phone ?? "",
+    petName: row.pet_name ?? "", petSpecies: row.pet_species ?? "",
+    destination: row.destination ?? "", assignedUnitCode: row.assigned_unit_code ?? "",
+    createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
     events,
   };
 }
 
 function toTelehealthSession(row: any, events: OperationEvent[]): TelehealthRecord {
   return {
-    id: row.id,
-    sessionNo: row.session_no,
-    patientName: row.patient_name,
-    customerId: row.customer_id,
-    doctorId: row.doctor_id,
-    scheduledAt: row.scheduled_at.toISOString(),
+    id: row.id, sessionNo: row.session_no,
+    patientName: row.patient_name, customerId: row.customer_id,
+    doctorId: row.doctor_id, scheduledAt: row.scheduled_at.toISOString(),
     durationMinutes: row.duration_minutes,
     consentAcceptedAt: row.consent_accepted_at.toISOString(),
     status: row.status,
-    createdAt: row.created_at.toISOString(),
-    updatedAt: row.updated_at.toISOString(),
+    // Extended frontend fields
+    customerName: row.customer_name ?? "", petId: row.pet_id ?? undefined,
+    petName: row.pet_name ?? "", doctorName: row.doctor_name ?? "",
+    date: row.date ? (row.date instanceof Date ? row.date.toISOString().substring(0, 10) : String(row.date)) : undefined,
+    timeSlot: row.time_slot ?? "", type: row.type ?? "",
+    complaint: row.complaint ?? "", fee: row.fee != null ? Number(row.fee) : 0,
+    meetingUrl: row.meeting_url ?? undefined, notes: row.notes ?? undefined,
+    diagnosis: row.diagnosis ?? undefined, prescription: row.prescription ?? undefined,
+    createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
     events,
   };
 }
@@ -145,46 +153,63 @@ export async function listOperations() {
   };
 }
 
-export async function registerAmbulanceUnit(input: { code: string; status?: AmbulanceUnitRecord["status"] }, _actor: string) {
+export async function registerAmbulanceUnit(
+  input: { code: string; status?: AmbulanceUnitRecord["status"]; vehicleName?: string; plateNo?: string; currentDriver?: string; currentParamedic?: string; equipmentStatus?: string },
+  _actor: string
+) {
   const code = input.code?.trim().toUpperCase();
   if (!code) throw new Error("Kode unit ambulance wajib diisi.");
   const { rows: existingRows } = await pool.query("SELECT * FROM ambulance_units WHERE code = $1", [code]);
   if (existingRows[0]) return toAmbulanceUnit(existingRows[0]);
   const { rows } = await pool.query(
-    "INSERT INTO ambulance_units (code, status) VALUES ($1, $2) RETURNING *",
-    [code, input.status || "available"]
+    "INSERT INTO ambulance_units (code, status, vehicle_name, plate_no, current_driver, current_paramedic, equipment_status) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+    [code, input.status || "available", input.vehicleName ?? "", input.plateNo ?? "", input.currentDriver ?? "", input.currentParamedic ?? "", input.equipmentStatus ?? ""]
   );
   return toAmbulanceUnit(rows[0]);
 }
 
+export async function updateAmbulanceUnit(id: string, patch: Record<string, any>) {
+  const { rows: cur } = await pool.query("SELECT * FROM ambulance_units WHERE id=$1", [id]);
+  if (!cur[0]) throw new Error("Unit ambulance tidak ditemukan.");
+  const c = cur[0];
+  const { rows } = await pool.query(
+    "UPDATE ambulance_units SET vehicle_name=$1, plate_no=$2, current_driver=$3, current_paramedic=$4, equipment_status=$5, status=$6, updated_at=now() WHERE id=$7 RETURNING *",
+    [patch.vehicleName ?? c.vehicle_name, patch.plateNo ?? c.plate_no, patch.currentDriver ?? c.current_driver,
+     patch.currentParamedic ?? c.current_paramedic, patch.equipmentStatus ?? c.equipment_status,
+     patch.status ?? c.status, id]
+  );
+  return toAmbulanceUnit(rows[0]);
+}
+
+export async function deleteAmbulanceUnit(id: string) {
+  await pool.query("DELETE FROM ambulance_units WHERE id=$1", [id]);
+}
+
 export async function createAmbulanceRequest(
-  input: Omit<AmbulanceRequestRecord, "id" | "requestNo" | "status" | "createdAt" | "updatedAt" | "events">,
+  input: Omit<AmbulanceRequestRecord, "id" | "requestNo" | "status" | "createdAt" | "updatedAt" | "events"> & Record<string, any>,
   actor: string
 ) {
-  if (!input.patientName?.trim() || !input.callerName?.trim() || !input.callerPhone?.trim() || !input.pickupAddress?.trim()) {
+  // Accept both old field names (patientName/callerName) and new frontend names (petName/customerName)
+  const patientName = (input.patientName || input.petName || "").trim();
+  const callerName = (input.callerName || input.customerName || "").trim();
+  const callerPhone = (input.callerPhone || input.customerPhone || "").trim();
+  const pickupAddress = (input.pickupAddress || "").trim();
+  if (!patientName || !callerName || !callerPhone || !pickupAddress) {
     throw new Error("Data pasien, pelapor, telepon, dan lokasi penjemputan wajib diisi.");
   }
-  if (input.latitude !== undefined && (!Number.isFinite(input.latitude) || input.latitude < -90 || input.latitude > 90)) throw new Error("Latitude tidak valid.");
-  if (input.longitude !== undefined && (!Number.isFinite(input.longitude) || input.longitude < -180 || input.longitude > 180)) throw new Error("Longitude tidak valid.");
-
   const createdAt = now();
   const requestNo = `AMB-${createdAt.slice(0, 10).replaceAll("-", "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
 
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      `INSERT INTO ambulance_requests (request_no, patient_name, caller_name, caller_phone, urgency, pickup_address, latitude, longitude, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'received') RETURNING *`,
-      [
-        requestNo,
-        input.patientName,
-        input.callerName,
-        input.callerPhone,
-        input.urgency,
-        input.pickupAddress,
-        input.latitude ?? null,
-        input.longitude ?? null,
-        input.notes ?? null,
-      ]
+      `INSERT INTO ambulance_requests
+         (request_no, patient_name, caller_name, caller_phone, urgency, pickup_address,
+          latitude, longitude, notes, status, customer_name, customer_phone, pet_name,
+          pet_species, destination)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'received',$10,$11,$12,$13,$14) RETURNING *`,
+      [requestNo, patientName, callerName, callerPhone, input.urgency || "normal",
+       pickupAddress, input.latitude ?? null, input.longitude ?? null, input.notes ?? null,
+       callerName, callerPhone, patientName, input.petSpecies ?? "", input.destination ?? ""]
     );
     const request = rows[0];
     const { rows: eventRows } = await client.query(
@@ -252,31 +277,42 @@ const TELEHEALTH_TRANSITIONS: Record<TelehealthStatus, TelehealthStatus[]> = {
 };
 
 export async function createTelehealthSession(
-  input: Omit<TelehealthRecord, "id" | "sessionNo" | "status" | "createdAt" | "updatedAt" | "events">,
+  input: Omit<TelehealthRecord, "id" | "sessionNo" | "status" | "createdAt" | "updatedAt" | "events"> & Record<string, any>,
   actor: string
 ) {
-  if (!input.patientName?.trim() || !input.customerId?.trim() || !input.doctorId?.trim() || !input.consentAcceptedAt) {
-    throw new Error("Pasien, pelanggan, dokter, dan persetujuan telehealth wajib diisi.");
-  }
-  if (!Number.isInteger(input.durationMinutes) || input.durationMinutes < 15 || input.durationMinutes > 60) {
-    throw new Error("Durasi telehealth harus 15–60 menit.");
-  }
-  if (Number.isNaN(Date.parse(input.scheduledAt))) throw new Error("Jadwal telehealth tidak valid.");
+  const patientName = (input.patientName || input.petName || "").trim();
+  const customerId = (input.customerId || "").trim();
+  const doctorId = (input.doctorId || "").trim();
+  // Accept either scheduledAt ISO or date+timeSlot combo
+  const scheduledAt = input.scheduledAt || (input.date && input.timeSlot ? `${input.date}T${input.timeSlot}:00.000Z` : "");
+  const consentAcceptedAt = input.consentAcceptedAt || new Date().toISOString();
+  const durationMinutes = Number(input.durationMinutes) || 30;
 
-  const { rows: conflictRows } = await pool.query(
-    `SELECT 1 FROM telehealth_sessions WHERE doctor_id = $1 AND scheduled_at = $2 AND status NOT IN ('cancelled', 'no_show')`,
-    [input.doctorId, input.scheduledAt]
-  );
-  if (conflictRows.length > 0) throw new Error("Dokter sudah memiliki sesi telehealth pada waktu tersebut.");
+  if (!patientName || !customerId) throw new Error("Pasien dan pelanggan wajib diisi.");
+  if (scheduledAt && !Number.isNaN(Date.parse(scheduledAt)) && doctorId) {
+    const { rows: conflictRows } = await pool.query(
+      `SELECT 1 FROM telehealth_sessions WHERE doctor_id=$1 AND scheduled_at=$2 AND status NOT IN ('cancelled','no_show')`,
+      [doctorId, scheduledAt]
+    );
+    if (conflictRows.length > 0) throw new Error("Dokter sudah memiliki sesi telehealth pada waktu tersebut.");
+  }
 
   const createdAt = now();
   const sessionNo = `TH-${createdAt.slice(0, 10).replaceAll("-", "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
 
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      `INSERT INTO telehealth_sessions (session_no, patient_name, customer_id, doctor_id, scheduled_at, duration_minutes, consent_accepted_at, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'scheduled') RETURNING *`,
-      [sessionNo, input.patientName, input.customerId, input.doctorId, input.scheduledAt, input.durationMinutes, input.consentAcceptedAt]
+      `INSERT INTO telehealth_sessions
+         (session_no, patient_name, customer_id, doctor_id, scheduled_at, duration_minutes,
+          consent_accepted_at, status, customer_name, pet_id, pet_name, doctor_name,
+          date, time_slot, type, complaint, fee, meeting_url, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'scheduled',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+      [sessionNo, patientName, customerId, doctorId || null,
+       scheduledAt || null, durationMinutes, consentAcceptedAt,
+       input.customerName ?? "", input.petId || null, input.petName ?? patientName,
+       input.doctorName ?? "", input.date || null, input.timeSlot ?? "",
+       input.type ?? "", input.complaint ?? "", input.fee ?? 0,
+       input.meetingUrl ?? null, input.notes ?? null]
     );
     const session = rows[0];
     const { rows: eventRows } = await client.query(
@@ -285,6 +321,28 @@ export async function createTelehealthSession(
     );
     return toTelehealthSession(session, [toEvent(eventRows[0])]);
   });
+}
+
+export async function updateTelehealthSession(id: string, patch: Record<string, any>) {
+  const { rows: cur } = await pool.query("SELECT * FROM telehealth_sessions WHERE id=$1", [id]);
+  if (!cur[0]) throw new Error("Sesi telehealth tidak ditemukan.");
+  const c = cur[0];
+  const { rows } = await pool.query(
+    `UPDATE telehealth_sessions SET
+       customer_name=$1, pet_id=$2, pet_name=$3, doctor_name=$4, date=$5, time_slot=$6,
+       type=$7, complaint=$8, fee=$9, meeting_url=$10, notes=$11, diagnosis=$12,
+       prescription=$13, updated_at=now()
+     WHERE id=$14 RETURNING *`,
+    [patch.customerName ?? c.customer_name, patch.petId ?? c.pet_id,
+     patch.petName ?? c.pet_name, patch.doctorName ?? c.doctor_name,
+     patch.date ?? c.date, patch.timeSlot ?? c.time_slot,
+     patch.type ?? c.type, patch.complaint ?? c.complaint,
+     patch.fee ?? c.fee, patch.meetingUrl ?? c.meeting_url,
+     patch.notes ?? c.notes, patch.diagnosis ?? c.diagnosis,
+     patch.prescription ?? c.prescription, id]
+  );
+  const { rows: evts } = await pool.query("SELECT * FROM telehealth_events WHERE session_id=$1 ORDER BY at ASC", [id]);
+  return toTelehealthSession(rows[0], evts.map(toEvent));
 }
 
 export async function transitionTelehealthSession(id: string, to: TelehealthStatus, actor: string, note?: string) {
