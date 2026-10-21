@@ -100,7 +100,6 @@ import {
   updateAmbulanceUnit,
   deleteAmbulanceUnit,
   transitionAmbulanceRequest,
-  createTelehealthSession,
   transitionTelehealthSession,
   updateTelehealthSession,
 } from "./server/operationsService";
@@ -655,10 +654,13 @@ async function startServer() {
   // persists them to Postgres so they cannot be cleared by users.
   app.post("/api/audit/log", requireSession, async (req, res) => {
     try {
-      const { userName, userRole, action, module, target, details, severity, branchName } = req.body || {};
+      const { userName, userRole, action, module, target, details, severity, branchName, branchId, previousValue, newValue } = req.body || {};
       await dbPool.query(
-        "INSERT INTO audit_logs (user_name, user_role, action, module, target, details, severity, branch_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-        [userName || "Sistem", userRole || "system", action || "unknown", module || "Sistem", target || "", details || "", severity || "Info", branchName || null]
+        `INSERT INTO audit_logs (user_name, user_role, action, module, target, details, severity, branch_name, branch_id, previous_value, new_value)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [userName || "Sistem", userRole || "system", action || "unknown", module || "Sistem",
+         target || "", details || "", severity || "Info", branchName || null,
+         branchId || null, previousValue || null, newValue || null]
       );
       res.json({ success: true });
     } catch {

@@ -214,6 +214,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         branchName: options?.branchName,
         logMessage: `Login berhasil untuk ${data.account.name} (${data.account.role})`
       });
+      // One-time: migrate any legacy localStorage data to Postgres (fire-and-forget)
+      import("../utils/legacyMigration").then(({ runLegacyMigrationIfNeeded }) => {
+        runLegacyMigrationIfNeeded().catch(() => {/* non-critical */});
+      });
       return { success: true };
     } catch (e) {
       recordSecurityLog('Login', emailToTry, 'Gagal menghubungi server autentikasi saat login.', null, 'Kritis');

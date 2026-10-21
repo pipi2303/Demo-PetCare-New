@@ -1,10 +1,19 @@
 /**
  * Minimal smoke tests — run with: tsx server/smoke-test.ts
  * Requires the app server to be running on PORT (default 3000).
+ * Set SEED_DEFAULT_PASSWORD (same value used at first boot) before running.
  * Tests: auth flow, core CRUD, ambulance operations, backup integrity.
  */
 
 const BASE = `http://localhost:${process.env.PORT || 3000}/api`;
+const SMOKE_EMAIL = process.env.SMOKE_EMAIL || "owner@petcare.id";
+const SMOKE_PASSWORD = process.env.SMOKE_PASSWORD || process.env.SEED_DEFAULT_PASSWORD || "";
+
+if (!SMOKE_PASSWORD) {
+  console.error("❌ SMOKE_PASSWORD (or SEED_DEFAULT_PASSWORD) not set.\n   Run: SMOKE_PASSWORD=<password-from-server-logs> npm run test:smoke");
+  process.exit(1);
+}
+
 let passed = 0;
 let failed = 0;
 let token = "";
@@ -29,10 +38,10 @@ async function run() {
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   console.log("Auth");
-  const login = await req("POST", "/auth/login", { email: "admin@petcare.id", password: "wrong" });
+  const login = await req("POST", "/auth/login", { email: SMOKE_EMAIL, password: "definitely-wrong-pw-xyz" });
   assert("login with bad password returns 401", login.status === 401 || login.body?.success === false);
 
-  const goodLogin = await req("POST", "/auth/login", { email: "owner@petcare.id", password: "petcare123" });
+  const goodLogin = await req("POST", "/auth/login", { email: SMOKE_EMAIL, password: SMOKE_PASSWORD });
   assert("login with correct password succeeds", goodLogin.status === 200 && goodLogin.body?.success === true, JSON.stringify(goodLogin.body));
   token = goodLogin.body?.data?.token ?? "";
   assert("login returns session token", token.length > 0);

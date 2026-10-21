@@ -10,7 +10,8 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.cjs",
     "lint": "tsc --noEmit",
-    "test:smoke": "tsx server/smoke-test.ts"
+    "test:smoke": "tsx server/smoke-test.ts",
+    "test:smoke:dev": "SEED_DEFAULT_PASSWORD=petcare123 tsx server/smoke-test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

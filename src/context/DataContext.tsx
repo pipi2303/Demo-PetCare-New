@@ -431,6 +431,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     api.post('/audit/log', {
       userName: newLog.userName, userRole: newLog.userRole, action, module: moduleName,
       target, details, severity: newLog.severity, branchName: newLog.branchName,
+      branchId: newLog.branchId, previousValue: newLog.previousValue, newValue: newLog.newValue,
     }).catch(() => {/* non-critical — local state is source of truth for UI */});
   };
 
