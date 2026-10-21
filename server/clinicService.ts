@@ -3,8 +3,8 @@ import { pool } from "./db";
 const SELECT_VISIT = `
   SELECT clinic_visits.*, customers.name AS customer_name, pets.name AS pet_name, pets.species AS pet_species, pets.breed AS pet_breed
   FROM clinic_visits
-  JOIN customers ON customers.id = clinic_visits.customer_id
-  JOIN pets ON pets.id = clinic_visits.pet_id
+  JOIN customers ON customers.id = clinic_visits.customer_id AND customers.deleted_at IS NULL
+  JOIN pets ON pets.id = clinic_visits.pet_id AND pets.deleted_at IS NULL
 `;
 
 function toClinicVisit(row: any) {

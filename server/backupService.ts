@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import { gzipSync } from "zlib";
+import { gzipSync, gunzipSync } from "zlib";
 import { execFile } from "child_process";
 import { pool } from "./db";
 
@@ -338,4 +338,51 @@ export async function verifySnapshotIntegrity(snapshotId: string) {
     cloudUri: filePath || "",
     verifiedAt: new Date().toISOString(),
   };
+}
+
+export async function restoreFromSnapshot(snapshotId: string) {
+  const { rows } = await pool.query("SELECT * FROM backup_records WHERE id = $1", [snapshotId]);
+  const record = rows[0];
+  if (!record) throw new Error(`Snapshot tidak ditemukan: ${snapshotId}`);
+
+  const filePath = record.file_path as string;
+  if (!filePath || !fs.existsSync(filePath)) throw new Error(`File backup tidak ada di disk: ${filePath}`);
+
+  const fileContent = fs.readFileSync(filePath);
+  const computedHash = crypto.createHash("sha256").update(fileContent).digest("hex");
+  if (computedHash !== record.sha256) throw new Error("Integrity check gagal — SHA256 tidak cocok, file mungkin korup.");
+
+  const dump: Record<string, any[]> = JSON.parse(gunzipSync(fileContent).toString("utf8"));
+
+  let totalRows = 0;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Truncate in reverse FK order so constraints don't block
+    await client.query(`TRUNCATE ${[...TABLES].reverse().join(", ")} CASCADE`);
+    for (const table of TABLES) {
+      const tableRows = dump[table];
+      if (!Array.isArray(tableRows) || tableRows.length === 0) continue;
+      for (const row of tableRows) {
+        const cols = Object.keys(row);
+        const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
+        await client.query(
+          `INSERT INTO ${table} (${cols.map((c) => `"${c}"`).join(", ")}) VALUES (${placeholders})`,
+          cols.map((c) => row[c])
+        );
+        totalRows++;
+      }
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  await pool.query("UPDATE backup_records SET status = 'VERIFIED_INTACT' WHERE id = $1", [snapshotId]);
+  const restoredAt = new Date().toISOString();
+  console.log(`[BackupService] Restore selesai dari ${record.filename}: ${totalRows} baris di ${TABLES.length} tabel.`);
+  return { restoredAt, tablesRestored: TABLES.length, rowsRestored: totalRows, filename: record.filename };
 }

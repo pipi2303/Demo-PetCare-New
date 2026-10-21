@@ -13,7 +13,8 @@ import {
   getAllBackups,
   executeBackup,
   updateBackupConfig,
-  verifySnapshotIntegrity
+  verifySnapshotIntegrity,
+  restoreFromSnapshot,
 } from "./server/backupService";
 import {
   initAuthService,
@@ -323,20 +324,10 @@ async function startServer() {
     }
   });
 
-  // Simulate restore from cloud snapshot
   app.post("/api/backup/restore/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try {
-      const snapshotId = req.params.id;
-      const snapshot = (await getAllBackups()).find((b) => b.id === snapshotId);
-      if (!snapshot) {
-        return res.status(404).json({ error: "Snapshot not found" });
-      }
-      res.json({
-        success: true,
-        message: `Database successfully restored and verified from snapshot ${snapshot.filename}`,
-        restoredAt: new Date().toISOString(),
-        snapshot,
-      });
+      const result = await restoreFromSnapshot(req.params.id);
+      res.json({ success: true, ...result });
     } catch (err: any) {
       res.status(500).json({ error: safeMessage(err) });
     }
