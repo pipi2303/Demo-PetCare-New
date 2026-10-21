@@ -55,6 +55,8 @@ const TABLES = [
   "clinic_visits", "invoices", "invoice_items", "cash_transactions",
   "ambulance_units", "ambulance_requests", "ambulance_events",
   "telehealth_sessions", "telehealth_events", "audit_logs", "sessions",
+  "product_categories", "warehouses", "stock_items", "stock_movements",
+  "suppliers", "purchase_orders", "employees",
 ];
 
 let config: BackupConfig = {
