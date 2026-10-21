@@ -23,6 +23,17 @@ import { listCarePlans, createCarePlan, toggleCarePlanTask } from "./server/care
 import { listDoctorBookings, createDoctorBooking, updateDoctorBooking, updateDoctorBookingStatus } from "./server/doctorBookingService";
 import { listAbsenceRecords, createAbsenceRecord, listLeaveRequests, createLeaveRequest, updateLeaveRequestStatus } from "./server/hrService";
 import {
+  listInterBranchTransfers, createInterBranchTransfer, markTransferReceived,
+  listLoyaltyEntries, createLoyaltyEntry,
+  listEFormTemplates, createEFormTemplate, updateEFormTemplate, deleteEFormTemplate,
+  listEFormSubmissions, createEFormSubmission,
+  listInformedConsents, createInformedConsent,
+  listSystemGroups, createSystemGroup, updateSystemGroup, deleteSystemGroup,
+  listCustomerTierGroups, createCustomerTierGroup, updateCustomerTierGroup, deleteCustomerTierGroup,
+  listPatientPhotos, createPatientPhoto,
+  listAuditLogs,
+} from "./server/phase5Service";
+import {
   listGroomingPackages, createGroomingPackage, updateGroomingPackage, deleteGroomingPackage,
   listGroomingBookings, createGroomingBooking, updateGroomingBooking,
   listGroomingSessions, createGroomingSession, updateGroomingStage,
@@ -2259,6 +2270,112 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   app.put("/api/leave-requests/:id/status", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try { res.json({ success: true, data: await updateLeaveRequestStatus(req.params.id, req.body?.status) }); }
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  // ── Phase 5: Final remaining entities ──────────────────────────────────────
+  app.get("/api/inter-branch-transfers", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listInterBranchTransfers() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/inter-branch-transfers", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createInterBranchTransfer(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/inter-branch-transfers/:id/receive", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await markTransferReceived(req.params.id) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/loyalty-entries", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listLoyaltyEntries() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/loyalty-entries", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createLoyaltyEntry(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/eform-templates", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listEFormTemplates() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/eform-templates", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createEFormTemplate(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/eform-templates/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateEFormTemplate(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/eform-templates/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteEFormTemplate(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/eform-submissions", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listEFormSubmissions() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/eform-submissions", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createEFormSubmission(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/informed-consents", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listInformedConsents() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/informed-consents", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createInformedConsent(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/system-groups", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listSystemGroups() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/system-groups", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createSystemGroup(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/system-groups/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateSystemGroup(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/system-groups/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteSystemGroup(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/customer-tier-groups", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listCustomerTierGroups() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/customer-tier-groups", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createCustomerTierGroup(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/customer-tier-groups/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateCustomerTierGroup(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/customer-tier-groups/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteCustomerTierGroup(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/patient-photos", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listPatientPhotos() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/patient-photos", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createPatientPhoto(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/audit-logs", requireSession, async (req, res) => {
+    try { res.json({ success: true, data: await listAuditLogs(Number(req.query.limit) || 500) }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
   });
 
   // ── Drugs ──────────────────────────────────────────────────────────────────

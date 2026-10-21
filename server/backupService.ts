@@ -66,6 +66,9 @@ const TABLES = [
   "pre_consult_forms", "referral_letters", "visit_surveys",
   "doc_bookings", "care_plans",
   "absence_records", "leave_requests",
+  "inter_branch_transfers", "loyalty_entries",
+  "eform_templates", "eform_submissions", "informed_consents",
+  "system_groups", "customer_tier_groups", "patient_photos",
 ];
 
 let config: BackupConfig = {

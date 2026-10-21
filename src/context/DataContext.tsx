@@ -101,7 +101,7 @@ interface DataContextType {
   // lihat catatan di Types.InterBranchTransfer)
   interBranchTransfers: Types.InterBranchTransfer[];
   addInterBranchTransfer: (t: Omit<Types.InterBranchTransfer, 'id' | 'transferNo' | 'date' | 'status'>) => Promise<Types.InterBranchTransfer>;
-  markInterBranchTransferReceived: (id: string) => void;
+  markInterBranchTransferReceived: (id: string) => Promise<void>;
 
   // Surgeries
   surgicalProcedures: Types.SurgicalProcedure[];
@@ -200,13 +200,13 @@ interface DataContextType {
   updateTelehealthSession: (id: string, updates: Partial<Types.TelehealthSession>) => void;
 
   eFormTemplates: Types.EFormTemplate[];
-  addEFormTemplate: (t: Omit<Types.EFormTemplate, 'id'>) => void;
-  updateEFormTemplate: (id: string, t: Partial<Types.EFormTemplate>) => void;
-  deleteEFormTemplate: (id: string) => void;
+  addEFormTemplate: (t: Omit<Types.EFormTemplate, 'id'>) => Promise<void>;
+  updateEFormTemplate: (id: string, t: Partial<Types.EFormTemplate>) => Promise<void>;
+  deleteEFormTemplate: (id: string) => Promise<void>;
   eFormSubmissions: Types.EFormSubmission[];
-  addEFormSubmission: (efs: Omit<Types.EFormSubmission, 'id' | 'date'>) => Types.EFormSubmission;
+  addEFormSubmission: (efs: Omit<Types.EFormSubmission, 'id' | 'date'>) => Promise<Types.EFormSubmission>;
   informedConsents: Types.InformedConsentRecord[];
-  addInformedConsent: (ic: Omit<Types.InformedConsentRecord, 'id'>) => Types.InformedConsentRecord;
+  addInformedConsent: (ic: Omit<Types.InformedConsentRecord, 'id'>) => Promise<Types.InformedConsentRecord>;
 
   ambulanceUnits: Types.AmbulanceUnit[];
   addAmbulanceUnit: (u: Omit<Types.AmbulanceUnit, 'id'>) => void;
@@ -218,18 +218,18 @@ interface DataContextType {
 
   // Grup Akses & Tier Membership (Master Data)
   systemGroups: Types.SystemGroup[];
-  addSystemGroup: (g: Omit<Types.SystemGroup, 'id' | 'createdAt'>) => Types.SystemGroup;
-  updateSystemGroup: (id: string, g: Partial<Types.SystemGroup>) => void;
-  deleteSystemGroup: (id: string) => void;
+  addSystemGroup: (g: Omit<Types.SystemGroup, 'id' | 'createdAt'>) => Promise<Types.SystemGroup>;
+  updateSystemGroup: (id: string, g: Partial<Types.SystemGroup>) => Promise<void>;
+  deleteSystemGroup: (id: string) => Promise<void>;
 
   customerTierGroups: Types.CustomerTierGroup[];
-  addCustomerTierGroup: (t: Omit<Types.CustomerTierGroup, 'id'>) => void;
-  updateCustomerTierGroup: (id: string, t: Partial<Types.CustomerTierGroup>) => void;
-  deleteCustomerTierGroup: (id: string) => void;
+  addCustomerTierGroup: (t: Omit<Types.CustomerTierGroup, 'id'>) => Promise<void>;
+  updateCustomerTierGroup: (id: string, t: Partial<Types.CustomerTierGroup>) => Promise<void>;
+  deleteCustomerTierGroup: (id: string) => Promise<void>;
 
   // Photos, Audit Logs, Notifications
   patientPhotos: Types.PatientPhoto[];
-  addPatientPhoto: (ph: Omit<Types.PatientPhoto, 'id'>) => void;
+  addPatientPhoto: (ph: Omit<Types.PatientPhoto, 'id'>) => Promise<void>;
 
   auditLogs: Types.AuditLog[];
   addAuditLog: (
@@ -341,7 +341,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [vacHistories, setVacHistories] = useServerState<Types.VacHistory[]>('/vac-histories', Seed.INITIAL_VAC_HISTORIES);
   const [dewormingRecords, setDewormingRecords] = useServerState<Types.DewormingRecord[]>('/deworming-records', []);
   const [customerNotes, setCustomerNotes] = useServerState<Types.CustomerNote[]>('/customer-notes', []);
-  const [interBranchTransfers, setInterBranchTransfers] = useLocalState<Types.InterBranchTransfer[]>('inter_branch_transfers', []);
+  const [interBranchTransfers, setInterBranchTransfers] = useServerState<Types.InterBranchTransfer[]>('/inter-branch-transfers', []);
   const [surgicalProcedures, setSurgicalProcedures] = useServerState<Types.SurgicalProcedure[]>('/surgical-procedures', Seed.INITIAL_SURGICAL_PROCEDURES);
 
   const [drugs, setDrugs] = useServerState<Types.Drug[]>('/drugs', Seed.INITIAL_DRUGS);
@@ -368,22 +368,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [leaveRequests, setLeaveRequests] = useServerState<Types.LeaveRequest[]>('/leave-requests', Seed.INITIAL_LEAVE_REQUESTS);
 
   const [reminders, setReminders] = useServerState<Types.Reminder[]>('/reminders', Seed.INITIAL_REMINDERS);
-  const [loyaltyEntries, setLoyaltyEntries] = useLocalState<Types.LoyaltyEntry[]>('loyalty_entries', Seed.INITIAL_LOYALTY_ENTRIES);
+  const [loyaltyEntries, setLoyaltyEntries] = useServerState<Types.LoyaltyEntry[]>('/loyalty-entries', Seed.INITIAL_LOYALTY_ENTRIES);
 
   const [carePlans, setCarePlans] = useServerState<Types.CarePlan[]>('/care-plans', Seed.INITIAL_CARE_PLANS);
   const [telehealthSessions, setTelehealthSessions] = useServerState<Types.TelehealthSession[]>('/telehealth-sessions', Seed.INITIAL_TELEHEALTH_SESSIONS);
-  const [eFormTemplates, setEFormTemplates] = useLocalState<Types.EFormTemplate[]>('eform_templates', Seed.INITIAL_EFORM_TEMPLATES);
-  const [eFormSubmissions, setEFormSubmissions] = useLocalState<Types.EFormSubmission[]>('eform_submissions', Seed.INITIAL_EFORM_SUBMISSIONS);
-  const [informedConsents, setInformedConsents] = useLocalState<Types.InformedConsentRecord[]>('informed_consents', []);
+  const [eFormTemplates, setEFormTemplates] = useServerState<Types.EFormTemplate[]>('/eform-templates', Seed.INITIAL_EFORM_TEMPLATES);
+  const [eFormSubmissions, setEFormSubmissions] = useServerState<Types.EFormSubmission[]>('/eform-submissions', Seed.INITIAL_EFORM_SUBMISSIONS);
+  const [informedConsents, setInformedConsents] = useServerState<Types.InformedConsentRecord[]>('/informed-consents', []);
 
   const [ambulanceUnits, setAmbulanceUnits] = useServerState<Types.AmbulanceUnit[]>('/ambulance-units', Seed.INITIAL_AMBULANCE_UNITS);
   const [ambulanceRequests, setAmbulanceRequests] = useServerState<Types.AmbulanceRequest[]>('/ambulance-requests', Seed.INITIAL_AMBULANCE_REQUESTS);
 
-  const [systemGroups, setSystemGroups] = useLocalState<Types.SystemGroup[]>('system_groups', Seed.INITIAL_SYSTEM_GROUPS);
-  const [customerTierGroups, setCustomerTierGroups] = useLocalState<Types.CustomerTierGroup[]>('customer_tier_groups', Seed.INITIAL_CUSTOMER_TIER_GROUPS);
+  const [systemGroups, setSystemGroups] = useServerState<Types.SystemGroup[]>('/system-groups', Seed.INITIAL_SYSTEM_GROUPS);
+  const [customerTierGroups, setCustomerTierGroups] = useServerState<Types.CustomerTierGroup[]>('/customer-tier-groups', Seed.INITIAL_CUSTOMER_TIER_GROUPS);
 
-  const [patientPhotos, setPatientPhotos] = useLocalState<Types.PatientPhoto[]>('patient_photos', Seed.INITIAL_PATIENT_PHOTOS);
-  const [auditLogs, setAuditLogs] = useLocalState<Types.AuditLog[]>('audit_logs', Seed.INITIAL_AUDIT_LOGS);
+  const [patientPhotos, setPatientPhotos] = useServerState<Types.PatientPhoto[]>('/patient-photos', Seed.INITIAL_PATIENT_PHOTOS);
+  const [auditLogs, setAuditLogs] = useServerState<Types.AuditLog[]>('/audit-logs', Seed.INITIAL_AUDIT_LOGS);
   const [notifications, setNotifications] = useLocalState<Types.AppNotification[]>('notifications', Seed.INITIAL_NOTIFICATIONS);
 
   // Generate a random 3-digit entity code that doesn't collide with existing codes
@@ -427,6 +427,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       newValue: options?.newValue
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    // Fire-and-forget to Postgres so audit trail survives browser clear
+    api.post('/audit/log', {
+      userName: newLog.userName, userRole: newLog.userRole, action, module: moduleName,
+      target, details, severity: newLog.severity, branchName: newLog.branchName,
+    }).catch(() => {/* non-critical — local state is source of truth for UI */});
   };
 
   const addNotification = (n: Omit<Types.AppNotification, 'id' | 'createdAt' | 'isRead'>) => {
@@ -582,15 +587,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = await api.post<Types.Customer>(`/customers/${customerId}/loyalty-points`, { amount });
     setCustomers((prev) => prev.map((c) => (c.id === customerId ? updated : c)));
 
-    const entry: Types.LoyaltyEntry = {
-      id: 'le_' + Date.now(),
-      customerId,
-      customerName: cust.name,
-      pointsChanged: amount,
-      type: amount >= 0 ? 'Earn' : 'Redeem',
-      description: reason,
-      date: new Date().toISOString().substring(0, 10),
-    };
+    const entry = await api.post<Types.LoyaltyEntry>('/loyalty-entries', {
+      customerId, customerName: cust.name, pointsChanged: amount,
+      type: amount >= 0 ? 'Earn' : 'Redeem', description: reason,
+    });
     setLoyaltyEntries((prev) => [entry, ...prev]);
     addAuditLog(
       'Edit',
@@ -875,32 +875,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addInterBranchTransfer = async (
     t: Omit<Types.InterBranchTransfer, 'id' | 'transferNo' | 'date' | 'status'>
   ): Promise<Types.InterBranchTransfer> => {
-    const newTransfer: Types.InterBranchTransfer = {
-      ...t,
-      id: 'ibt_' + Date.now(),
-      transferNo: 'MUTASI-' + new Date().toISOString().split('T')[0].replace(/-/g, '') + '-' + Math.floor(100 + Math.random() * 900),
-      date: new Date().toISOString().substring(0, 10),
-      status: 'Dalam Pengiriman'
-    };
+    const transferNo = 'MUTASI-' + new Date().toISOString().split('T')[0].replace(/-/g, '') + '-' + Math.floor(100 + Math.random() * 900);
+    const newTransfer = await api.post<Types.InterBranchTransfer>('/inter-branch-transfers', { ...t, transferNo });
     setInterBranchTransfers((prev) => [newTransfer, ...prev]);
-
     await addStockMovement({
-      itemId: t.stockItemId,
-      itemName: t.itemName,
-      type: 'Transfer',
-      quantity: t.qty,
-      fromWarehouse: t.sourceBranchName,
-      toWarehouse: t.destBranchName,
-      referenceNo: newTransfer.transferNo,
-      operator: t.requestedBy
+      itemId: t.stockItemId, itemName: t.itemName, type: 'Transfer',
+      quantity: t.qty, fromWarehouse: t.sourceBranchName, toWarehouse: t.destBranchName,
+      referenceNo: newTransfer.transferNo, operator: t.requestedBy,
     });
-
     return newTransfer;
   };
 
-  const markInterBranchTransferReceived = (id: string) => {
+  const markInterBranchTransferReceived = async (id: string): Promise<void> => {
     const t = interBranchTransfers.find((x) => x.id === id);
-    setInterBranchTransfers((prev) => prev.map((x) => (x.id === id ? { ...x, status: 'Diterima' } : x)));
+    const updated = await api.put<Types.InterBranchTransfer>(`/inter-branch-transfers/${id}/receive`, {});
+    setInterBranchTransfers((prev) => prev.map((x) => (x.id === id ? updated : x)));
     if (t) {
       addAuditLog('Edit', 'Manajemen Multi-Cabang', t.transferNo, `Mutasi stok ${t.transferNo} (${t.itemName} x${t.qty}) dikonfirmasi diterima di ${t.destBranchName}.`, { severity: 'Info' });
     }
@@ -1277,37 +1266,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Edit', 'Telehealth & Konsultasi', id, `Pembaruan data telekonsultasi: ${id}`);
   };
 
-  const addEFormTemplate = (t: Omit<Types.EFormTemplate, 'id'>) => {
-    const newTpl: Types.EFormTemplate = { ...t, id: 'eft_' + Date.now() };
+  const addEFormTemplate = async (t: Omit<Types.EFormTemplate, 'id'>): Promise<void> => {
+    const newTpl = await api.post<Types.EFormTemplate>('/eform-templates', t);
     setEFormTemplates((prev) => [...prev, newTpl]);
     addAuditLog('Tambah', 'E-Form & Persetujuan Medis', newTpl.title, `Template e-form baru dibuat: ${newTpl.title}`);
   };
 
-  const updateEFormTemplate = (id: string, tData: Partial<Types.EFormTemplate>) => {
+  const updateEFormTemplate = async (id: string, tData: Partial<Types.EFormTemplate>): Promise<void> => {
     const current = eFormTemplates.find((t) => t.id === id);
-    setEFormTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, ...tData } : t)));
+    const updated = await api.put<Types.EFormTemplate>(`/eform-templates/${id}`, tData);
+    setEFormTemplates((prev) => prev.map((t) => (t.id === id ? updated : t)));
     addAuditLog('Edit', 'E-Form & Persetujuan Medis', current?.title || id, `Pembaruan template e-form: ${current?.title || id}`, { severity: 'Warning' });
   };
 
-  const deleteEFormTemplate = (id: string) => {
+  const deleteEFormTemplate = async (id: string): Promise<void> => {
     const current = eFormTemplates.find((t) => t.id === id);
+    await api.del(`/eform-templates/${id}`);
     setEFormTemplates((prev) => prev.filter((t) => t.id !== id));
     addAuditLog('Hapus', 'E-Form & Persetujuan Medis', current?.title || id, `Penghapusan template e-form: ${current?.title || id}`, { severity: 'Kritis' });
   };
 
-  const addEFormSubmission = (efs: Omit<Types.EFormSubmission, 'id' | 'date'>): Types.EFormSubmission => {
-    const newSub: Types.EFormSubmission = {
-      ...efs,
-      id: 'efs_' + Date.now(),
-      date: new Date().toISOString().substring(0, 10)
-    };
+  const addEFormSubmission = async (efs: Omit<Types.EFormSubmission, 'id' | 'date'>): Promise<Types.EFormSubmission> => {
+    const newSub = await api.post<Types.EFormSubmission>('/eform-submissions', efs);
     setEFormSubmissions((prev) => [newSub, ...prev]);
     addAuditLog('Tambah', 'E-Form & Persetujuan Medis', newSub.templateTitle, `Penyerahan formulir digital ${newSub.templateTitle} untuk pasien ${newSub.petName} (Oleh: ${newSub.customerName})`, { severity: 'Warning' });
     return newSub;
   };
 
-  const addInformedConsent = (ic: Omit<Types.InformedConsentRecord, 'id'>): Types.InformedConsentRecord => {
-    const newConsent: Types.InformedConsentRecord = { ...ic, id: 'ic_' + Date.now() };
+  const addInformedConsent = async (ic: Omit<Types.InformedConsentRecord, 'id'>): Promise<Types.InformedConsentRecord> => {
+    const newConsent = await api.post<Types.InformedConsentRecord>('/informed-consents', ic);
     setInformedConsents((prev) => [newConsent, ...prev]);
     addAuditLog('Tambah', 'E-Form & Persetujuan Medis', newConsent.consentNo, `Persetujuan tindakan medis (${newConsent.procedureType}) untuk pasien ${newConsent.petName} ditandatangani oleh ${newConsent.customerName}. Hash: ${newConsent.securityHash}`, { severity: 'Kritis' });
     return newConsent;
@@ -1351,50 +1338,51 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Edit', 'Ambulans Emergency', id, `Status armada ambulans diperbarui menjadi: ${status}${unitCode ? ` (Unit: ${unitCode})` : ''}`);
   };
 
-  const addSystemGroup = (g: Omit<Types.SystemGroup, 'id' | 'createdAt'>): Types.SystemGroup => {
-    const newGroup: Types.SystemGroup = {
-      ...g,
-      id: 'grp_' + Date.now(),
-      createdAt: new Date().toISOString().substring(0, 10)
-    };
+  const addSystemGroup = async (g: Omit<Types.SystemGroup, 'id' | 'createdAt'>): Promise<Types.SystemGroup> => {
+    const newGroup = await api.post<Types.SystemGroup>('/system-groups', g);
     setSystemGroups((prev) => [...prev, newGroup]);
     addAuditLog('Tambah', 'Grup & Hak Akses', newGroup.name, `Grup departemen baru dibuat: ${newGroup.name} (${newGroup.code})`, { severity: 'Warning' });
     return newGroup;
   };
 
-  const updateSystemGroup = (id: string, gData: Partial<Types.SystemGroup>) => {
+  const updateSystemGroup = async (id: string, gData: Partial<Types.SystemGroup>): Promise<void> => {
     const current = systemGroups.find((g) => g.id === id);
-    setSystemGroups((prev) => prev.map((g) => (g.id === id ? { ...g, ...gData } : g)));
+    const updated = await api.put<Types.SystemGroup>(`/system-groups/${id}`, gData);
+    setSystemGroups((prev) => prev.map((g) => (g.id === id ? updated : g)));
     addAuditLog('Edit', 'Grup & Hak Akses', current?.name || id, `Pembaruan grup/hak akses: ${current?.name || id}`, { severity: 'Warning' });
   };
 
-  const deleteSystemGroup = (id: string) => {
+  const deleteSystemGroup = async (id: string): Promise<void> => {
     const current = systemGroups.find((g) => g.id === id);
     if (current?.isSystemDefault) return;
+    await api.del(`/system-groups/${id}`);
     setSystemGroups((prev) => prev.filter((g) => g.id !== id));
     addAuditLog('Hapus', 'Grup & Hak Akses', current?.name || id, `Penghapusan grup departemen: ${current?.name || id}`, { severity: 'Kritis' });
   };
 
-  const addCustomerTierGroup = (t: Omit<Types.CustomerTierGroup, 'id'>) => {
-    const newTier: Types.CustomerTierGroup = { ...t, id: 'tier_' + Date.now() };
+  const addCustomerTierGroup = async (t: Omit<Types.CustomerTierGroup, 'id'>): Promise<void> => {
+    const newTier = await api.post<Types.CustomerTierGroup>('/customer-tier-groups', t);
     setCustomerTierGroups((prev) => [...prev, newTier]);
     addAuditLog('Tambah', 'CRM & Loyalty', newTier.tierName, `Tier membership baru dibuat: ${newTier.tierName} (Diskon ${newTier.discountPercent}%)`);
   };
 
-  const updateCustomerTierGroup = (id: string, tData: Partial<Types.CustomerTierGroup>) => {
+  const updateCustomerTierGroup = async (id: string, tData: Partial<Types.CustomerTierGroup>): Promise<void> => {
     const current = customerTierGroups.find((t) => t.id === id);
-    setCustomerTierGroups((prev) => prev.map((t) => (t.id === id ? { ...t, ...tData } : t)));
+    const updated = await api.put<Types.CustomerTierGroup>(`/customer-tier-groups/${id}`, tData);
+    setCustomerTierGroups((prev) => prev.map((t) => (t.id === id ? updated : t)));
     addAuditLog('Edit', 'CRM & Loyalty', current?.tierName || id, `Pembaruan tier membership: ${current?.tierName || id}`, { severity: 'Warning' });
   };
 
-  const deleteCustomerTierGroup = (id: string) => {
+  const deleteCustomerTierGroup = async (id: string): Promise<void> => {
     const current = customerTierGroups.find((t) => t.id === id);
+    await api.del(`/customer-tier-groups/${id}`);
     setCustomerTierGroups((prev) => prev.filter((t) => t.id !== id));
     addAuditLog('Hapus', 'CRM & Loyalty', current?.tierName || id, `Penghapusan tier membership: ${current?.tierName || id}`, { severity: 'Kritis' });
   };
 
-  const addPatientPhoto = (ph: Omit<Types.PatientPhoto, 'id'>) => {
-    setPatientPhotos((prev) => [{ ...ph, id: 'ph_' + Date.now() }, ...prev]);
+  const addPatientPhoto = async (ph: Omit<Types.PatientPhoto, 'id'>): Promise<void> => {
+    const newPhoto = await api.post<Types.PatientPhoto>('/patient-photos', ph);
+    setPatientPhotos((prev) => [newPhoto, ...prev]);
   };
 
   const resetDailyQueue = () => {
