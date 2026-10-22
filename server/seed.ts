@@ -8,6 +8,8 @@ import {
   INITIAL_CLINIC_VISITS,
   INITIAL_INVOICES,
   INITIAL_CASH_TRANSACTIONS,
+  INITIAL_SYSTEM_GROUPS,
+  INITIAL_CUSTOMER_TIER_GROUPS,
   DEFAULT_APP_SETTINGS,
 } from "../src/data/mockData";
 
@@ -203,6 +205,30 @@ export async function seedIfEmpty() {
       );
     }
     console.log(`[Seed] cash_transactions: ${INITIAL_CASH_TRANSACTIONS.length} baris.`);
+  }
+
+  if (await isEmpty("system_groups")) {
+    for (const g of INITIAL_SYSTEM_GROUPS) {
+      await pool.query(
+        `INSERT INTO system_groups (code, name, type, description, department_head, allowed_roles, module_permissions, member_count, color, is_system_default)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [g.code, g.name, g.type, g.description, g.departmentHead,
+         JSON.stringify(g.allowedRoles), JSON.stringify(g.modulePermissions),
+         g.memberCount, g.color, g.isSystemDefault ?? false]
+      );
+    }
+    console.log(`[Seed] system_groups: ${INITIAL_SYSTEM_GROUPS.length} grup.`);
+  }
+
+  if (await isEmpty("customer_tier_groups")) {
+    for (const t of INITIAL_CUSTOMER_TIER_GROUPS) {
+      await pool.query(
+        `INSERT INTO customer_tier_groups (tier_name, code, min_spend, discount_percent, perks, color, member_count, auto_upgrade)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [t.tierName, t.code, t.minSpend, t.discountPercent, t.perks, t.color, t.memberCount, t.autoUpgrade]
+      );
+    }
+    console.log(`[Seed] customer_tier_groups: ${INITIAL_CUSTOMER_TIER_GROUPS.length} tier.`);
   }
 
   if (await isEmpty("ambulance_units")) {
