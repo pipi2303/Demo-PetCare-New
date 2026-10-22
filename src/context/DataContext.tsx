@@ -205,8 +205,10 @@ interface DataContextType {
   deleteEFormTemplate: (id: string) => Promise<void>;
   eFormSubmissions: Types.EFormSubmission[];
   addEFormSubmission: (efs: Omit<Types.EFormSubmission, 'id' | 'date'>) => Promise<Types.EFormSubmission>;
+  deleteEFormSubmission: (id: string) => Promise<void>;
   informedConsents: Types.InformedConsentRecord[];
   addInformedConsent: (ic: Omit<Types.InformedConsentRecord, 'id'>) => Promise<Types.InformedConsentRecord>;
+  deleteInformedConsent: (id: string) => Promise<void>;
 
   ambulanceUnits: Types.AmbulanceUnit[];
   addAmbulanceUnit: (u: Omit<Types.AmbulanceUnit, 'id'>) => Promise<void>;
@@ -230,6 +232,7 @@ interface DataContextType {
   // Photos, Audit Logs, Notifications
   patientPhotos: Types.PatientPhoto[];
   addPatientPhoto: (ph: Omit<Types.PatientPhoto, 'id'>) => Promise<void>;
+  deletePatientPhoto: (id: string) => Promise<void>;
 
   auditLogs: Types.AuditLog[];
   addAuditLog: (
@@ -1327,11 +1330,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newSub;
   };
 
+  const deleteEFormSubmission = async (id: string): Promise<void> => {
+    await api.del(`/eform-submissions/${id}`);
+    setEFormSubmissions((prev) => prev.filter((s) => s.id !== id));
+    addAuditLog('Hapus', 'E-Form & Persetujuan Medis', id, 'Penghapusan formulir e-form digital.', { severity: 'Warning' });
+  };
+
   const addInformedConsent = async (ic: Omit<Types.InformedConsentRecord, 'id'>): Promise<Types.InformedConsentRecord> => {
     const newConsent = await api.post<Types.InformedConsentRecord>('/informed-consents', ic);
     setInformedConsents((prev) => [newConsent, ...prev]);
     addAuditLog('Tambah', 'E-Form & Persetujuan Medis', newConsent.consentNo, `Persetujuan tindakan medis (${newConsent.procedureType}) untuk pasien ${newConsent.petName} ditandatangani oleh ${newConsent.customerName}. Hash: ${newConsent.securityHash}`, { severity: 'Kritis' });
     return newConsent;
+  };
+
+  const deleteInformedConsent = async (id: string): Promise<void> => {
+    await api.del(`/informed-consents/${id}`);
+    setInformedConsents((prev) => prev.filter((c) => c.id !== id));
+    addAuditLog('Hapus', 'E-Form & Persetujuan Medis', id, 'Penghapusan dokumen informed consent medis.', { severity: 'Kritis' });
   };
 
   // Maps backend ambulance unit status → frontend status
@@ -1470,6 +1485,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addPatientPhoto = async (ph: Omit<Types.PatientPhoto, 'id'>): Promise<void> => {
     const newPhoto = await api.post<Types.PatientPhoto>('/patient-photos', ph);
     setPatientPhotos((prev) => [newPhoto, ...prev]);
+  };
+
+  const deletePatientPhoto = async (id: string): Promise<void> => {
+    await api.del(`/patient-photos/${id}`);
+    setPatientPhotos((prev) => prev.filter((p) => p.id !== id));
   };
 
   const resetDailyQueue = () => {
@@ -1620,9 +1640,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateEFormTemplate,
         deleteEFormTemplate,
         eFormSubmissions,
-        addEFormSubmission,
+        addEFormSubmission, deleteEFormSubmission,
         informedConsents,
-        addInformedConsent,
+        addInformedConsent, deleteInformedConsent,
         ambulanceUnits,
         addAmbulanceUnit,
         updateAmbulanceUnit,
@@ -1639,7 +1659,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateCustomerTierGroup,
         deleteCustomerTierGroup,
         patientPhotos,
-        addPatientPhoto,
+        addPatientPhoto, deletePatientPhoto,
         auditLogs,
         addAuditLog,
         notifications,

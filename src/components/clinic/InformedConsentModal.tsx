@@ -18,6 +18,7 @@ import {
   AlertOctagon
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
+import { api } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { InformedConsentRecord, Pet, Customer } from '../../types';
 
@@ -143,7 +144,7 @@ export const InformedConsentModal: React.FC<InformedConsentModalProps> = ({
     return `IC-SHA256-${Math.abs(hash).toString(16).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
   };
 
-  const handleSaveConsent = () => {
+  const handleSaveConsent = async () => {
     if (!hasSignature) {
       addToast('Harap bubuhkan tanda tangan digital pada kotak yang tersedia!', 'error');
       return;
@@ -154,16 +155,20 @@ export const InformedConsentModal: React.FC<InformedConsentModalProps> = ({
     }
 
     const canvas = canvasRef.current;
-    const signatureDataUrl = canvas ? canvas.toDataURL('image/png') : '';
+    const rawSignature = canvas ? canvas.toDataURL('image/png') : '';
     const consentNo = `IC-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
     const securityHash = generateSecurityHash();
 
-    // Sebelumnya dokumen ini (termasuk gambar tanda tangan & hash keamanan)
-    // hanya disimpan ke useState lokal komponen — hilang begitu modal
-    // ditutup atau halaman di-refresh, walau UI mengklaim "tersimpan
-    // permanen". Sekarang benar-benar disimpan lewat addInformedConsent ke
-    // DataContext (localStorage), jadi bisa dibuka ulang kapan saja.
-    const newRecord = addInformedConsent({
+    // Upload signature to disk; store URL not raw base64
+    let signatureDataUrl = rawSignature;
+    if (rawSignature) {
+      try {
+        const { url } = await api.upload(rawSignature, 'consent-sig');
+        signatureDataUrl = url;
+      } catch { /* fallback: store base64 if upload fails */ }
+    }
+
+    const newRecord = await addInformedConsent({
       consentNo,
       petId: currentPet?.id || '',
       petName: currentPet?.name || 'Pasien',
@@ -171,7 +176,7 @@ export const InformedConsentModal: React.FC<InformedConsentModalProps> = ({
       customerName: currentOwner?.name || 'Pemilik',
       customerPhone: emergencyPhone,
       customerNik: ownerNik,
-      doctorId: 'doc_1',
+      doctorId: '',
       doctorName,
       procedureType,
       diagnosis,

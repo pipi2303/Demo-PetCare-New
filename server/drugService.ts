@@ -34,6 +34,8 @@ export async function createDrug(input: {
   name: string; category: string; unit: string; stock: number; minStock: number;
   unitPrice: number; batchNumber?: string; expiryDate?: string; location?: string;
 }) {
+  if (!input.name?.trim()) throw new Error("Nama obat wajib diisi.");
+  if (!input.category?.trim()) throw new Error("Kategori obat wajib diisi.");
   const { rows: existing } = await pool.query("SELECT code FROM drugs");
   const code = nextCode(existing.map((r: any) => r.code));
   const { rows } = await pool.query(

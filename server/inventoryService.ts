@@ -131,6 +131,7 @@ export async function createStockItem(input: {
   supplierName: string; expiryDate?: string; batchNumber?: string;
   isClearanceSale?: boolean; clearanceDiscountPercent?: number;
 }) {
+  if (!input.name?.trim()) throw new Error("Nama item stok wajib diisi.");
   const sku = input.sku || "SKU-" + Math.floor(1000 + Math.random() * 9000);
   const { rows } = await pool.query(
     `INSERT INTO stock_items

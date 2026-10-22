@@ -48,6 +48,8 @@ export async function createClinicVisit(input: {
   complaint: string;
   branchId?: string;
 }) {
+  if (!input.customerId?.trim()) throw new Error("ID pelanggan wajib diisi.");
+  if (!input.petId?.trim()) throw new Error("ID hewan wajib diisi.");
   const { rows: openRows } = await pool.query(
     "SELECT count(*)::int AS count FROM clinic_visits WHERE status NOT IN ('Selesai', 'Batal')"
   );

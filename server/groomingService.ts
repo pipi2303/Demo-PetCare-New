@@ -103,6 +103,8 @@ export async function createGroomingBooking(input: {
   customerName: string; petName: string; groomerName?: string; packageType: string;
   date: string; timeSlot?: string; price: number; status?: string; notes?: string;
 }) {
+  if (!input.customerName?.trim()) throw new Error("Nama pelanggan wajib diisi.");
+  if (!input.packageType?.trim()) throw new Error("Tipe paket grooming wajib diisi.");
   const bookingNo = "GRM-" + Date.now().toString().slice(-6);
   const { rows } = await pool.query(
     `INSERT INTO grooming_bookings
