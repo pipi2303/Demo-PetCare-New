@@ -10,6 +10,7 @@ import { TriageUrgencyBadge } from '../clinic/TriageUrgencyBadge';
 import { TriageUrgencyModal } from '../clinic/TriageUrgencyModal';
 import { useAutoSaveDraft } from '../../hooks/useAutoSaveDraft';
 import { authHeaders } from '../../utils/authToken';
+import { api } from '../../services/api';
 import { NavModule } from '../layout/Sidebar';
 import {
   Stethoscope,
@@ -576,7 +577,7 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
     setHasConsentSignature(false);
   };
 
-  const handleSaveConsent = () => {
+  const handleSaveConsent = async () => {
     // Sebelumnya tab ini bisa menyimpan status 'Ditandatangani' walau kanvas
     // kosong (beda dari InformedConsentModal yang mewajibkan tanda tangan
     // terisi) — signatureData jadi data URL kosong/transparan tapi status
@@ -588,7 +589,15 @@ export const ClinicModule: React.FC<ClinicModuleProps> = ({ activeModule }) => {
 
     const template = eFormTemplates.find((t) => t.id === soapDraft.selectedTemplateId) || eFormTemplates[0];
     const canvas = canvasRef.current;
-    const signatureData = canvas ? canvas.toDataURL() : '';
+    const rawSignature = canvas ? canvas.toDataURL('image/png') : '';
+    // Upload signature to disk; store URL not raw base64
+    let signatureData = rawSignature;
+    if (rawSignature) {
+      try {
+        const { url } = await api.upload(rawSignature, 'sig');
+        signatureData = url;
+      } catch { /* fallback: store base64 if upload fails */ }
+    }
 
     addEFormSubmission({
       templateId: template.id,

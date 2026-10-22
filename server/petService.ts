@@ -33,6 +33,9 @@ export async function listPets() {
 }
 
 export async function createPet(input: { customerId: string; name: string; species: string; breed?: string; color?: string; gender?: string; sterilized?: boolean; birthDate?: string; weightKg?: number; microchipNo?: string; allergies?: string; notes?: string; photoUrl?: string }) {
+  if (!input.customerId?.trim()) throw new Error("ID pelanggan wajib diisi.");
+  if (!input.name?.trim()) throw new Error("Nama hewan wajib diisi.");
+  if (!input.species?.trim()) throw new Error("Spesies hewan wajib diisi.");
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO pets (customer_id, name, species, breed, color, gender, sterilized, birth_date, weight_kg, microchip_no, allergies, notes, photo_url)

@@ -1,6 +1,7 @@
 // Phase 5: inter_branch_transfers, loyalty_entries, e-forms, informed_consents,
 // system_groups, customer_tier_groups, patient_photos, audit_logs GET.
 import { pool } from "./db";
+import { deleteUpload } from "./uploadService";
 
 const d = (v: any) => v instanceof Date ? v.toISOString().substring(0, 10) : (v ? String(v) : "");
 const dt = (v: any) => v instanceof Date ? v.toISOString().replace("T", " ").substring(0, 19) : (v ? String(v) : "");
@@ -144,6 +145,12 @@ export async function createEFormSubmission(input: {
      input.status ?? "Draft", JSON.stringify(input.fieldValues ?? {}), input.signatureData ?? null]
   );
   return toSub(rows[0]);
+}
+
+export async function deleteEFormSubmission(id: string) {
+  const { rows } = await pool.query("SELECT signature_data FROM eform_submissions WHERE id=$1", [id]);
+  if (rows[0]?.signature_data) deleteUpload(rows[0].signature_data);
+  await pool.query("DELETE FROM eform_submissions WHERE id=$1", [id]);
 }
 
 // ── Informed Consents ─────────────────────────────────────────────────────────
@@ -295,6 +302,12 @@ function toPhoto(row: any) {
   };
 }
 
+export async function deleteInformedConsent(id: string) {
+  const { rows } = await pool.query("SELECT signature_data_url FROM informed_consents WHERE id=$1", [id]);
+  if (rows[0]?.signature_data_url) deleteUpload(rows[0].signature_data_url);
+  await pool.query("DELETE FROM informed_consents WHERE id=$1", [id]);
+}
+
 export async function listPatientPhotos() {
   const { rows } = await pool.query("SELECT id, pet_id, pet_name, category, photo_url, caption, taken_at, taken_by FROM patient_photos ORDER BY taken_at DESC LIMIT 1000");
   return rows.map(toPhoto);
@@ -308,6 +321,12 @@ export async function createPatientPhoto(input: {
     [input.petId || null, input.petName, input.category ?? "Lainnya", input.photoUrl, input.caption ?? "", input.takenBy ?? ""]
   );
   return toPhoto(rows[0]);
+}
+
+export async function deletePatientPhoto(id: string) {
+  const { rows } = await pool.query("SELECT photo_url FROM patient_photos WHERE id=$1", [id]);
+  if (rows[0]?.photo_url) deleteUpload(rows[0].photo_url);
+  await pool.query("DELETE FROM patient_photos WHERE id=$1", [id]);
 }
 
 // ── Audit Logs GET ────────────────────────────────────────────────────────────

@@ -23,6 +23,8 @@ export async function listCustomers() {
 }
 
 export async function createCustomer(input: { name: string; phone: string; email?: string; address?: string; nik?: string; gender?: string; membershipTier?: string }) {
+  if (!input.name?.trim()) throw new Error("Nama pelanggan wajib diisi.");
+  if (!input.phone?.trim()) throw new Error("Nomor telepon pelanggan wajib diisi.");
   const { rows } = await pool.query(
     `INSERT INTO customers (name, phone, email, address, nik, gender, membership_tier)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,

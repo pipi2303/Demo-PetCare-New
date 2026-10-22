@@ -38,6 +38,8 @@ export async function createEmployee(input: {
   phone?: string; email?: string; hireDate?: string; sipNumber?: string;
   baseSalary?: number; commissionRatePercent?: number; status?: string;
 }) {
+  if (!input.name?.trim()) throw new Error("Nama karyawan wajib diisi.");
+  if (!input.role?.trim()) throw new Error("Peran karyawan wajib diisi.");
   const { rows: existing } = await pool.query("SELECT nik FROM employees");
   const nik = nextNik(existing.map((r: any) => r.nik));
   const { rows } = await pool.query(

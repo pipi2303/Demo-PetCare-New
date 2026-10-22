@@ -1277,7 +1277,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addTelehealthSession = async (th: Omit<Types.TelehealthSession, 'id' | 'sessionNo' | 'meetingUrl'>): Promise<Types.TelehealthSession> => {
     const raw = await api.post<any>('/operations/telehealth/sessions', {
       ...th, patientName: th.petName, customerId: th.customerId,
-      doctorId: th.doctorName, scheduledAt: th.date && th.timeSlot ? `${th.date}T${th.timeSlot}:00.000Z` : undefined,
+      doctorId: th.doctorId ?? th.doctorName, scheduledAt: th.date && th.timeSlot ? `${th.date}T${th.timeSlot}:00.000Z` : undefined,
       consentAcceptedAt: th.consentAcceptedAt || new Date().toISOString(),
     });
     const newTh = mapThRecord(raw);

@@ -30,7 +30,8 @@ import {
   listInformedConsents, createInformedConsent,
   listSystemGroups, createSystemGroup, updateSystemGroup, deleteSystemGroup,
   listCustomerTierGroups, createCustomerTierGroup, updateCustomerTierGroup, deleteCustomerTierGroup,
-  listPatientPhotos, createPatientPhoto,
+  listPatientPhotos, createPatientPhoto, deletePatientPhoto,
+  deleteEFormSubmission, deleteInformedConsent,
   listAuditLogs,
 } from "./server/phase5Service";
 import {
@@ -2342,6 +2343,10 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
     try { res.status(201).json({ success: true, data: await createEFormSubmission(req.body || {}) }); }
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
+  app.delete("/api/eform-submissions/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { await deleteEFormSubmission(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
 
   app.get("/api/informed-consents", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await listInformedConsents() }); }
@@ -2349,6 +2354,10 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   });
   app.post("/api/informed-consents", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createInformedConsent(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/informed-consents/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteInformedConsent(req.params.id); res.json({ success: true }); }
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
 
@@ -2392,6 +2401,10 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   });
   app.post("/api/patient-photos", requireRole(...STAFF_ROLES), async (req, res) => {
     try { res.status(201).json({ success: true, data: await createPatientPhoto(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/patient-photos/:id", requireRole(...STAFF_ROLES), async (req, res) => {
+    try { await deletePatientPhoto(req.params.id); res.json({ success: true }); }
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
 
