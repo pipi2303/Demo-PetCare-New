@@ -374,17 +374,24 @@ export async function restoreFromSnapshot(snapshotId: string) {
     await client.query("BEGIN");
     // Truncate in reverse FK order so constraints don't block
     await client.query(`TRUNCATE ${[...TABLES].reverse().join(", ")} CASCADE`);
+    const BATCH = 500; // ponytail: 500-row batches — ~12K params max, well under Postgres 65535 limit
     for (const table of TABLES) {
       const tableRows = dump[table];
       if (!Array.isArray(tableRows) || tableRows.length === 0) continue;
-      for (const row of tableRows) {
-        const cols = Object.keys(row);
-        const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
+      const cols = Object.keys(tableRows[0]);
+      const colList = cols.map((c) => `"${c}"`).join(", ");
+      for (let i = 0; i < tableRows.length; i += BATCH) {
+        const chunk = tableRows.slice(i, i + BATCH);
+        const values: any[] = [];
+        const rowPlaceholders = chunk.map((row, ri) => {
+          cols.forEach((c) => values.push(row[c]));
+          return `(${cols.map((_, ci) => `$${ri * cols.length + ci + 1}`).join(", ")})`;
+        });
         await client.query(
-          `INSERT INTO ${table} (${cols.map((c) => `"${c}"`).join(", ")}) VALUES (${placeholders})`,
-          cols.map((c) => row[c])
+          `INSERT INTO ${table} (${colList}) VALUES ${rowPlaceholders.join(", ")}`,
+          values
         );
-        totalRows++;
+        totalRows += chunk.length;
       }
     }
     await client.query("COMMIT");
