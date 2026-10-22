@@ -12,6 +12,7 @@ import {
   INITIAL_EFORM_TEMPLATES, INITIAL_EFORM_SUBMISSIONS,
   INITIAL_VAC_SCHEDULES, INITIAL_VAC_HISTORIES, INITIAL_SURGICAL_PROCEDURES,
   INITIAL_SOAP_NOTES, INITIAL_LAB_TESTS,
+  INITIAL_AMBULANCE_UNITS, INITIAL_AMBULANCE_REQUESTS, INITIAL_PATIENT_PHOTOS,
 } from "../src/data/mockData";
 
 async function isEmpty(table: string): Promise<boolean> {
@@ -438,16 +439,41 @@ export async function seedIfEmpty() {
   }
 
   if (await isEmpty("ambulance_units")) {
-    const fleet = [
-      { code: "AMB-01", vehicleName: "Ambulans Unit 1", plateNo: "B 1234 AMB", currentDriver: "Ahmad Sopir", currentParamedic: "Budi Paramedik", equipmentStatus: "Lengkap" },
-      { code: "AMB-02", vehicleName: "Ambulans Unit 2", plateNo: "B 5678 AMB", currentDriver: "Citra Sopir", currentParamedic: "Dian Paramedik", equipmentStatus: "Lengkap" },
-    ];
-    for (const u of fleet) {
+    const auStatusMap: Record<string, string> = { Tersedia: "available", Bertugas: "assigned", Maintenance: "maintenance" };
+    for (const u of INITIAL_AMBULANCE_UNITS) {
       await pool.query(
-        "INSERT INTO ambulance_units (code, status, vehicle_name, plate_no, current_driver, current_paramedic, equipment_status) VALUES ($1,'available',$2,$3,$4,$5,$6)",
-        [u.code, u.vehicleName, u.plateNo, u.currentDriver, u.currentParamedic, u.equipmentStatus]
+        "INSERT INTO ambulance_units (code, status, vehicle_name, plate_no, current_driver, current_paramedic, equipment_status) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+        [u.code, auStatusMap[u.status] ?? "available", u.vehicleName, u.plateNo, u.currentDriver, u.currentParamedic, u.equipmentStatus]
       );
     }
-    console.log(`[Seed] ambulance_units: ${fleet.length} armada.`);
+    console.log(`[Seed] ambulance_units: ${INITIAL_AMBULANCE_UNITS.length} armada.`);
+
+    if (INITIAL_AMBULANCE_REQUESTS.length > 0) {
+      const { rows: unitRows } = await pool.query("SELECT id, code FROM ambulance_units");
+      const unitByCode = new Map(unitRows.map((r: any) => [r.code, r.id]));
+      for (const ar of INITIAL_AMBULANCE_REQUESTS) {
+        const arStatusMap: Record<string, string> = { Menunggu: "received", "Menuju Lokasi": "en_route", Penjemputan: "arrived", Perjalanan: "patient_onboard", Completed: "closed", Cancelled: "cancelled" };
+        const backendStatus = arStatusMap[ar.status] ?? "received";
+        const assignedUnitId = ar.assignedUnitCode ? unitByCode.get(ar.assignedUnitCode) || null : null;
+        const { rows: reqRows } = await pool.query(
+          "INSERT INTO ambulance_requests (request_no, patient_name, caller_name, caller_phone, urgency, pickup_address, status, assigned_unit_id, notes, customer_name, customer_phone, pet_name, pet_species, destination) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id",
+          [ar.requestNo, ar.petName, ar.customerName, ar.customerPhone, ar.urgency.toLowerCase(), ar.pickupAddress, backendStatus, assignedUnitId, ar.notes || null, ar.customerName, ar.customerPhone, ar.petName, ar.petSpecies || "", ar.destination || ""]
+        );
+        await pool.query(
+          "INSERT INTO ambulance_events (request_id, actor, type) VALUES ($1,'system','received')",
+          [reqRows[0].id]
+        );
+      }
+      console.log(`[Seed] ambulance_requests: ${INITIAL_AMBULANCE_REQUESTS.length} permintaan.`);
+    }
+  }
+
+  if (await isEmpty("patient_photos")) {
+    for (const ph of INITIAL_PATIENT_PHOTOS)
+      await pool.query(
+        "INSERT INTO patient_photos (pet_id, pet_name, category, photo_url, caption, taken_by) VALUES ($1,$2,$3,$4,$5,$6)",
+        [petMap.get(ph.petId) || null, ph.petName, ph.category, ph.photoUrl, ph.caption, ph.takenBy]
+      );
+    console.log(`[Seed] patient_photos: ${INITIAL_PATIENT_PHOTOS.length} foto.`);
   }
 }
