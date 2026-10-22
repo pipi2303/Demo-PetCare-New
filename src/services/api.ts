@@ -27,4 +27,7 @@ export const api = {
   put: <T,>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PUT', body: body !== undefined ? JSON.stringify(body) : undefined }),
   del: (path: string) => request<void>(path, { method: 'DELETE' }),
+  /** Upload a base64 data URI to disk; returns the served URL. */
+  upload: (dataUri: string, prefix?: string) =>
+    request<{ url: string }>('/uploads', { method: 'POST', body: JSON.stringify({ data: dataUri, prefix }) }),
 };

@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS eform_submissions (
   status          TEXT NOT NULL DEFAULT 'Draft'
                     CHECK (status IN ('Draft','Ditandatangani','Disimpan ke EMR')),
   field_values    JSONB NOT NULL DEFAULT '{}',
-  -- ponytail: base64 stored as TEXT — move to cloud storage (S3/GCS) if size matters
+  -- Use POST /api/uploads to get a URL; store the URL here rather than raw base64.
   signature_data  TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS informed_consents (
   procedure_details  TEXT NOT NULL DEFAULT '',
   risks_disclosed    TEXT NOT NULL DEFAULT '',
   estimated_cost     NUMERIC(15,2) NOT NULL DEFAULT 0,
-  -- ponytail: base64 stored as TEXT — move to cloud storage if size matters
+  -- Use POST /api/uploads to get a URL; store the URL here rather than raw base64.
   signature_data_url TEXT NOT NULL DEFAULT '',
   signed_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   witness_name       TEXT NOT NULL DEFAULT '',
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS patient_photos (
   pet_id     UUID REFERENCES pets(id) ON DELETE CASCADE,
   pet_name   TEXT NOT NULL,
   category   TEXT NOT NULL DEFAULT 'Lainnya',
-  -- ponytail: URL or base64 stored as TEXT — prefer cloud URL in production
+  -- Use POST /api/uploads to get a served URL; store that URL here.
   photo_url  TEXT NOT NULL DEFAULT '',
   caption    TEXT NOT NULL DEFAULT '',
   taken_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),

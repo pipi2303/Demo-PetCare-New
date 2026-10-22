@@ -137,6 +137,7 @@ import {
   updateClinicVisit
 } from "./server/clinicService";
 import { listInvoices, createInvoice, processPayment, listCashTransactions, createCashTransaction } from "./server/invoiceService";
+import { saveUpload, uploadsDir } from "./server/uploadService";
 
 async function startServer() {
   const app = express();
@@ -144,6 +145,9 @@ async function startServer() {
 
   // Standard security headers
   app.use(helmet({ contentSecurityPolicy: false }));
+
+  // Serve uploaded files (signatures, photos) from disk
+  app.use("/uploads", express.static(uploadsDir(), { maxAge: "7d" }));
 
   // CORS — allow requests from FRONTEND_URL (or same origin in production)
   const allowedOrigin = process.env.FRONTEND_URL || `http://localhost:${PORT}`;
@@ -2394,6 +2398,22 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   app.get("/api/audit-logs", requireSession, async (req, res) => {
     try { res.json({ success: true, data: await listAuditLogs(Number(req.query.limit) || 500) }); }
     catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  // File upload — replaces base64-in-TEXT pattern for signatures and photos.
+  // Accepts { data: "data:image/png;base64,...", prefix?: string } and saves
+  // to disk, returning { url: "/uploads/<filename>" }.
+  app.post("/api/uploads", requireSession, (req, res) => {
+    try {
+      const { data, prefix } = req.body || {};
+      if (!data || typeof data !== "string") {
+        return res.status(400).json({ success: false, message: "Field 'data' (base64 data URI) wajib diisi." });
+      }
+      const url = saveUpload(data, prefix || "upload");
+      res.status(201).json({ success: true, data: { url } });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: safeMessage(err) });
+    }
   });
 
   // ── Drugs ──────────────────────────────────────────────────────────────────
