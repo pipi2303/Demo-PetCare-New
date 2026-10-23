@@ -1,34 +1,5 @@
-import React, { Component, useState, useEffect } from 'react';
-
-type EBProps = { children: React.ReactNode };
-type EBState = { error: Error | null };
-class ErrorBoundary extends Component<EBProps, EBState> {
-  constructor(props: EBProps) {
-    super(props);
-    this.state = { error: null };
-  }
-  static getDerivedStateFromError(error: Error): EBState { return { error }; }
-  render() {
-    if (this.state.error) {
-      const err = this.state.error;
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-8 text-center">
-          <div className="max-w-md">
-            <h2 className="text-xl font-bold text-red-600 mb-2">Terjadi kesalahan aplikasi</h2>
-            <p className="text-sm text-gray-500 mb-6 font-mono bg-gray-100 p-3 rounded">{err.message}</p>
-            <button
-              onClick={() => this.setState({ error: null })}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold"
-            >
-              Coba Lagi
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
+import React, { useState, useEffect } from 'react';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { motion, AnimatePresence } from 'motion/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider, useData } from './context/DataContext';
