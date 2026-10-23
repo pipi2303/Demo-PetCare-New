@@ -267,7 +267,8 @@ export async function createSurgicalProcedure(input: {
      input.category, input.date, input.startTime ?? null, input.endTime ?? null,
      input.leadSurgeon, input.assistantSurgeon ?? null, input.anesthetist, input.anesthesiaProtocol,
      input.asaScore ?? null, input.status ?? "Selesai", input.findings ?? null,
-     input.postOpNotes ?? null, input.sutureRemovalDate ?? null,
+     input.postOpNotes ?? null,
+     (input.sutureRemovalDate && /^\d{4}-\d{2}-\d{2}$/.test(input.sutureRemovalDate)) ? input.sutureRemovalDate : null,
      input.complications ?? null, input.photoUrl ?? null]
   );
   return toSurg(rows[0]);

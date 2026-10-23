@@ -372,7 +372,9 @@ export async function seedIfEmpty() {
     for (const s of INITIAL_SURGICAL_PROCEDURES)
       await pool.query(
         "INSERT INTO surgical_procedures (procedure_no, pet_id, pet_name, customer_name, procedure_name, category, date, start_time, end_time, lead_surgeon, assistant_surgeon, anesthetist, anesthesia_protocol, asa_score, status, findings, post_op_notes, suture_removal_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)",
-        [s.procedureNo, petMap.get(s.petId) || null, s.petName, s.customerName, s.procedureName, s.category, s.date, s.startTime || null, s.endTime || null, s.leadSurgeon, s.assistantSurgeon || null, s.anesthetist, s.anesthesiaProtocol, s.asaScore || null, s.status, s.findings || null, s.postOpNotes || null, s.sutureRemovalDate || null]
+        [s.procedureNo, petMap.get(s.petId) || null, s.petName, s.customerName, s.procedureName, s.category, s.date, s.startTime || null, s.endTime || null, s.leadSurgeon, s.assistantSurgeon || null, s.anesthetist, s.anesthesiaProtocol, s.asaScore || null, s.status, s.findings || null, s.postOpNotes || null,
+         // Only pass a valid YYYY-MM-DD date, not freetext like "Tidak perlu..."
+         (s.sutureRemovalDate && /^\d{4}-\d{2}-\d{2}$/.test(s.sutureRemovalDate)) ? s.sutureRemovalDate : null]
       );
     console.log(`[Seed] surgical_procedures: ${INITIAL_SURGICAL_PROCEDURES.length} prosedur.`);
   }
