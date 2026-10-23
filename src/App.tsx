@@ -1,11 +1,16 @@
 import React, { Component, useState, useEffect } from 'react';
 
-class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
-  state = { error: null };
-  static getDerivedStateFromError(error: Error) { return { error }; }
+type EBProps = { children: React.ReactNode };
+type EBState = { error: Error | null };
+class ErrorBoundary extends Component<EBProps, EBState> {
+  constructor(props: EBProps) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error): EBState { return { error }; }
   render() {
     if (this.state.error) {
-      const err = this.state.error as Error;
+      const err = this.state.error;
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-8 text-center">
           <div className="max-w-md">

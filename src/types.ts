@@ -715,6 +715,7 @@ export interface TelehealthSession {
   customerName: string;
   petId: string;
   petName: string;
+  doctorId?: string;
   doctorName: string;
   date: string;
   timeSlot: string;

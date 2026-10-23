@@ -9,6 +9,11 @@ export interface AmbulanceUnitRecord {
   id: string;
   code: string;
   status: "available" | "assigned" | "maintenance";
+  vehicleName: string;
+  plateNo: string;
+  currentDriver: string;
+  currentParamedic: string;
+  equipmentStatus: string;
   updatedAt: string;
 }
 
@@ -32,6 +37,13 @@ export interface AmbulanceRequestRecord {
   notes?: string;
   status: AmbulanceStatus;
   assignedUnitId?: string;
+  // Extended frontend fields
+  customerName: string;
+  customerPhone: string;
+  petName: string;
+  petSpecies: string;
+  destination: string;
+  assignedUnitCode: string;
   createdAt: string;
   updatedAt: string;
   events: OperationEvent[];
@@ -47,6 +59,20 @@ export interface TelehealthRecord {
   durationMinutes: number;
   consentAcceptedAt: string;
   status: TelehealthStatus;
+  // Extended frontend fields
+  customerName: string;
+  petId?: string;
+  petName: string;
+  doctorName: string;
+  date?: string;
+  timeSlot: string;
+  type: string;
+  complaint: string;
+  fee: number;
+  meetingUrl?: string;
+  notes?: string;
+  diagnosis?: string;
+  prescription?: string;
   createdAt: string;
   updatedAt: string;
   events: OperationEvent[];
