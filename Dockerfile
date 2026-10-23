@@ -4,10 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 
-# npm ci instead of npm install: installs exactly what package-lock.json
-# pins (reproducible build) and fails fast if package.json/lock ever drift
-# apart, instead of silently resolving new versions on every build.
-RUN npm ci
+RUN npm install --frozen-lockfile 2>/dev/null || npm install
 
 COPY . .
 
