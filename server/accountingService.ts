@@ -45,6 +45,11 @@ export async function updateCoA(id: string, patch: Partial<CoAAccount>) {
 }
 
 export async function deleteCoA(id: string) {
+  const { rows } = await pool.query(
+    "SELECT COUNT(*)::int AS n FROM journal_lines WHERE account_id=$1", [id]
+  );
+  if (rows[0].n > 0)
+    throw new Error(`Akun ini memiliki ${rows[0].n} entri jurnal dan tidak dapat dihapus. Nonaktifkan saja (is_active=false) jika tidak ingin dipakai lagi.`);
   await pool.query("DELETE FROM chart_of_accounts WHERE id=$1", [id]);
 }
 
