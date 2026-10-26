@@ -26,12 +26,13 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
   );
 
   React.useEffect(() => {
+    const financeOnlyTabs = ['cashbook', 'pl', 'aging', 'journal'];
     if (activeModule === 'finance' && activeTab === 'pos') {
       setActiveTab('cashbook');
-    } else if (activeModule === 'billing' && (activeTab === 'cashbook' || activeTab === 'pl')) {
+    } else if (activeModule === 'billing' && financeOnlyTabs.includes(activeTab)) {
       setActiveTab('pos');
     }
-  }, [activeModule]);
+  }, [activeModule, activeTab]);
   const [showQrisModal, setShowQrisModal] = useState(false);
   const [selectedInvId, setSelectedInvId] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<any>('QRIS');
@@ -255,8 +256,15 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
   });
 
   const totalRev = Object.values(unitRevenue).reduce((a, b) => a + b, 0);
-  const totalExp = cashTransactions.filter((ct) => ct.type === 'Keluar').reduce((sum, ct) => sum + ct.amount, 0);
-  const netProfit = totalRev - totalExp;
+  // COGS dari invoice items (diisi otomatis saat barang dijual & stok ada)
+  const totalCogs = paidInvoices.reduce((sum, inv) =>
+    sum + inv.items.reduce((s, item) => s + ((item as any).cogsAmount || 0), 0), 0
+  );
+  const grossProfit = totalRev - totalCogs;
+  // Beban operasional = semua Kas Keluar (termasuk gaji, listrik, dll)
+  const totalOpEx = cashTransactions.filter((ct) => ct.type === 'Keluar').reduce((sum, ct) => sum + ct.amount, 0);
+  const totalExp = totalOpEx; // alias untuk backward compat di template lama
+  const netProfit = grossProfit - totalOpEx;
 
   return (
     <div className="space-y-6">
@@ -585,20 +593,36 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
 
       {activeTab === 'pl' && (
         <div className="space-y-5">
-          {/* Top KPI Summary */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Top KPI Summary — full income statement structure */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="p-4 rounded-xl bg-[#FFFDF9] border border-[#E1D6BE] shadow-2xs">
-              <span className="text-[11px] font-bold text-[#6B6656] uppercase">Total Pendapatan (Omzet)</span>
-              <p className="text-xl font-bold text-emerald-700 mt-1">Rp {totalRev.toLocaleString('id-ID')}</p>
+              <span className="text-[11px] font-bold text-[#6B6656] uppercase">Pendapatan (Omzet)</span>
+              <p className="text-lg font-bold text-emerald-700 mt-1">Rp {totalRev.toLocaleString('id-ID')}</p>
             </div>
             <div className="p-4 rounded-xl bg-[#FFFDF9] border border-[#E1D6BE] shadow-2xs">
-              <span className="text-[11px] font-bold text-[#6B6656] uppercase">Total Beban Operasional</span>
-              <p className="text-xl font-bold text-rose-700 mt-1">Rp {totalExp.toLocaleString('id-ID')}</p>
+              <span className="text-[11px] font-bold text-[#6B6656] uppercase">HPP (COGS)</span>
+              <p className="text-lg font-bold text-orange-600 mt-1">Rp {totalCogs.toLocaleString('id-ID')}</p>
+              <p className="text-[10px] text-[#8A7560] mt-0.5">Harga pokok barang terjual</p>
             </div>
-            <div className="p-4 rounded-xl bg-[#1B2A45] text-[#FFFDF9] border border-[#B8905A]/30 shadow-2xs">
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 shadow-2xs">
+              <span className="text-[11px] font-bold text-emerald-700 uppercase">Laba Kotor</span>
+              <p className="text-lg font-bold text-emerald-700 mt-1">Rp {grossProfit.toLocaleString('id-ID')}</p>
+              <p className="text-[10px] text-emerald-600 mt-0.5">Omzet − HPP</p>
+            </div>
+            <div className="p-4 rounded-xl bg-[#FFFDF9] border border-[#E1D6BE] shadow-2xs">
+              <span className="text-[11px] font-bold text-[#6B6656] uppercase">Beban Operasional</span>
+              <p className="text-lg font-bold text-rose-700 mt-1">Rp {totalOpEx.toLocaleString('id-ID')}</p>
+              <p className="text-[10px] text-[#8A7560] mt-0.5">Gaji, listrik, dll</p>
+            </div>
+          </div>
+          <div className="p-4 rounded-xl bg-[#1B2A45] text-[#FFFDF9] border border-[#B8905A]/30 shadow-2xs flex justify-between items-center">
+            <div>
               <span className="text-[11px] font-bold text-[#D9B98A] uppercase">Laba Bersih (Net Profit)</span>
-              <p className="text-xl font-bold text-[#FFFDF9] mt-1">Rp {netProfit.toLocaleString('id-ID')}</p>
+              <p className="text-[10px] text-[#EDE6D6]/70 mt-0.5">Laba Kotor − Beban Operasional</p>
             </div>
+            <p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-[#FFFDF9]' : 'text-rose-400'}`}>
+              Rp {netProfit.toLocaleString('id-ID')}
+            </p>
           </div>
 
           {/* Business Unit Breakdown */}

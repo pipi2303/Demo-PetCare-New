@@ -153,14 +153,17 @@ export async function processPayment(invoiceId: string, method: string, pointsRe
       id: invoiceId, invoiceNo: invoice.invoice_no, totalAmount,
       cashierName: invoice.cashier_name || operatorName || "Kasir",
       items: items.map((i: any) => ({ category: i.category, totalPrice: Number(i.total_price) })),
-    }).catch(() => {/* non-blocking — CoA may not be seeded yet */});
+    }).catch((e: any) => { console.warn("[Accounting] Jurnal invoice dilewati:", e?.message); });
 
     // COGS: match goods-based invoice items to stock_items by name
     const goodsCategories = ["Obat", "Makanan", "Vitamin", "Aksesoris", "Pasir Kucing", "Pet Shop Product"];
     for (const item of items) {
       if (!goodsCategories.includes(item.category)) continue;
+      // Prefer exact match, fallback to ILIKE only on trimmed exact string (no wildcards)
       const { rows: stockRows } = await client.query(
-        "SELECT id, purchase_price FROM stock_items WHERE name ILIKE $1 LIMIT 1", [item.name]
+        `SELECT id, purchase_price FROM stock_items
+         WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+        [item.name]
       );
       if (!stockRows[0]) continue;
       const cogsPerUnit = Number(stockRows[0].purchase_price);
@@ -175,7 +178,7 @@ export async function processPayment(invoiceId: string, method: string, pointsRe
       // Journal: DR HPP / CR Persediaan
       await journalizeCogs(client, invoice.invoice_no, item.name, cogsTotal,
         invoice.cashier_name || operatorName || "Kasir"
-      ).catch(() => {});
+      ).catch((e: any) => { console.warn("[Accounting] Jurnal COGS dilewati:", e?.message); });
     }
 
     return toInvoice(updatedInvRows[0], items);

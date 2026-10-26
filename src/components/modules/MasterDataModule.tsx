@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
-import { Customer, Pet, Employee, Supplier, ServiceItem, MembershipTier, Drug, HotelRoom, GroomingPackage, AmbulanceUnit, EFormTemplate } from '../../types';
+import { Customer, Pet, Employee, Supplier, ServiceItem, MembershipTier, Drug, HotelRoom, GroomingPackage, AmbulanceUnit, EFormTemplate, ChartOfAccount } from '../../types';
 import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import { usePermissions } from '../../hooks/usePermissions';
 import { TriageUrgencyBadge } from '../clinic/TriageUrgencyBadge';
@@ -38,7 +38,8 @@ import {
   FileSignature,
   GripVertical,
   Tag,
-  Warehouse
+  Warehouse,
+  BookOpen
 } from 'lucide-react';
 
 export const MasterDataModule: React.FC = () => {
@@ -99,6 +100,10 @@ export const MasterDataModule: React.FC = () => {
     warehouses = [],
     addWarehouse,
     deleteWarehouse,
+    chartOfAccounts = [],
+    addCoA,
+    updateCoA,
+    deleteCoA,
     clinicVisits = [],
     soapNotes = [],
     branches = []
@@ -117,9 +122,11 @@ export const MasterDataModule: React.FC = () => {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'customers' | 'pets' | 'services' | 'staff' | 'suppliers' | 'drugs' | 'hotelRooms' | 'groomingPackages' | 'ambulanceUnits' | 'eFormTemplates' | 'categoriesWarehouses'>('customers');
+  const [activeTab, setActiveTab] = useState<'customers' | 'pets' | 'services' | 'staff' | 'suppliers' | 'drugs' | 'hotelRooms' | 'groomingPackages' | 'ambulanceUnits' | 'eFormTemplates' | 'categoriesWarehouses' | 'coa'>('customers');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newWarehouseName, setNewWarehouseName] = useState('');
+  const [coaForm, setCoaForm] = useState<{ code: string; name: string; type: ChartOfAccount['type']; description: string }>({ code: '', name: '', type: 'Beban', description: '' });
+  const [editingCoaId, setEditingCoaId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [tierFilter, setTierFilter] = useState<string>('All');
   const [speciesFilter, setSpeciesFilter] = useState<string>('All');
@@ -1088,7 +1095,8 @@ export const MasterDataModule: React.FC = () => {
           { id: 'groomingPackages', label: 'Paket Grooming', icon: Scissors, count: (groomingPackages || []).length },
           { id: 'ambulanceUnits', label: 'Armada Ambulance', icon: Ambulance, count: (ambulanceUnits || []).length },
           { id: 'eFormTemplates', label: 'Template E-Form', icon: FileSignature, count: (eFormTemplates || []).length },
-          { id: 'categoriesWarehouses', label: 'Kategori & Gudang', icon: Tag, count: (productCategories || []).length + (warehouses || []).length }
+          { id: 'categoriesWarehouses', label: 'Kategori & Gudang', icon: Tag, count: (productCategories || []).length + (warehouses || []).length },
+          { id: 'coa', label: 'Chart of Accounts', icon: BookOpen, count: (chartOfAccounts || []).length }
         ]}
         activeTab={activeTab}
         onTabChange={(tabId) => setActiveTab(tabId as any)}
@@ -2256,6 +2264,86 @@ export const MasterDataModule: React.FC = () => {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 12: Chart of Accounts (Bagan Akun GL) */}
+      {activeTab === 'coa' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* Form */}
+          <div className="bg-white rounded-xl border border-[#E1D6BE] shadow-xs p-5 space-y-3 lg:col-span-1">
+            <h3 className="font-bold text-[#1B2A45] text-sm flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-[#B8905A]" /> {editingCoaId ? 'Edit Akun' : 'Tambah Akun GL'}
+            </h3>
+            <div className="space-y-2">
+              <input type="text" value={coaForm.code} onChange={(e) => setCoaForm((f) => ({ ...f, code: e.target.value }))}
+                placeholder="Kode akun (mis. 6100)" className="w-full border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#1B2A45]" />
+              <input type="text" value={coaForm.name} onChange={(e) => setCoaForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Nama akun" className="w-full border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#1B2A45]" />
+              <select value={coaForm.type} onChange={(e) => setCoaForm((f) => ({ ...f, type: e.target.value as ChartOfAccount['type'] }))}
+                className="w-full border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#1B2A45] bg-white">
+                {['Aset','Kewajiban','Ekuitas','Pendapatan','HPP','Beban'].map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <input type="text" value={coaForm.description} onChange={(e) => setCoaForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Deskripsi (opsional)" className="w-full border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#1B2A45]" />
+              <div className="flex gap-2 pt-1">
+                <button onClick={async () => {
+                  if (!coaForm.code.trim() || !coaForm.name.trim()) { addToast('Kode dan nama akun wajib diisi.', 'error'); return; }
+                  try {
+                    if (editingCoaId) { await updateCoA(editingCoaId, coaForm); addToast('Akun diperbarui.', 'success'); }
+                    else { await addCoA({ ...coaForm, isActive: true }); addToast('Akun ditambahkan.', 'success'); }
+                    setCoaForm({ code: '', name: '', type: 'Beban', description: '' });
+                    setEditingCoaId(null);
+                  } catch (e: any) { addToast(e.message || 'Gagal menyimpan akun.', 'error'); }
+                }} className="flex-1 py-2 bg-[#1B2A45] text-[#FFFDF9] font-bold rounded-lg text-xs flex items-center justify-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5" /> {editingCoaId ? 'Simpan' : 'Tambah'}
+                </button>
+                {editingCoaId && <button onClick={() => { setEditingCoaId(null); setCoaForm({ code: '', name: '', type: 'Beban', description: '' }); }}
+                  className="px-3 py-2 bg-gray-100 text-gray-600 font-bold rounded-lg text-xs"><X className="w-3.5 h-3.5" /></button>}
+              </div>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-xl border border-[#E1D6BE] shadow-xs overflow-hidden lg:col-span-2">
+            <div className="p-3 bg-[#F5EDD8] border-b border-[#E1D6BE]">
+              <span className="font-bold text-[#1B2A45] text-sm">{chartOfAccounts.length} Akun GL</span>
+            </div>
+            <div className="overflow-y-auto max-h-[500px]">
+              {(['Aset','Kewajiban','Ekuitas','Pendapatan','HPP','Beban'] as const).map((type) => {
+                const accs = chartOfAccounts.filter((a) => a.type === type).sort((a, b) => a.code.localeCompare(b.code));
+                if (!accs.length) return null;
+                return (
+                  <div key={type}>
+                    <div className="px-4 py-1.5 bg-[#F5EDD8]/60 text-[10px] font-bold text-[#8A7560] uppercase tracking-wider">{type}</div>
+                    {accs.map((a) => (
+                      <div key={a.id} className="flex items-center justify-between px-4 py-2.5 border-t border-[#E1D6BE]/50 hover:bg-[#F5EDD8]/30">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-xs font-bold text-[#B8905A] w-12">{a.code}</span>
+                          <div>
+                            <p className="text-xs font-semibold text-[#1B2A45]">{a.name}</p>
+                            {a.description && <p className="text-[10px] text-[#8A7560]">{a.description}</p>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button onClick={() => { setEditingCoaId(a.id); setCoaForm({ code: a.code, name: a.name, type: a.type, description: a.description }); }}
+                            className="p-1.5 hover:bg-[#F5EDD8] text-[#1B2A45] rounded">
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => confirmAndDelete(`Hapus akun "${a.code} - ${a.name}"?`, () => deleteCoA(a.id))}
+                            className="p-1.5 hover:bg-rose-50 text-rose-600 rounded">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
