@@ -52,7 +52,23 @@ jobs:
           WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
         run: |
           if [ -z "$WEBHOOK_URL" ]; then
-            echo "::error::PORTAINER_WEBHOOK_URL secret is not set. Add it in GitHub repo Settings > Secrets and variables > Actions."
+            echo "::error::PORTAINER_WEBHOOK_URL secret is not set."
             exit 1
           fi
-          curl --fail --silent --show-error -k -X POST "$WEBHOOK_URL"
+          # Retry up to 3x with 15s delay. HTTP 409 = Portainer already deploying;
+          # wait and retry. Any other non-2xx fails immediately.
+          for attempt in 1 2 3; do
+            STATUS=$(curl --silent --show-error -k -o /dev/null -w "%{http_code}" -X POST "$WEBHOOK_URL")
+            echo "Attempt $attempt: HTTP $STATUS"
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "204" ]; then
+              echo "Webhook accepted."
+              exit 0
+            elif [ "$STATUS" = "409" ]; then
+              echo "Portainer busy (409), retrying in 15s..."
+              sleep 15
+            else
+              echo "::error::Webhook failed with HTTP $STATUS"
+              exit 1
+            fi
+          done
+          echo "::warning::Portainer still busy after 3 attempts — deploy may be queued."
