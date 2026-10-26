@@ -1,5 +1,6 @@
 import { pool, withTransaction } from "./db";
 import { getAppSettings } from "./tenantService";
+import { journalizeInvoicePayment, journalizeCogs, journalizeCashExpense, journalizeCashIncome } from "./accountingService";
 
 function toInvoice(row: any, items: any[]) {
   return {
@@ -146,6 +147,37 @@ export async function processPayment(invoiceId: string, method: string, pointsRe
     );
 
     const { rows: items } = await client.query("SELECT * FROM invoice_items WHERE invoice_id = $1", [invoiceId]);
+
+    // Double-entry journal: DR Cash / CR Revenue
+    await journalizeInvoicePayment(client, {
+      id: invoiceId, invoiceNo: invoice.invoice_no, totalAmount,
+      cashierName: invoice.cashier_name || operatorName || "Kasir",
+      items: items.map((i: any) => ({ category: i.category, totalPrice: Number(i.total_price) })),
+    }).catch(() => {/* non-blocking — CoA may not be seeded yet */});
+
+    // COGS: match goods-based invoice items to stock_items by name
+    const goodsCategories = ["Obat", "Makanan", "Vitamin", "Aksesoris", "Pasir Kucing", "Pet Shop Product"];
+    for (const item of items) {
+      if (!goodsCategories.includes(item.category)) continue;
+      const { rows: stockRows } = await client.query(
+        "SELECT id, purchase_price FROM stock_items WHERE name ILIKE $1 LIMIT 1", [item.name]
+      );
+      if (!stockRows[0]) continue;
+      const cogsPerUnit = Number(stockRows[0].purchase_price);
+      const cogsTotal = cogsPerUnit * Number(item.quantity);
+      if (cogsTotal <= 0) continue;
+      // Record COGS in invoice_item
+      await client.query("UPDATE invoice_items SET stock_item_id=$1, cogs_amount=$2 WHERE id=$3",
+        [stockRows[0].id, cogsTotal, item.id]);
+      // Deduct stock
+      await client.query("UPDATE stock_items SET stock = GREATEST(0, stock - $1) WHERE id=$2",
+        [Number(item.quantity), stockRows[0].id]);
+      // Journal: DR HPP / CR Persediaan
+      await journalizeCogs(client, invoice.invoice_no, item.name, cogsTotal,
+        invoice.cashier_name || operatorName || "Kasir"
+      ).catch(() => {});
+    }
+
     return toInvoice(updatedInvRows[0], items);
   });
 }
@@ -156,19 +188,26 @@ export async function listCashTransactions() {
 }
 
 export async function createCashTransaction(input: {
-  type: string;
-  category: string;
-  amount: number;
-  description: string;
-  referenceNo?: string;
-  operator: string;
+  type: string; category: string; amount: number;
+  description: string; referenceNo?: string; operator: string;
 }) {
-  const transNo = "CSH-" + Date.now().toString().slice(-6);
-  const occurredAt = new Date().toISOString().replace("T", " ").substring(0, 16);
-  const { rows } = await pool.query(
-    `INSERT INTO cash_transactions (trans_no, type, category, amount, occurred_at, description, reference_no, operator)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [transNo, input.type, input.category, input.amount, occurredAt, input.description, input.referenceNo ?? null, input.operator]
-  );
-  return toCashTransaction(rows[0]);
+  return withTransaction(async (client) => {
+    const transNo = "CSH-" + Date.now().toString().slice(-6);
+    const occurredAt = new Date().toISOString().replace("T", " ").substring(0, 16);
+    const { rows } = await client.query(
+      `INSERT INTO cash_transactions (trans_no, type, category, amount, occurred_at, description, reference_no, operator)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [transNo, input.type, input.category, input.amount, occurredAt,
+       input.description, input.referenceNo ?? null, input.operator]
+    );
+    // Auto double-entry journal (Pelunasan Invoice already journalized via processPayment)
+    if (input.category !== "Pelunasan Invoice") {
+      if (input.type === "Keluar") {
+        await journalizeCashExpense(client, transNo, input.category, input.amount, input.operator).catch(() => {});
+      } else {
+        await journalizeCashIncome(client, transNo, input.category, input.amount, input.operator).catch(() => {});
+      }
+    }
+    return toCashTransaction(rows[0]);
+  });
 }

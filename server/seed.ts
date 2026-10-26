@@ -478,4 +478,45 @@ export async function seedIfEmpty() {
       );
     console.log(`[Seed] patient_photos: ${INITIAL_PATIENT_PHOTOS.length} foto.`);
   }
+
+  if (await isEmpty("chart_of_accounts")) {
+    const coa = [
+      // ASET
+      ["1100","Kas & Bank","Aset","Uang tunai dan saldo bank operasional"],
+      ["1200","Piutang Usaha","Aset","Invoice yang belum dibayar pelanggan"],
+      ["1300","Persediaan Obat & Produk","Aset","Nilai stok obat, makanan, dan produk pet shop"],
+      ["1400","Aset Tetap - Peralatan","Aset","Peralatan medis, mesin grooming, dan inventaris"],
+      // KEWAJIBAN
+      ["2100","Utang Usaha ke Supplier","Kewajiban","Tagihan purchase order yang belum dibayar"],
+      ["2200","Utang Gaji Karyawan","Kewajiban","Gaji yang sudah jatuh tempo belum dicairkan"],
+      ["2300","PPN Keluaran","Kewajiban","Pajak pertambahan nilai yang dipungut"],
+      // EKUITAS
+      ["3100","Modal Pemilik","Ekuitas","Investasi awal dan tambahan modal pemilik"],
+      ["3200","Laba Ditahan","Ekuitas","Akumulasi laba/rugi periode sebelumnya"],
+      // PENDAPATAN
+      ["4100","Pendapatan Jasa Klinik","Pendapatan","Konsultasi, tindakan, vaksinasi, rawat inap, lab"],
+      ["4200","Pendapatan Grooming","Pendapatan","Jasa grooming salon dan spa"],
+      ["4300","Pendapatan Pet Hotel","Pendapatan","Penitipan hewan dan boarding"],
+      ["4400","Penjualan Produk Pet Shop","Pendapatan","Penjualan obat, makanan, aksesoris"],
+      ["4500","Pendapatan Telehealth","Pendapatan","Konsultasi video dan telekonsultasi online"],
+      // HPP
+      ["5100","HPP Obat & Produk","HPP","Harga pokok barang yang terjual (COGS)"],
+      ["5200","Komisi Dokter & Staf","HPP","Komisi langsung terkait pelayanan pasien"],
+      // BEBAN OPERASIONAL
+      ["6100","Beban Gaji Pokok","Beban","Gaji tetap seluruh karyawan"],
+      ["6200","BPJS & Tunjangan Karyawan","Beban","BPJS Kesehatan, Ketenagakerjaan, tunjangan"],
+      ["6300","Listrik, Air & Internet","Beban","Utilitas operasional klinik"],
+      ["6400","Pemeliharaan Alat & Gedung","Beban","Servis, kalibrasi alat, dan maintenance gedung"],
+      ["6500","ATK & Perlengkapan Operasional","Beban","Alat tulis kantor dan perlengkapan harian"],
+      ["6600","Konsumsi & Kesejahteraan Staf","Beban","Makanan staf, snack rapat, dan insentif"],
+      ["6700","Biaya Jasa Profesional","Beban","Akuntan, konsultan, jasa outsourcing"],
+      ["6800","Beban Lain-lain","Beban","Pengeluaran operasional di luar kategori di atas"],
+    ];
+    for (const [code, name, type, description] of coa)
+      await pool.query(
+        "INSERT INTO chart_of_accounts (code, name, type, description) VALUES ($1,$2,$3,$4)",
+        [code, name, type, description]
+      );
+    console.log(`[Seed] chart_of_accounts: ${coa.length} akun GL.`);
+  }
 }

@@ -172,6 +172,16 @@ interface DataContextType {
   cashTransactions: Types.CashTransaction[];
   addCashTransaction: (ct: Omit<Types.CashTransaction, 'id' | 'transNo' | 'date'>) => Promise<void>;
 
+  // Accounting
+  chartOfAccounts: Types.ChartOfAccount[];
+  addCoA: (a: Omit<Types.ChartOfAccount, 'id'>) => Promise<Types.ChartOfAccount>;
+  updateCoA: (id: string, patch: Partial<Types.ChartOfAccount>) => Promise<void>;
+  deleteCoA: (id: string) => Promise<void>;
+  journalEntries: Types.JournalEntry[];
+  trialBalance: Types.TrialBalanceLine[];
+  receivablesAging: Types.ReceivablesAging | null;
+  refreshAccounting: () => Promise<void>;
+
   // HR & Shifts
   employees: Types.Employee[];
   addEmployee: (e: Omit<Types.Employee, 'id' | 'nik'>) => Promise<void>;
@@ -365,6 +375,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [invoices, setInvoices] = useServerState<Types.Invoice[]>('/invoices', Seed.INITIAL_INVOICES);
   const [cashTransactions, setCashTransactions] = useServerState<Types.CashTransaction[]>('/cash-transactions', Seed.INITIAL_CASH_TRANSACTIONS);
+  const [chartOfAccounts, setChartOfAccounts] = useServerState<Types.ChartOfAccount[]>('/coa', []);
+  const [journalEntries, setJournalEntries] = useServerState<Types.JournalEntry[]>('/journal-entries', []);
+  const [trialBalance, setTrialBalance] = useServerState<Types.TrialBalanceLine[]>('/trial-balance', []);
+  const [receivablesAging, setReceivablesAging] = useServerState<Types.ReceivablesAging | null>('/invoices/aging', null);
 
   const [employees, setEmployees] = useServerState<Types.Employee[]>('/employees', Seed.INITIAL_EMPLOYEES);
   const [absenceRecords, setAbsenceRecords] = useServerState<Types.AbsenceRecord[]>('/absence-records', Seed.INITIAL_ABSENCE_RECORDS);
@@ -1492,6 +1506,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPatientPhotos((prev) => prev.filter((p) => p.id !== id));
   };
 
+  // ── Accounting mutations ────────────────────────────────────────────────────
+  const addCoA = async (account: Omit<Types.ChartOfAccount, 'id'>): Promise<Types.ChartOfAccount> => {
+    const newAcc = await api.post<Types.ChartOfAccount>('/coa', account);
+    setChartOfAccounts((prev) => [...prev, newAcc].sort((a, b) => a.code.localeCompare(b.code)));
+    return newAcc;
+  };
+  const updateCoA = async (id: string, patch: Partial<Types.ChartOfAccount>): Promise<void> => {
+    const updated = await api.put<Types.ChartOfAccount>(`/coa/${id}`, patch);
+    setChartOfAccounts((prev) => prev.map((a) => (a.id === id ? updated : a)));
+  };
+  const deleteCoA = async (id: string): Promise<void> => {
+    await api.del(`/coa/${id}`);
+    setChartOfAccounts((prev) => prev.filter((a) => a.id !== id));
+  };
+  const refreshAccounting = async (): Promise<void> => {
+    const [je, tb, aging] = await Promise.all([
+      api.get<Types.JournalEntry[]>('/journal-entries'),
+      api.get<Types.TrialBalanceLine[]>('/trial-balance'),
+      api.get<Types.ReceivablesAging>('/invoices/aging'),
+    ]);
+    setJournalEntries(je);
+    setTrialBalance(tb);
+    setReceivablesAging(aging);
+  };
+
   const resetDailyQueue = () => {
     setClinicVisits((prev) => prev.map((v) => (v.status === 'Menunggu' ? { ...v, status: 'Batal' } : v)));
     addAuditLog('Edit', 'Sistem & Operasional', 'Antrean Harian', 'Penutupan sesi operasional harian: seluruh sisa antrean dibatalkan secara otomatis.', { severity: 'Warning' });
@@ -1615,6 +1654,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         processPayment,
         cashTransactions,
         addCashTransaction,
+        chartOfAccounts, addCoA, updateCoA, deleteCoA,
+        journalEntries, trialBalance, receivablesAging, refreshAccounting,
         employees,
         addEmployee,
         updateEmployee,

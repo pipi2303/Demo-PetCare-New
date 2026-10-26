@@ -35,6 +35,10 @@ import {
   listAuditLogs,
 } from "./server/phase5Service";
 import {
+  listCoA, createCoA, updateCoA, deleteCoA,
+  listJournalEntries, getTrialBalance, getReceivablesAging,
+} from "./server/accountingService";
+import {
   listGroomingPackages, createGroomingPackage, updateGroomingPackage, deleteGroomingPackage,
   listGroomingBookings, createGroomingBooking, updateGroomingBooking,
   listGroomingSessions, createGroomingSession, updateGroomingStage,
@@ -2410,6 +2414,39 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
 
   app.get("/api/audit-logs", requireSession, async (req, res) => {
     try { res.json({ success: true, data: await listAuditLogs(Number(req.query.limit) || 500) }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  // ── Accounting: CoA, Journal, Trial Balance, Aging ─────────────────────────
+  app.get("/api/coa", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await listCoA() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.post("/api/coa", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.status(201).json({ success: true, data: await createCoA(req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.put("/api/coa/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { res.json({ success: true, data: await updateCoA(req.params.id, req.body || {}) }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+  app.delete("/api/coa/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    try { await deleteCoA(req.params.id); res.json({ success: true }); }
+    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/journal-entries", requireSession, async (req, res) => {
+    try { res.json({ success: true, data: await listJournalEntries(Number(req.query.limit) || 200) }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/trial-balance", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await getTrialBalance() }); }
+    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
+  });
+
+  app.get("/api/invoices/aging", requireSession, async (_req, res) => {
+    try { res.json({ success: true, data: await getReceivablesAging() }); }
     catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
   });
 

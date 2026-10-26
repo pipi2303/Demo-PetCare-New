@@ -610,6 +610,62 @@ export interface CashTransaction {
   operator: string;
 }
 
+export interface ChartOfAccount {
+  id: string;
+  code: string;
+  name: string;
+  type: 'Aset' | 'Kewajiban' | 'Ekuitas' | 'Pendapatan' | 'HPP' | 'Beban';
+  description: string;
+  isActive: boolean;
+}
+
+export interface JournalLine {
+  accountId: string;
+  accountCode?: string;
+  accountName?: string;
+  debit: number;
+  credit: number;
+  description?: string;
+}
+
+export interface JournalEntry {
+  id: string;
+  entryNo: string;
+  date: string;
+  description: string;
+  referenceNo: string;
+  source: string;
+  createdBy: string;
+  lines: JournalLine[];
+}
+
+export interface TrialBalanceLine {
+  code: string;
+  name: string;
+  type: string;
+  totalDebit: number;
+  totalCredit: number;
+  balance: number;
+}
+
+export interface AgingBucket {
+  label: string;
+  min: number;
+  max: number;
+  count: number;
+  total: number;
+  invoices: {
+    id: string; invoiceNo: string; customerName: string;
+    customerPhone: string; totalAmount: number; date: string; daysOverdue: number;
+  }[];
+}
+
+export interface ReceivablesAging {
+  buckets: AgingBucket[];
+  grandTotal: number;
+  totalCount: number;
+}
+
 export interface Employee {
   id: string;
   nik: string;

@@ -3,25 +3,9 @@ import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { createQrisPayment, pollPaymentStatus, PaymentStatus } from '../../utils/payment';
 import {
-  Receipt,
-  QrCode,
-  DollarSign,
-  CreditCard,
-  Building2,
-  TrendingUp,
-  PieChart,
-  CheckCircle2,
-  Clock,
-  Printer,
-  Plus,
-  BarChart2,
-  Wallet,
-  ArrowUpRight,
-  ArrowDownRight,
-  FileText,
-  Loader2,
-  AlertTriangle,
-  RefreshCw
+  Receipt, QrCode, DollarSign, CreditCard, Building2, TrendingUp, PieChart,
+  CheckCircle2, Clock, Printer, Plus, BarChart2, Wallet, ArrowUpRight, ArrowDownRight,
+  FileText, Loader2, AlertTriangle, RefreshCw, BookOpen, Scale, AlertCircle
 } from 'lucide-react';
 
 interface BillingFinanceModuleProps {
@@ -29,10 +13,15 @@ interface BillingFinanceModuleProps {
 }
 
 export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ activeModule = 'billing' }) => {
-  const { invoices = [], cashTransactions = [], productCategories = [], addInvoice, processPayment, addCashTransaction } = useData();
+  const {
+    invoices = [], cashTransactions = [], productCategories = [],
+    addInvoice, processPayment, addCashTransaction,
+    chartOfAccounts = [], journalEntries = [], trialBalance = [],
+    receivablesAging, refreshAccounting,
+  } = useData();
   const { addToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'pos' | 'cashbook' | 'pl'>(
+  const [activeTab, setActiveTab] = useState<'pos' | 'cashbook' | 'pl' | 'aging' | 'journal'>(
     activeModule === 'finance' ? 'cashbook' : 'pos'
   );
 
@@ -46,6 +35,14 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
   const [showQrisModal, setShowQrisModal] = useState(false);
   const [selectedInvId, setSelectedInvId] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<any>('QRIS');
+  const [accountingLoading, setAccountingLoading] = useState(false);
+
+  const handleRefreshAccounting = async () => {
+    setAccountingLoading(true);
+    try { await refreshAccounting?.(); addToast('Data akuntansi diperbarui.', 'success'); }
+    catch { addToast('Gagal memuat data akuntansi.', 'error'); }
+    finally { setAccountingLoading(false); }
+  };
 
   // Real QRIS payment state (Midtrans). qrisPhase 'idle' means: not a QRIS
   // payment in progress (either a different payment method is selected, or
@@ -307,6 +304,26 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
             }`}
           >
             <PieChart className="w-4 h-4" /> Laba / Rugi Per Unit
+          </button>
+          <button
+            onClick={() => setActiveTab('aging')}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              activeTab === 'aging'
+                ? 'bg-[#B8905A] text-[#FFFDF9] shadow-2xs'
+                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/30 hover:bg-[#101A2C]/80'
+            }`}
+          >
+            <AlertCircle className="w-4 h-4" /> Piutang & Aging
+          </button>
+          <button
+            onClick={() => setActiveTab('journal')}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              activeTab === 'journal'
+                ? 'bg-[#B8905A] text-[#FFFDF9] shadow-2xs'
+                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/30 hover:bg-[#101A2C]/80'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" /> Jurnal & Trial Balance
           </button>
         </div>
       </div>
@@ -619,6 +636,193 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
               <p className="text-[11px] text-[#6B6656]">
                 + Rp {unitRevenue.Lainnya.toLocaleString('id-ID')} dari kategori item invoice yang belum terpetakan ke unit manapun.
               </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Aging Piutang Tab ───────────────────────────────────────────── */}
+      {activeTab === 'aging' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-[#1B2A45] text-sm">Aging Piutang Usaha</h3>
+              <p className="text-xs text-[#8A7560]">Invoice belum dibayar, dikelompokkan berdasarkan umur hutang</p>
+            </div>
+            <button onClick={handleRefreshAccounting} disabled={accountingLoading}
+              className="px-3 py-1.5 bg-[#1B2A45] text-[#FFFDF9] rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50">
+              <RefreshCw className={`w-3 h-3 ${accountingLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          {receivablesAging ? (
+            <>
+              {/* Summary cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {receivablesAging.buckets.map((b) => (
+                  <div key={b.label} className={`rounded-xl p-3 border ${b.count > 0 ? 'border-red-200 bg-red-50' : 'border-[#E1D6BE] bg-[#FFFDF9]'}`}>
+                    <p className="text-xs text-[#8A7560] font-medium">{b.label}</p>
+                    <p className={`text-lg font-bold ${b.count > 0 ? 'text-red-700' : 'text-[#8A7560]'}`}>{b.count} invoice</p>
+                    <p className="text-xs font-semibold text-[#1B2A45]">Rp {b.total.toLocaleString('id-ID')}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Grand total */}
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex justify-between items-center">
+                <span className="text-sm font-bold text-red-700">Total Piutang Outstanding</span>
+                <span className="text-lg font-bold text-red-700">Rp {receivablesAging.grandTotal.toLocaleString('id-ID')}</span>
+              </div>
+
+              {/* Detail table */}
+              {receivablesAging.buckets.some((b) => b.count > 0) && (
+                <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-[#F5EDD8]">
+                      <tr>
+                        <th className="text-left p-3 font-bold text-[#1B2A45]">Invoice</th>
+                        <th className="text-left p-3 font-bold text-[#1B2A45]">Pelanggan</th>
+                        <th className="text-left p-3 font-bold text-[#1B2A45]">Tanggal</th>
+                        <th className="text-right p-3 font-bold text-[#1B2A45]">Jumlah</th>
+                        <th className="text-right p-3 font-bold text-[#1B2A45]">Hari Overdue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {receivablesAging.buckets.flatMap((b) => b.invoices).map((inv) => (
+                        <tr key={inv.id} className="border-t border-[#E1D6BE] hover:bg-[#F5EDD8]/50">
+                          <td className="p-3 font-mono text-[#B8905A]">{inv.invoiceNo}</td>
+                          <td className="p-3">{inv.customerName}</td>
+                          <td className="p-3 text-[#8A7560]">{inv.date}</td>
+                          <td className="p-3 text-right font-semibold">Rp {inv.totalAmount.toLocaleString('id-ID')}</td>
+                          <td className={`p-3 text-right font-bold ${inv.daysOverdue > 30 ? 'text-red-600' : inv.daysOverdue > 14 ? 'text-orange-500' : 'text-[#1B2A45]'}`}>
+                            {inv.daysOverdue}h
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-12 text-[#8A7560] text-sm">
+              <AlertCircle className="w-10 h-10 mx-auto mb-2 opacity-40" />
+              <p>Klik Refresh untuk memuat data aging piutang</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Jurnal & Trial Balance Tab ──────────────────────────────────── */}
+      {activeTab === 'journal' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-[#1B2A45] text-sm">Jurnal & Trial Balance</h3>
+              <p className="text-xs text-[#8A7560]">Pencatatan double-entry otomatis dari setiap transaksi</p>
+            </div>
+            <button onClick={handleRefreshAccounting} disabled={accountingLoading}
+              className="px-3 py-1.5 bg-[#1B2A45] text-[#FFFDF9] rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50">
+              <RefreshCw className={`w-3 h-3 ${accountingLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          {/* Trial Balance */}
+          <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] overflow-hidden">
+            <div className="p-3 bg-[#F5EDD8] border-b border-[#E1D6BE] flex items-center gap-2">
+              <Scale className="w-4 h-4 text-[#B8905A]" />
+              <span className="font-bold text-[#1B2A45] text-sm">Neraca Saldo (Trial Balance)</span>
+            </div>
+            {trialBalance.length > 0 ? (
+              <>
+                <table className="w-full text-xs">
+                  <thead className="bg-[#F5EDD8]/60">
+                    <tr>
+                      <th className="text-left p-2.5 font-bold text-[#1B2A45]">Kode</th>
+                      <th className="text-left p-2.5 font-bold text-[#1B2A45]">Akun</th>
+                      <th className="text-left p-2.5 font-bold text-[#1B2A45]">Tipe</th>
+                      <th className="text-right p-2.5 font-bold text-[#1B2A45]">Debit</th>
+                      <th className="text-right p-2.5 font-bold text-[#1B2A45]">Kredit</th>
+                      <th className="text-right p-2.5 font-bold text-[#1B2A45]">Saldo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trialBalance.filter((t) => t.totalDebit > 0 || t.totalCredit > 0).map((t) => (
+                      <tr key={t.code} className="border-t border-[#E1D6BE] hover:bg-[#F5EDD8]/30">
+                        <td className="p-2.5 font-mono text-[#B8905A]">{t.code}</td>
+                        <td className="p-2.5">{t.name}</td>
+                        <td className="p-2.5 text-[#8A7560]">{t.type}</td>
+                        <td className="p-2.5 text-right">{t.totalDebit > 0 ? `Rp ${t.totalDebit.toLocaleString('id-ID')}` : '-'}</td>
+                        <td className="p-2.5 text-right">{t.totalCredit > 0 ? `Rp ${t.totalCredit.toLocaleString('id-ID')}` : '-'}</td>
+                        <td className={`p-2.5 text-right font-semibold ${t.balance < 0 ? 'text-red-600' : 'text-[#1B2A45]'}`}>
+                          {t.balance !== 0 ? `Rp ${Math.abs(t.balance).toLocaleString('id-ID')}` : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-[#F5EDD8] font-bold border-t-2 border-[#B8905A]">
+                    <tr>
+                      <td colSpan={3} className="p-2.5 text-[#1B2A45]">TOTAL</td>
+                      <td className="p-2.5 text-right text-[#1B2A45]">
+                        Rp {trialBalance.reduce((s, t) => s + t.totalDebit, 0).toLocaleString('id-ID')}
+                      </td>
+                      <td className="p-2.5 text-right text-[#1B2A45]">
+                        Rp {trialBalance.reduce((s, t) => s + t.totalCredit, 0).toLocaleString('id-ID')}
+                      </td>
+                      <td className="p-2.5"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </>
+            ) : (
+              <p className="text-center py-8 text-xs text-[#8A7560]">Klik Refresh untuk memuat neraca saldo</p>
+            )}
+          </div>
+
+          {/* Journal Entries */}
+          <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] overflow-hidden">
+            <div className="p-3 bg-[#F5EDD8] border-b border-[#E1D6BE] flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-[#B8905A]" />
+              <span className="font-bold text-[#1B2A45] text-sm">Buku Jurnal Umum</span>
+              <span className="text-xs text-[#8A7560] ml-auto">{journalEntries.length} entri</span>
+            </div>
+            {journalEntries.length > 0 ? (
+              <div className="divide-y divide-[#E1D6BE] max-h-[500px] overflow-y-auto">
+                {journalEntries.map((entry) => (
+                  <div key={entry.id} className="p-3 hover:bg-[#F5EDD8]/30">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <span className="font-mono text-xs text-[#B8905A] font-bold">{entry.entryNo}</span>
+                        <span className="text-xs text-[#8A7560] ml-2">{entry.date}</span>
+                        <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          entry.source === 'invoice' ? 'bg-green-100 text-green-700' :
+                          entry.source === 'cogs' ? 'bg-orange-100 text-orange-700' :
+                          entry.source === 'cash_transaction' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>{entry.source}</span>
+                      </div>
+                      <span className="text-xs text-[#8A7560]">{entry.createdBy}</span>
+                    </div>
+                    <p className="text-xs text-[#1B2A45] mb-2">{entry.description}</p>
+                    <table className="w-full text-[11px]">
+                      <tbody>
+                        {entry.lines.map((line, i) => (
+                          <tr key={i} className="text-[#444]">
+                            <td className="py-0.5 pr-2 font-mono text-[#B8905A] w-16">{line.accountCode}</td>
+                            <td className="py-0.5 pr-4">{line.accountName}</td>
+                            <td className="py-0.5 text-right w-32 font-medium">{line.debit > 0 ? `Rp ${line.debit.toLocaleString('id-ID')}` : ''}</td>
+                            <td className="py-0.5 text-right w-32 text-[#8A7560] pl-4">{line.credit > 0 ? `Rp ${line.credit.toLocaleString('id-ID')}` : ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center py-8 text-xs text-[#8A7560]">Klik Refresh untuk memuat entri jurnal</p>
             )}
           </div>
         </div>
