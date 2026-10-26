@@ -258,7 +258,7 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
   const totalRev = Object.values(unitRevenue).reduce((a, b) => a + b, 0);
   // COGS dari invoice items (diisi otomatis saat barang dijual & stok ada)
   const totalCogs = paidInvoices.reduce((sum, inv) =>
-    sum + inv.items.reduce((s, item) => s + ((item as any).cogsAmount || 0), 0), 0
+    sum + inv.items.reduce((s, item) => s + (item.cogsAmount || 0), 0), 0
   );
   const grossProfit = totalRev - totalCogs;
   // Beban operasional = semua Kas Keluar (termasuk gaji, listrik, dll)

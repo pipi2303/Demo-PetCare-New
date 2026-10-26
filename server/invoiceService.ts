@@ -17,6 +17,7 @@ function toInvoice(row: any, items: any[]) {
       quantity: i.quantity,
       unitPrice: Number(i.unit_price),
       totalPrice: Number(i.total_price),
+      cogsAmount: Number(i.cogs_amount ?? 0),
     })),
     subtotal: Number(row.subtotal),
     discountAmount: Number(row.discount_amount),

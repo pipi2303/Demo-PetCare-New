@@ -578,6 +578,7 @@ export interface InvoiceItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  cogsAmount: number;
 }
 
 export interface Invoice {
