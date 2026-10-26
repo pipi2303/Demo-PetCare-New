@@ -578,7 +578,7 @@ export interface InvoiceItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
-  cogsAmount: number;
+  cogsAmount?: number;
 }
 
 export interface Invoice {
