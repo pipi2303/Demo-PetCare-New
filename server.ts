@@ -247,6 +247,22 @@ async function startServer() {
     return err?.message || "Terjadi kesalahan.";
   }
 
+  // Validates required fields at trust boundary. Returns an error message or null.
+  // strings: must be non-empty strings under 2000 chars.
+  // numbers: must be finite non-negative numbers.
+  function guard(body: any, strings: string[] = [], numbers: string[] = []): string | null {
+    for (const k of strings) {
+      const v = body?.[k];
+      if (typeof v !== 'string' || v.trim() === '') return `${k} wajib diisi`;
+      if (v.length > 2000) return `${k} terlalu panjang (maks 2000 karakter)`;
+    }
+    for (const k of numbers) {
+      const v = Number(body?.[k]);
+      if (!isFinite(v) || v < 0) return `${k} harus berupa angka non-negatif`;
+    }
+    return null;
+  }
+
   // Reads the "Authorization: Bearer <token>" header and attaches the
   // resolved session (email/role) to the request, or responds 401 if the
   // token is missing/expired. Role can never come from the client body.
@@ -1907,6 +1923,8 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   });
 
   app.post("/api/customers", requireRole(...STAFF_ROLES), async (req, res) => {
+    const err = guard(req.body, ['name', 'phone']);
+    if (err) return res.status(400).json({ success: false, message: err });
     try { res.status(201).json({ success: true, data: await createCustomer(req.body || {}) }); }
     catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
@@ -1932,6 +1950,8 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   });
 
   app.post("/api/pets", requireRole(...STAFF_ROLES), async (req, res) => {
+    const err = guard(req.body, ['name', 'species']);
+    if (err) return res.status(400).json({ success: false, message: err });
     try { res.status(201).json({ success: true, data: await createPet(req.body || {}) }); }
     catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
@@ -1992,6 +2012,8 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   });
 
   app.post("/api/invoices", requireRole(...STAFF_ROLES), async (req, res) => {
+    const err = guard(req.body, ['customerId', 'customerName']);
+    if (err) return res.status(400).json({ success: false, message: err });
     try { res.status(201).json({ success: true, data: await createInvoice(req.body || {}) }); }
     catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
@@ -2050,6 +2072,8 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
     catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
   });
   app.post("/api/stock-items", requireRole(...STAFF_ROLES), async (req, res) => {
+    const err = guard(req.body, ['name', 'sku'], ['purchasePrice', 'sellingPrice', 'minStock']);
+    if (err) return res.status(400).json({ success: false, message: err });
     try { res.status(201).json({ success: true, data: await createStockItem(req.body || {}) }); }
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
@@ -2109,6 +2133,8 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
     catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
   });
   app.post("/api/employees", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
+    const err = guard(req.body, ['name', 'role']);
+    if (err) return res.status(400).json({ success: false, message: err });
     try { res.status(201).json({ success: true, data: await createEmployee(req.body || {}) }); }
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
@@ -2466,7 +2492,9 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
   app.post("/api/drugs/:id/dispense", requireRole(...STAFF_ROLES), async (req, res) => {
-    try { res.json({ success: true, data: await dispenseDrug(req.params.id, Number(req.body?.quantity) || 0) }); }
+    const qty = Number(req.body?.quantity);
+    if (!isFinite(qty) || qty <= 0) return res.status(400).json({ success: false, message: 'quantity harus berupa angka lebih dari 0' });
+    try { res.json({ success: true, data: await dispenseDrug(req.params.id, qty) }); }
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
 

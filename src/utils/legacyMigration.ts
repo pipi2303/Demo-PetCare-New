@@ -48,7 +48,6 @@ const MIGRATION_MAP: Record<string, { endpoint: string; transform?: (item: any) 
   // Phase 5 — config, e-forms, loyalty
   petcare_eform_templates: { endpoint: "/eform-templates" },
   petcare_eform_submissions: { endpoint: "/eform-submissions" },
-  petcare_system_groups: { endpoint: "/system-groups" },
   petcare_customer_tier_groups: { endpoint: "/customer-tier-groups" },
   petcare_patient_photos: { endpoint: "/patient-photos" },
   petcare_loyalty_entries: { endpoint: "/loyalty-entries" },
