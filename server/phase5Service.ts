@@ -2,9 +2,7 @@
 // system_groups, customer_tier_groups, patient_photos, audit_logs GET.
 import { pool } from "./db";
 import { deleteUpload } from "./uploadService";
-
-const d = (v: any) => v instanceof Date ? v.toISOString().substring(0, 10) : (v ? String(v) : "");
-const dt = (v: any) => v instanceof Date ? v.toISOString().replace("T", " ").substring(0, 19) : (v ? String(v) : "");
+import { d, dt } from "./baseService";
 
 // ── Inter-Branch Transfers ────────────────────────────────────────────────────
 
@@ -192,60 +190,6 @@ export async function createInformedConsent(input: Record<string, any>) {
      input.witnessName ?? "", input.status ?? "Ditandatangani", input.securityHash ?? null]
   );
   return toConsent(rows[0]);
-}
-
-// ── System Groups ─────────────────────────────────────────────────────────────
-
-function toGroup(row: any) {
-  return {
-    id: row.id as string, code: row.code as string, name: row.name as string,
-    type: row.type as string, description: row.description as string,
-    departmentHead: row.department_head as string,
-    allowedRoles: row.allowed_roles ?? [],
-    modulePermissions: row.module_permissions ?? [],
-    memberCount: Number(row.member_count), color: row.color as string,
-    branchId: row.branch_id ?? undefined,
-    isSystemDefault: Boolean(row.is_system_default),
-    createdAt: d(row.created_at),
-  };
-}
-
-export async function listSystemGroups() {
-  const { rows } = await pool.query("SELECT * FROM system_groups ORDER BY created_at");
-  return rows.map(toGroup);
-}
-
-export async function createSystemGroup(input: Record<string, any>) {
-  const { rows } = await pool.query(
-    `INSERT INTO system_groups (code, name, type, description, department_head, allowed_roles, module_permissions, member_count, color, branch_id, is_system_default)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [input.code, input.name, input.type ?? "", input.description ?? "", input.departmentHead ?? "",
-     JSON.stringify(input.allowedRoles ?? []), JSON.stringify(input.modulePermissions ?? []),
-     input.memberCount ?? 0, input.color ?? "#6366f1",
-     input.branchId || null, input.isSystemDefault ?? false]
-  );
-  return toGroup(rows[0]);
-}
-
-export async function updateSystemGroup(id: string, patch: Record<string, any>) {
-  const { rows: cur } = await pool.query("SELECT * FROM system_groups WHERE id=$1", [id]);
-  if (!cur[0]) throw new Error("Grup tidak ditemukan.");
-  const c = cur[0];
-  const { rows } = await pool.query(
-    `UPDATE system_groups SET name=$1, type=$2, description=$3, department_head=$4, allowed_roles=$5,
-       module_permissions=$6, member_count=$7, color=$8, branch_id=$9 WHERE id=$10 RETURNING *`,
-    [patch.name ?? c.name, patch.type ?? c.type, patch.description ?? c.description,
-     patch.departmentHead ?? c.department_head,
-     JSON.stringify(patch.allowedRoles ?? c.allowed_roles),
-     JSON.stringify(patch.modulePermissions ?? c.module_permissions),
-     patch.memberCount ?? c.member_count, patch.color ?? c.color,
-     patch.branchId ?? c.branch_id, id]
-  );
-  return toGroup(rows[0]);
-}
-
-export async function deleteSystemGroup(id: string) {
-  await pool.query("DELETE FROM system_groups WHERE id=$1 AND is_system_default=FALSE", [id]);
 }
 
 // ── Customer Tier Groups ──────────────────────────────────────────────────────

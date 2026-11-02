@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Pet, ClinicVisit, SOAPNote, MedicalRecord, Inpatient, TriageUrgencyResult, TriageUrgencyLevel } from '../../types';
-import { analyzePetTriageWithGemini, computeClientTriageUrgency } from '../../utils/aiTriageUrgency';
+import { analyzePetTriageWithGemini, computeTriageHeuristic } from '../../utils/aiTriageUrgency';
 import {
   ShieldAlert,
   AlertTriangle,
@@ -92,7 +92,7 @@ export const TriageUrgencyModal: React.FC<TriageUrgencyModalProps> = ({
       }
     : soapNote;
 
-  const defaultCalculated = initialResult || computeClientTriageUrgency(
+  const defaultCalculated = initialResult || computeTriageHeuristic(
     pet,
     activeVisit,
     effectiveSoapNote,
@@ -110,7 +110,7 @@ export const TriageUrgencyModal: React.FC<TriageUrgencyModalProps> = ({
     let isMounted = true;
     if (isOpen) {
       // Re-compute baseline client rule engine immediately
-      const baseline = computeClientTriageUrgency(
+      const baseline = computeTriageHeuristic(
         pet,
         activeVisit,
         effectiveSoapNote,

@@ -2,7 +2,7 @@ import { pool } from "./db";
 import {
   INITIAL_TENANTS, INITIAL_BRANCHES, INITIAL_CUSTOMERS, INITIAL_PETS,
   INITIAL_SERVICES, INITIAL_CLINIC_VISITS, INITIAL_INVOICES, INITIAL_CASH_TRANSACTIONS,
-  INITIAL_SYSTEM_GROUPS, INITIAL_CUSTOMER_TIER_GROUPS, DEFAULT_APP_SETTINGS,
+  INITIAL_CUSTOMER_TIER_GROUPS, DEFAULT_APP_SETTINGS,
   // Phase 2-5 master data
   INITIAL_PRODUCT_CATEGORIES, INITIAL_WAREHOUSES,
   INITIAL_DRUGS, INITIAL_SUPPLIERS, INITIAL_STOCK_ITEMS, INITIAL_STOCK_MOVEMENTS,
@@ -414,19 +414,6 @@ export async function seedIfEmpty() {
         [c.planNo, petMap.get(c.petId) || null, c.petName, c.customerName, c.doctorName, c.title, c.diagnosis, c.startDate, c.endDate, c.status, JSON.stringify(c.tasks), c.notes || null]
       );
     console.log(`[Seed] care_plans: ${INITIAL_CARE_PLANS.length} care plan.`);
-  }
-
-  if (await isEmpty("system_groups")) {
-    for (const g of INITIAL_SYSTEM_GROUPS) {
-      await pool.query(
-        `INSERT INTO system_groups (code, name, type, description, department_head, allowed_roles, module_permissions, member_count, color, is_system_default)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [g.code, g.name, g.type, g.description, g.departmentHead,
-         JSON.stringify(g.allowedRoles), JSON.stringify(g.modulePermissions),
-         g.memberCount, g.color, g.isSystemDefault ?? false]
-      );
-    }
-    console.log(`[Seed] system_groups: ${INITIAL_SYSTEM_GROUPS.length} grup.`);
   }
 
   if (await isEmpty("customer_tier_groups")) {

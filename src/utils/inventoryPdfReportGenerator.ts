@@ -6,6 +6,7 @@ import {
   InventoryDepletionSummary,
   StockDepletionAnalysisItem
 } from './stockDepletionCalculator';
+import { formatRupiah, formatNumber } from './pdfBuilder';
 
 export interface InventoryPdfReportOptions {
   periodMonth?: string;
@@ -24,14 +25,6 @@ export interface InventoryPdfReportOptions {
   managementNotes?: string;
   customDocNumber?: string;
 }
-
-const formatRupiah = (num: number): string => {
-  return 'Rp ' + Math.round(num).toLocaleString('id-ID');
-};
-
-const formatNumber = (num: number): string => {
-  return Math.round(num).toLocaleString('id-ID');
-};
 
 /**
  * Generates an executive-ready, professionally formatted PDF report

@@ -49,7 +49,6 @@ import {
   Sparkles,
   ShieldCheck,
   Check,
-  FolderTree
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -130,7 +129,6 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'SISTEM',
     items: [
       { id: 'notifications', label: 'Notifikasi', icon: Bell, allowedRoles: MODULE_PERMISSIONS.notifications },
-      { id: 'systemGroups', label: 'Grup & Hak Akses', icon: FolderTree, allowedRoles: MODULE_PERMISSIONS.systemGroups },
       { id: 'branches', label: 'Cabang Klinik', icon: GitBranch, allowedRoles: MODULE_PERMISSIONS.branches },
       { id: 'auditLog', label: 'Audit Log Sistem', icon: History, allowedRoles: MODULE_PERMISSIONS.auditLog },
       { id: 'settings', label: 'Pengaturan Sistem', icon: Settings, allowedRoles: MODULE_PERMISSIONS.settings },

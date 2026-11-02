@@ -1,6 +1,6 @@
 import { pool } from "./db";
+import { d, dt } from "./baseService";
 
-const d = (v: any) => v instanceof Date ? v.toISOString().substring(0, 10) : (v ? String(v) : "");
 
 function toBooking(row: any) {
   return {

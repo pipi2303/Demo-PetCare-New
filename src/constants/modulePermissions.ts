@@ -30,7 +30,6 @@ export type NavModule =
   | 'notifications'
   | 'branches'
   | 'settings'
-  | 'systemGroups'
   | 'tenantAdmin';
 
 // Group definitions for role-based permissions
@@ -77,7 +76,6 @@ export const MODULE_PERMISSIONS: Record<NavModule, string[]> = {
   // Sistem & Konfigurasi
   notifications: ['*'],
   branches: [...ALL_OWNERS, 'admin', 'superadmin'],
-  systemGroups: [...ALL_OWNERS, 'admin', 'superadmin'],
   auditLog: [...ALL_OWNERS, 'admin', 'superadmin'],
   settings: [...ALL_OWNERS, 'admin', 'superadmin'],
   tenantAdmin: ['superadmin'],

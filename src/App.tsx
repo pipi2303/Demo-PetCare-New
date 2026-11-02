@@ -29,7 +29,6 @@ import { DiagnosticsModule } from './components/modules/DiagnosticsModule';
 import { HRMModule } from './components/modules/HRMModule';
 import { ReportsExportModule } from './components/modules/ReportsExportModule';
 import { AIAssistantModule } from './components/modules/AIAssistantModule';
-import { SystemGroupsModule } from './components/modules/SystemGroupsModule';
 import { SettingsModule } from './components/modules/SettingsModule';
 import { AuditLogModule } from './components/modules/AuditLogModule';
 import { BranchesModule } from './components/modules/BranchesModule';
@@ -100,7 +99,6 @@ const MODULE_TITLES: Record<NavModule, { title: string; desc: string }> = {
   ambulance: { title: 'Ambulance & Emergency Rescue', desc: 'Layanan antar jemput hewan darurat & tim medis keliling' },
   carePlan: { title: 'Rencana Perawatan (Care Plan)', desc: 'Rencana perawatan intensif harian & instruksi khusus pasien' },
   auditLog: { title: 'Audit Log & Jejak Sistem', desc: 'Catatan jejak aktivitas user, perubahan data & keamanan' },
-  systemGroups: { title: 'Manajemen Sistem Grup & RBAC', desc: 'Departemen staf, hak akses perizinan modul granular dan tier pelanggan' },
   notifications: { title: 'Pusat Notifikasi', desc: 'Pengingat otomatis booking, stok habis & pesan sistem' },
   branches: { title: 'Manajemen Cabang Klinik', desc: 'Pengaturan multi-cabang, cabang pusat & sinkronisasi data' },
   settings: { title: 'Pengaturan Sistem', desc: 'Konfigurasi profil klinik, header invoice, tax & integrasi WA' },
@@ -327,7 +325,6 @@ const MainAppContent: React.FC = () => {
                   {activeModule === 'purchasing' && <PurchasingModule />}
                   {(activeModule === 'billing' || activeModule === 'finance') && <BillingFinanceModule activeModule={activeModule} />}
                   {activeModule === 'vaccination' && <ClientPortalModule activeModule={activeModule} />}
-                  {activeModule === 'systemGroups' && <SystemGroupsModule />}
                   {activeModule === 'branches' && <BranchesModule />}
                   {activeModule === 'notifications' && <NotificationsModule setActiveModule={setActiveModule} />}
                   {activeModule === 'auditLog' && <AuditLogModule />}
@@ -358,7 +355,6 @@ const MainAppContent: React.FC = () => {
                     'inventory',
                     'purchasing',
                     'vaccination',
-                    'systemGroups',
                     'branches',
                     'notifications',
                     'auditLog',

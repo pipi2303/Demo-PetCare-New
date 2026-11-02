@@ -47,7 +47,6 @@ import {
   PreConsultForm,
   ReferralLetter,
   VisitSurvey,
-  SystemGroup,
   CustomerTierGroup,
   HotelRoom,
   GroomingPackage,
@@ -1177,119 +1176,6 @@ export const INITIAL_SERVICES: ServiceItem[] = [
   { id: 'srv5', code: 'SRV-005', name: 'Pet Hotel VIP Room (per malam)', category: 'Pet Hotel', estimatedDurationMins: 1440, price: 150000, description: 'Ruang AC, CCTV live 24 jam, pakan & playtime', isActive: true },
   { id: 'srv6', code: 'SRV-006', name: 'Radiologi X-Ray Digital (1 posisi)', category: 'Lab & Radiologi', estimatedDurationMins: 30, price: 350000, description: 'Citra Rontgen DICOM + ekspertise dokter', isActive: true },
   { id: 'srv7', code: 'SRV-007', name: 'Pemeriksaan Darah Lengkap (Hematologi)', category: 'Lab & Radiologi', estimatedDurationMins: 20, price: 250000, description: 'Cek Hb, Leukosit, Hematokrit, Trombosit', isActive: true },
-];
-
-export const INITIAL_SYSTEM_GROUPS: SystemGroup[] = [
-  {
-    id: 'grp-medis',
-    code: 'MED-VET',
-    name: 'Tim Medis & Dokter Hewan (EMR / Poliklinik)',
-    type: 'Staf & Medis',
-    description: 'Otorisasi diagnosa klinis, SOAP, EMR, tindakan bedah, radiologi, resep obat keras, dan rencana rawat inap.',
-    departmentHead: 'Drh. Ratna Permata, M.Si (Kepala Tim Medis)',
-    color: '#5BB076',
-    allowedRoles: ['dokter', 'perawat', 'owner_klinik', 'owner_petcare', 'superadmin'],
-    memberCount: 6,
-    isSystemDefault: true,
-    createdAt: '2026-01-10',
-    modulePermissions: [
-      { moduleId: 'clinic', moduleName: 'Pemeriksaan Klinik & EMR', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-      { moduleId: 'emr', moduleName: 'Rekam Medis & Riwayat Pasien', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-      { moduleId: 'vaccination', moduleName: 'Buku Vaksinasi & Paspor', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-      { moduleId: 'pharmacy', moduleName: 'Resep Obat & Lab Cito', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-      { moduleId: 'carePlan', moduleName: 'Care Plan & Rencana Terapi', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-      { moduleId: 'eForms', moduleName: 'E-Form Persetujuan Tindakan Bedah', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-      { moduleId: 'booking', moduleName: 'Antrean & Reservasi Pasien', canView: true, canCreate: true, canEdit: true, canDelete: false },
-      { moduleId: 'inventory', moduleName: 'Stok Obat & Gudang', canView: true, canCreate: false, canEdit: false, canDelete: false },
-      { moduleId: 'billing', moduleName: 'Kasir & Keuangan', canView: false, canCreate: false, canEdit: false, canDelete: false }
-    ]
-  },
-  {
-    id: 'grp-farmasi',
-    code: 'PHARM-LOG',
-    name: 'Departemen Farmasi, Apotek & Lab',
-    type: 'Staf & Medis',
-    description: 'Pengelolaan obat etiket keras, dispensing resep dokter, validasi dosis interaksi obat, dan stok opname apotek.',
-    departmentHead: 'Apoteker Dimas Pratama, S.Farm',
-    color: '#6BA3BE',
-    allowedRoles: ['admin', 'dokter', 'owner_klinik', 'superadmin'],
-    memberCount: 4,
-    isSystemDefault: true,
-    createdAt: '2026-01-12',
-    modulePermissions: [
-      { moduleId: 'pharmacy', moduleName: 'Dispensing Resep & Lab', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-      { moduleId: 'inventory', moduleName: 'Inventaris & Farmasi', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-      { moduleId: 'purchasing', moduleName: 'Purchasing (PO Obat)', canView: true, canCreate: true, canEdit: true, canDelete: false },
-      { moduleId: 'clinic', moduleName: 'EMR (Hanya Riwayat Resep)', canView: true, canCreate: false, canEdit: false, canDelete: false },
-      { moduleId: 'billing', moduleName: 'Kasir & Billing', canView: true, canCreate: false, canEdit: false, canDelete: false }
-    ]
-  },
-  {
-    id: 'grp-frontoffice',
-    code: 'FO-CASHIER',
-    name: 'Front Office, Registrasi & Kasir POS',
-    type: 'Layanan & Operasional',
-    description: 'Pendaftaran pasien baru, antrean poli, kasir POS billing, invoice, WhatsApp reminder, dan retail pet shop.',
-    departmentHead: 'Siska Amanda (Head Receptionist)',
-    color: '#D9B98A',
-    allowedRoles: ['kasir', 'resepsionis', 'admin', 'owner_petshop', 'owner_petcare', 'superadmin'],
-    memberCount: 5,
-    isSystemDefault: true,
-    createdAt: '2026-01-15',
-    modulePermissions: [
-      { moduleId: 'dashboard', moduleName: 'Dashboard Operasional', canView: true, canCreate: false, canEdit: false, canDelete: false },
-      { moduleId: 'masterData', moduleName: 'Master Pelanggan & Hewan', canView: true, canCreate: true, canEdit: true, canDelete: false },
-      { moduleId: 'booking', moduleName: 'Booking & Antrean Kiosk', canView: true, canCreate: true, canEdit: true, canDelete: true },
-      { moduleId: 'petShop', moduleName: 'Pet Shop Retail POS', canView: true, canCreate: true, canEdit: true, canDelete: false },
-      { moduleId: 'billing', moduleName: 'Billing & Kasir Pembayaran', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-      { moduleId: 'clinic', moduleName: 'Status Kunjungan Poli', canView: true, canCreate: true, canEdit: false, canDelete: false }
-    ]
-  },
-  {
-    id: 'grp-ops-care',
-    code: 'CARE-HOTEL',
-    name: 'Divisi Perawatan Grooming, Hotel & Ambulans',
-    type: 'Layanan & Operasional',
-    description: 'Layanan salon grooming spa anabul, reservasi kandang pet hotel, pemantauan CCTV, dan penjemputan darurat ambulans.',
-    departmentHead: 'Budi Santoso (Koordinator Pet Care)',
-    color: '#D97757',
-    allowedRoles: ['groomer', 'perawat', 'admin', 'owner_petcare', 'superadmin'],
-    memberCount: 7,
-    isSystemDefault: false,
-    createdAt: '2026-02-01',
-    modulePermissions: [
-      { moduleId: 'grooming', moduleName: 'Grooming Salon & Spa', canView: true, canCreate: true, canEdit: true, canDelete: false },
-      { moduleId: 'petHotel', moduleName: 'Pet Hotel Boarding & Kandang', canView: true, canCreate: true, canEdit: true, canDelete: false },
-      { moduleId: 'ambulance', moduleName: 'Ambulance & Emergency Rescue', canView: true, canCreate: true, canEdit: true, canDelete: false, canApprove: true },
-      { moduleId: 'patientGallery', moduleName: 'Galeri Foto Pasien', canView: true, canCreate: true, canEdit: true, canDelete: false },
-      { moduleId: 'masterData', moduleName: 'Data Hewan & Klien', canView: true, canCreate: false, canEdit: false, canDelete: false }
-    ]
-  },
-  {
-    id: 'grp-manajemen',
-    code: 'EXEC-MGMT',
-    name: 'Direksi, Audit & Manajemen Keuangan',
-    type: 'Eksekutif & Keuangan',
-    description: 'Akses tanpa batas ke laporan P&L, buku kas besar, manajemen SDM, multi-cabang, audit trail, dan konfigurasi sistem.',
-    departmentHead: 'Drh. Hendra Wijaya (Direktur Operasional)',
-    color: '#B8905A',
-    allowedRoles: ['owner', 'owner_klinik', 'owner_petshop', 'owner_petcare', 'admin', 'superadmin'],
-    memberCount: 3,
-    isSystemDefault: true,
-    createdAt: '2026-01-01',
-    modulePermissions: [
-      { moduleId: 'dashboard', moduleName: 'Dashboard Utama & Analitik', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-      { moduleId: 'finance', moduleName: 'Buku Kas & Laporan Laba Rugi', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-      { moduleId: 'hrm', moduleName: 'SDM, Payroll & Shift Staf', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-      { moduleId: 'reports', moduleName: 'Laporan Eksekutif & Ekspor', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-      { moduleId: 'crm', moduleName: 'CRM & Loyalty Member Club', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-      { moduleId: 'auditLog', moduleName: 'Audit Log & Keamanan Cloud', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-      { moduleId: 'branches', moduleName: 'Manajemen Multi-Cabang', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-      { moduleId: 'masterData', moduleName: 'Master Data (Pelanggan, Layanan, Staf, dst)', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-      { moduleId: 'systemGroups', moduleName: 'Grup Sistem & Tier Loyalitas Klien', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true },
-      { moduleId: 'purchasing', moduleName: 'Purchasing & Pengadaan Supplier', canView: true, canCreate: true, canEdit: true, canDelete: true, canApprove: true }
-    ]
-  }
 ];
 
 export const INITIAL_CUSTOMER_TIER_GROUPS: CustomerTierGroup[] = [

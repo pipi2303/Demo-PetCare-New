@@ -6,7 +6,7 @@ import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import { usePermissions } from '../../hooks/usePermissions';
 import { TriageUrgencyBadge } from '../clinic/TriageUrgencyBadge';
 import { TriageUrgencyModal } from '../clinic/TriageUrgencyModal';
-import { computeClientTriageUrgency } from '../../utils/aiTriageUrgency';
+import { computeTriageHeuristic } from '../../utils/aiTriageUrgency';
 import {
   Users,
   Dog,
@@ -848,7 +848,7 @@ export const MasterDataModule: React.FC = () => {
     const visit = clinicVisits.find((v) => v.petId === p.id);
     const soap = soapNotes.find((s) => s.petId === p.id || (visit && s.visitId === visit.id));
     return {
-      triage: computeClientTriageUrgency(p, visit, soap),
+      triage: computeTriageHeuristic(p, visit, soap),
       visit,
       soap
     };
@@ -1382,7 +1382,7 @@ export const MasterDataModule: React.FC = () => {
             ) : (
               filteredPets.map((p) => {
                 const triageData = petTriageMap.get(p.id);
-                const triage = triageData?.triage || computeClientTriageUrgency(p);
+                const triage = triageData?.triage || computeTriageHeuristic(p);
                 const visit = triageData?.visit;
                 const soap = triageData?.soap;
 

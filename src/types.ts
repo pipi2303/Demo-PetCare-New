@@ -914,31 +914,6 @@ export interface VisitSurvey {
   createdAt: string;
 }
 
-export interface GroupModulePermission {
-  moduleId: string;
-  moduleName: string;
-  canView: boolean;
-  canCreate: boolean;
-  canEdit: boolean;
-  canDelete: boolean;
-  canApprove?: boolean;
-}
-
-export interface SystemGroup {
-  id: string;
-  code: string;
-  name: string;
-  type: 'Staf & Medis' | 'Pelanggan & CRM' | 'Layanan & Operasional' | 'Inventaris & Logistik' | 'Eksekutif & Keuangan';
-  description: string;
-  departmentHead: string;
-  allowedRoles: UserRole[];
-  modulePermissions: GroupModulePermission[];
-  memberCount: number;
-  color: string;
-  branchId?: string;
-  isSystemDefault?: boolean;
-  createdAt: string;
-}
 
 export interface CustomerTierGroup {
   id: string;

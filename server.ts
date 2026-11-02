@@ -28,7 +28,6 @@ import {
   listEFormTemplates, createEFormTemplate, updateEFormTemplate, deleteEFormTemplate,
   listEFormSubmissions, createEFormSubmission,
   listInformedConsents, createInformedConsent,
-  listSystemGroups, createSystemGroup, updateSystemGroup, deleteSystemGroup,
   listCustomerTierGroups, createCustomerTierGroup, updateCustomerTierGroup, deleteCustomerTierGroup,
   listPatientPhotos, createPatientPhoto, deletePatientPhoto,
   deleteEFormSubmission, deleteInformedConsent,
@@ -2362,23 +2361,6 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   });
   app.delete("/api/informed-consents/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
     try { await deleteInformedConsent(req.params.id); res.json({ success: true }); }
-    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
-  });
-
-  app.get("/api/system-groups", requireSession, async (_req, res) => {
-    try { res.json({ success: true, data: await listSystemGroups() }); }
-    catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
-  });
-  app.post("/api/system-groups", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
-    try { res.status(201).json({ success: true, data: await createSystemGroup(req.body || {}) }); }
-    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
-  });
-  app.put("/api/system-groups/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
-    try { res.json({ success: true, data: await updateSystemGroup(req.params.id, req.body || {}) }); }
-    catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
-  });
-  app.delete("/api/system-groups/:id", requireRole(...PRIVILEGED_ROLES), async (req, res) => {
-    try { await deleteSystemGroup(req.params.id); res.json({ success: true }); }
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
 

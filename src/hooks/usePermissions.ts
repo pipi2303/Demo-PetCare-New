@@ -1,5 +1,4 @@
 import { useAuth } from '../context/AuthContext';
-import { useData } from '../context/DataContext';
 import { MODULE_PERMISSIONS, NavModule } from '../components/layout/Sidebar';
 import { UserRole } from '../types';
 
@@ -21,7 +20,6 @@ const OWNER_FLAVORS = ['owner_klinik', 'owner_petshop', 'owner_petcare'];
  */
 export function usePermissions() {
   const { user, activeOwnership } = useAuth();
-  const { systemGroups = [] } = useData();
 
   let role: UserRole = user?.role || 'owner_klinik';
   if ((role === 'owner' || !user) && user?.ownershipType && OWNER_FLAVORS.includes(user.ownershipType)) {
@@ -40,40 +38,7 @@ export function usePermissions() {
     return allowed.includes('*') || allowed.includes(role);
   };
 
-  const group = user?.groupId ? systemGroups.find((g) => g.id === user.groupId) : undefined;
-
-  /**
-   * Module-level access is checked first (from MODULE_PERMISSIONS). If the
-   * user's SystemGroup additionally defines a granular entry for this
-   * module, that entry narrows the specific action further — this is what
-   * makes SystemGroupsModule's permission matrix actually mean something,
-   * instead of being purely decorative.
-   */
-  const can = (moduleId: string, action: PermissionAction = 'view'): boolean => {
-    if (!canAccessModule(moduleId)) return false;
-    const entry = group?.modulePermissions.find((p) => p.moduleId === moduleId);
-    // Fail-closed: kalau grup pengguna tidak punya entri eksplisit untuk
-    // modul ini, TOLAK aksi granular (create/edit/delete/approve) — bukan
-    // izinkan. Sebelumnya di sini `return true`, artinya grup akses baru
-    // yang cuma di-seed 2-3 modul otomatis dapat akses PENUH ke SEMUA modul
-    // lain yang tidak terdaftar (termasuk hrm & masterData) — kebalikan dari
-    // maksud "grup terbatas".
-    if (!entry) return false;
-    switch (action) {
-      case 'view':
-        return entry.canView;
-      case 'create':
-        return entry.canCreate;
-      case 'edit':
-        return entry.canEdit;
-      case 'delete':
-        return entry.canDelete;
-      case 'approve':
-        return entry.canApprove ?? entry.canEdit;
-      default:
-        return false;
-    }
-  };
+  const can = (moduleId: string, _action: PermissionAction = 'view'): boolean => canAccessModule(moduleId);
 
   return { role, isPetshop, isClinic, isPetcare, canAccessModule, can };
 }

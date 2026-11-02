@@ -65,7 +65,6 @@ const MODULE_TITLES: Record<NavModule, string> = {
   ambulance: 'Ambulance & Emergency Rescue',
   carePlan: 'Rencana Perawatan (Care Plan)',
   auditLog: 'Audit Log & Jejak Sistem',
-  systemGroups: 'Sistem Grup & RBAC Departemen',
   notifications: 'Pusat Notifikasi',
   branches: 'Manajemen Cabang Klinik',
   settings: 'Pengaturan Sistem',

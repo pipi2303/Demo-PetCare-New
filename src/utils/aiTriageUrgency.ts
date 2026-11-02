@@ -1,12 +1,8 @@
 import { Pet, ClinicVisit, SOAPNote, MedicalRecord, Inpatient, TriageUrgencyResult, TriageUrgencyLevel } from '../types';
 import { authHeaders } from './authToken';
 
-/**
- * Intelligent Clinical Triage Engine for Veterinary Medicine
- * Implements standard Veterinary Triage List (VTL) & Manchester Triage System (MTS) adaptation for small animals.
- */
-
-export function computeClientTriageUrgency(
+// Heuristic scoring only. Always apply clinical judgment — not AI inference.
+export function computeTriageHeuristic(
   pet: Pet,
   visit?: ClinicVisit,
   soapNote?: SOAPNote,
@@ -320,6 +316,6 @@ export async function analyzePetTriageWithGemini(
     throw new Error(json.error || 'Fallback required');
   } catch (err) {
     console.warn('Using client-side clinical triage engine:', err);
-    return computeClientTriageUrgency(pet, visit, soapNote, medicalRecords);
+    return computeTriageHeuristic(pet, visit, soapNote, medicalRecords);
   }
 }

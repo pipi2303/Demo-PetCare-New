@@ -228,12 +228,6 @@ interface DataContextType {
   addAmbulanceRequest: (ar: Omit<Types.AmbulanceRequest, 'id' | 'requestNo' | 'requestedAt' | 'status'>) => Promise<Types.AmbulanceRequest>;
   updateAmbulanceStatus: (id: string, status: Types.AmbulanceRequest['status'], unitCode?: string) => Promise<void>;
 
-  // Grup Akses & Tier Membership (Master Data)
-  systemGroups: Types.SystemGroup[];
-  addSystemGroup: (g: Omit<Types.SystemGroup, 'id' | 'createdAt'>) => Promise<Types.SystemGroup>;
-  updateSystemGroup: (id: string, g: Partial<Types.SystemGroup>) => Promise<void>;
-  deleteSystemGroup: (id: string) => Promise<void>;
-
   customerTierGroups: Types.CustomerTierGroup[];
   addCustomerTierGroup: (t: Omit<Types.CustomerTierGroup, 'id'>) => Promise<void>;
   updateCustomerTierGroup: (id: string, t: Partial<Types.CustomerTierGroup>) => Promise<void>;
@@ -396,7 +390,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [ambulanceUnits, setAmbulanceUnits] = useServerState<Types.AmbulanceUnit[]>('/ambulance-units', Seed.INITIAL_AMBULANCE_UNITS);
   const [ambulanceRequests, setAmbulanceRequests] = useServerState<Types.AmbulanceRequest[]>('/ambulance-requests', Seed.INITIAL_AMBULANCE_REQUESTS);
 
-  const [systemGroups, setSystemGroups] = useServerState<Types.SystemGroup[]>('/system-groups', Seed.INITIAL_SYSTEM_GROUPS);
   const [customerTierGroups, setCustomerTierGroups] = useServerState<Types.CustomerTierGroup[]>('/customer-tier-groups', Seed.INITIAL_CUSTOMER_TIER_GROUPS);
 
   const [patientPhotos, setPatientPhotos] = useServerState<Types.PatientPhoto[]>('/patient-photos', Seed.INITIAL_PATIENT_PHOTOS);
@@ -1454,28 +1447,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Edit', 'Ambulans Emergency', id, `Status armada ambulans diperbarui menjadi: ${status}${unitCode ? ` (Unit: ${unitCode})` : ''}`);
   };
 
-  const addSystemGroup = async (g: Omit<Types.SystemGroup, 'id' | 'createdAt'>): Promise<Types.SystemGroup> => {
-    const newGroup = await api.post<Types.SystemGroup>('/system-groups', g);
-    setSystemGroups((prev) => [...prev, newGroup]);
-    addAuditLog('Tambah', 'Grup & Hak Akses', newGroup.name, `Grup departemen baru dibuat: ${newGroup.name} (${newGroup.code})`, { severity: 'Warning' });
-    return newGroup;
-  };
-
-  const updateSystemGroup = async (id: string, gData: Partial<Types.SystemGroup>): Promise<void> => {
-    const current = systemGroups.find((g) => g.id === id);
-    const updated = await api.put<Types.SystemGroup>(`/system-groups/${id}`, gData);
-    setSystemGroups((prev) => prev.map((g) => (g.id === id ? updated : g)));
-    addAuditLog('Edit', 'Grup & Hak Akses', current?.name || id, `Pembaruan grup/hak akses: ${current?.name || id}`, { severity: 'Warning' });
-  };
-
-  const deleteSystemGroup = async (id: string): Promise<void> => {
-    const current = systemGroups.find((g) => g.id === id);
-    if (current?.isSystemDefault) return;
-    await api.del(`/system-groups/${id}`);
-    setSystemGroups((prev) => prev.filter((g) => g.id !== id));
-    addAuditLog('Hapus', 'Grup & Hak Akses', current?.name || id, `Penghapusan grup departemen: ${current?.name || id}`, { severity: 'Kritis' });
-  };
-
   const addCustomerTierGroup = async (t: Omit<Types.CustomerTierGroup, 'id'>): Promise<void> => {
     const newTier = await api.post<Types.CustomerTierGroup>('/customer-tier-groups', t);
     setCustomerTierGroups((prev) => [...prev, newTier]);
@@ -1691,10 +1662,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ambulanceRequests,
         addAmbulanceRequest,
         updateAmbulanceStatus,
-        systemGroups,
-        addSystemGroup,
-        updateSystemGroup,
-        deleteSystemGroup,
         customerTierGroups,
         addCustomerTierGroup,
         updateCustomerTierGroup,

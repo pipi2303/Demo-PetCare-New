@@ -1,28 +1,10 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as Types from '../types';
-
-export interface ReportCompanyInfo {
-  clinicName: string;
-  subTitle: string;
-  address: string;
-  phone: string;
-  email: string;
-  npwp: string;
-  licenseNo: string;
-  branchName: string;
-}
-
-export const DEFAULT_COMPANY_INFO: ReportCompanyInfo = {
-  clinicName: 'PETCARE VETERINARY HOSPITAL & CLINIC',
-  subTitle: 'Pusat Pelayanan Medis Veteriner Terpadu, Pet Shop & Grooming Modern',
-  address: 'Jl. Senopati Raya No. 88, Kebayoran Baru, Jakarta Selatan 12190',
-  phone: '(021) 555-8899 / WhatsApp: 0812-9988-7766',
-  email: 'finance@petcare-erp.id | info@petcare-erp.id',
-  npwp: '01.234.567.8-012.000',
-  licenseNo: 'IZIN-KLINIK-VET/DKPKP/2024/0981',
-  branchName: 'Cabang Utama Jakarta Selatan'
-};
+export type { ReportCompanyInfo } from './pdfBuilder';
+export { DEFAULT_COMPANY_INFO, formatRupiah, formatNumber } from './pdfBuilder';
+import type { ReportCompanyInfo } from './pdfBuilder';
+import { DEFAULT_COMPANY_INFO, formatRupiah, formatNumber } from './pdfBuilder';
 
 export interface FinancialReportOptions {
   periodMonth: string; // e.g. "Agustus"
@@ -49,14 +31,6 @@ export interface MedicalReportOptions {
   headVetSip?: string;
 }
 
-// Helpers for formatted currency and numbers
-const formatRupiah = (amount: number): string => {
-  return 'Rp ' + Math.round(amount).toLocaleString('id-ID');
-};
-
-const formatNumber = (num: number): string => {
-  return Math.round(num).toLocaleString('id-ID');
-};
 
 /**
  * Draws the official clinic letterhead (Kop Surat) and header design

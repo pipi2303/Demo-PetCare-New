@@ -1,7 +1,6 @@
 import { pool } from "./db";
+import { d, dt } from "./baseService";
 
-const d = (v: any) => v instanceof Date ? v.toISOString().substring(0, 10) : (v ? String(v) : "");
-const dt = (v: any) => v instanceof Date ? v.toISOString().replace("T", " ").substring(0, 16) : (v ? String(v) : "");
 
 // ── Medical Records ───────────────────────────────────────────────────────────
 

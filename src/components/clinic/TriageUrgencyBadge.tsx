@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pet, ClinicVisit, SOAPNote, MedicalRecord, Inpatient, TriageUrgencyResult } from '../../types';
-import { computeClientTriageUrgency } from '../../utils/aiTriageUrgency';
+import { computeTriageHeuristic } from '../../utils/aiTriageUrgency';
 import { TriageUrgencyModal, DraftSoapInput } from './TriageUrgencyModal';
 import { ShieldAlert, AlertTriangle, Clock, CheckCircle2, Sparkles } from 'lucide-react';
 
@@ -67,7 +67,7 @@ export const TriageUrgencyBadge: React.FC<TriageUrgencyBadgeProps> = ({
     : soapNote;
 
   // Compute triage urgency
-  const result: TriageUrgencyResult = computeClientTriageUrgency(
+  const result: TriageUrgencyResult = computeTriageHeuristic(
     pet,
     activeVisit,
     effectiveSoapNote,
