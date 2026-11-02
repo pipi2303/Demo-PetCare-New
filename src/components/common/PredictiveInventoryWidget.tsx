@@ -58,7 +58,7 @@ export const PredictiveInventoryWidget: React.FC<PredictiveInventoryWidgetProps>
 
   // Generate predictive calculation based on current stockItems and consumption rates
   const forecastSummary = useMemo(() => {
-    return generateAllCriticalSuppliesForecast(stockItems, selectedScenario, 0, 0.98, userRole);
+    return generateAllCriticalSuppliesForecast(stockItems, selectedScenario, 0, 0.98);
   }, [stockItems, selectedScenario, userRole]);
 
   // Supplies running out within 7 days
