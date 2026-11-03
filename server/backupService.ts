@@ -68,7 +68,7 @@ const TABLES = [
   "absence_records", "leave_requests",
   "inter_branch_transfers", "loyalty_entries",
   "eform_templates", "eform_submissions", "informed_consents",
-  "system_groups", "customer_tier_groups", "patient_photos",
+  "customer_tier_groups", "patient_photos",
   "chart_of_accounts", "journal_entries", "journal_lines",
 ];
 
