@@ -120,8 +120,11 @@ export async function deleteWarehouse(id: string) {
 
 // ── Stock Items ──────────────────────────────────────────────────────────────
 
-export async function listStockItems() {
-  const { rows } = await pool.query("SELECT * FROM stock_items ORDER BY name");
+export async function listStockItems(branchId?: string) {
+  const filter = branchId ? "WHERE (branch_id = $1 OR branch_id IS NULL)" : "";
+  const { rows } = branchId
+    ? await pool.query(`SELECT * FROM stock_items ${filter} ORDER BY name`, [branchId])
+    : await pool.query("SELECT * FROM stock_items ORDER BY name");
   return rows.map(toStockItem);
 }
 

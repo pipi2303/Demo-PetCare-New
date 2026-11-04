@@ -44,10 +44,16 @@ function toCashTransaction(row: any) {
   };
 }
 
-export async function listInvoices() {
-  const { rows: invoices } = await pool.query(
-    `SELECT invoices.*, customers.name AS customer_name FROM invoices JOIN customers ON customers.id = invoices.customer_id AND customers.deleted_at IS NULL ORDER BY invoices.date DESC LIMIT 500`
-  );
+export async function listInvoices(branchId?: string) {
+  const branchFilter = branchId ? "AND (invoices.branch_id = $1 OR invoices.branch_id IS NULL)" : "";
+  const { rows: invoices } = branchId
+    ? await pool.query(
+        `SELECT invoices.*, customers.name AS customer_name FROM invoices JOIN customers ON customers.id = invoices.customer_id AND customers.deleted_at IS NULL WHERE TRUE ${branchFilter} ORDER BY invoices.date DESC LIMIT 500`,
+        [branchId]
+      )
+    : await pool.query(
+        `SELECT invoices.*, customers.name AS customer_name FROM invoices JOIN customers ON customers.id = invoices.customer_id AND customers.deleted_at IS NULL ORDER BY invoices.date DESC LIMIT 500`
+      );
   const invoiceIds = invoices.map((r) => r.id);
   const { rows: items } = invoiceIds.length > 0
     ? await pool.query("SELECT * FROM invoice_items WHERE invoice_id = ANY($1::uuid[])", [invoiceIds])

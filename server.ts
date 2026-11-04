@@ -89,6 +89,7 @@ import {
   destroyAllSessionsForEmail
 } from "./server/sessionService";
 import { sendWhatsAppMessage } from "./server/waService";
+import { startReminderJob } from "./server/reminderJob";
 import {
   createQrisCharge,
   getPaymentStatus,
@@ -264,6 +265,14 @@ async function startServer() {
   }
 
   // Reads the "Authorization: Bearer <token>" header and attaches the
+  // Extract active branch from X-Branch-Id header (sent by frontend DataContext).
+  // 'all' or absent = no filter (superadmin view).
+  app.use((req, _res, next) => {
+    const b = req.headers["x-branch-id"] as string | undefined;
+    (req as any).branchId = b && b !== "all" ? b : undefined;
+    next();
+  });
+
   // resolved session (email/role) to the request, or responds 401 if the
   // token is missing/expired. Role can never come from the client body.
   async function requireSession(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -308,6 +317,31 @@ async function startServer() {
   // API Health Endpoint
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", service: "PetCare ERP Backend", version: "1.0.0", time: new Date().toISOString() });
+  });
+
+  // Public (unauthenticated) pet passport — scanned from QR code by pet owner or third party.
+  app.get("/api/public/pet/:petId", async (req, res) => {
+    try {
+      const { petId } = req.params;
+      const [petRes, vacRes, dewRes, schedRes] = await Promise.all([
+        dbPool.query("SELECT id,name,species,breed,gender,birth_date,microchip_no,photo_url,customer_name,sterilized FROM pets WHERE id=$1 AND deleted_at IS NULL", [petId]),
+        dbPool.query("SELECT vaccine_name,given_date,next_due_date,doctor_name,batch_number,certificate_no FROM vac_histories WHERE pet_id=$1 ORDER BY given_date DESC", [petId]),
+        dbPool.query("SELECT medicine_name,date,dosage,given_by,next_due_date FROM deworming_records WHERE pet_id=$1 ORDER BY date DESC", [petId]),
+        dbPool.query("SELECT vaccine_name,due_date,status FROM vac_schedules WHERE pet_id=$1 AND status='Mendatang' ORDER BY due_date", [petId]),
+      ]);
+      if (!petRes.rows[0]) return res.status(404).json({ success: false, message: "Pasien tidak ditemukan." });
+      res.json({
+        success: true,
+        data: {
+          pet: petRes.rows[0],
+          vacHistories: vacRes.rows,
+          dewormingRecords: dewRes.rows,
+          upcomingVaccines: schedRes.rows,
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: safeMessage(err) });
+    }
   });
 
   // ==========================================
@@ -2006,15 +2040,27 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
     catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
-  app.get("/api/invoices", requireSession, async (_req, res) => {
-    try { res.json({ success: true, data: await listInvoices() }); }
+  app.get("/api/invoices", requireSession, async (req, res) => {
+    try { res.json({ success: true, data: await listInvoices((req as any).branchId) }); }
     catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
   });
 
   app.post("/api/invoices", requireRole(...STAFF_ROLES), async (req, res) => {
     const err = guard(req.body, ['customerId', 'customerName']);
     if (err) return res.status(400).json({ success: false, message: err });
-    try { res.status(201).json({ success: true, data: await createInvoice(req.body || {}) }); }
+    try {
+      const invoice = await createInvoice(req.body || {});
+      // ponytail: best-effort drug deduction by name match — category 'Apotek' signals pharmacy items
+      const drugItems = (invoice.items || []).filter((i: any) => i.category === 'Apotek');
+      if (drugItems.length > 0) {
+        const { rows: drugs } = await dbPool.query("SELECT id, name FROM drugs");
+        for (const item of drugItems) {
+          const drug = drugs.find((d: any) => d.name.toLowerCase() === item.name.toLowerCase());
+          if (drug) await dispenseDrug(drug.id, item.quantity).catch(() => {});
+        }
+      }
+      res.status(201).json({ success: true, data: invoice });
+    }
     catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
@@ -2067,8 +2113,8 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
     catch (err: any) { res.status(400).json({ success: false, message: safeMessage(err) }); }
   });
 
-  app.get("/api/stock-items", requireSession, async (_req, res) => {
-    try { res.json({ success: true, data: await listStockItems() }); }
+  app.get("/api/stock-items", requireSession, async (req, res) => {
+    try { res.json({ success: true, data: await listStockItems((req as any).branchId) }); }
     catch (err: any) { res.status(500).json({ success: false, message: safeMessage(err) }); }
   });
   app.post("/api/stock-items", requireRole(...STAFF_ROLES), async (req, res) => {
@@ -2645,6 +2691,7 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`[PetCare ERP] Server running on http://0.0.0.0:${PORT}`);
+    startReminderJob();
   });
 
   async function shutdown(signal: string) {

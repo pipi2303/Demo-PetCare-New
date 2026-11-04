@@ -322,8 +322,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return [state, setState];
   }
 
-  // Active Context
-  const [activeBranchId, setActiveBranchId] = useState<string>('all');
+  // Active Context — persisted to localStorage so api.ts can read it without React context
+  const [activeBranchId, setActiveBranchIdState] = useState<string>('all');
+  const setActiveBranchId = (id: string) => {
+    localStorage.setItem('activeBranchId', id);
+    setActiveBranchIdState(id);
+  };
   const [tenants, setTenants] = useServerState<Types.Tenant[]>('/tenants', Seed.INITIAL_TENANTS);
   const [branches, setBranches] = useServerState<Types.Branch[]>('/branches', Seed.INITIAL_BRANCHES);
   const [appSettings, setAppSettings] = useServerState<Types.AppSettings>('/app-settings', Seed.DEFAULT_APP_SETTINGS);

@@ -72,6 +72,7 @@ export const ReportsExportModule: React.FC = () => {
     vacHistories = [],
     cashTransactions = [],
     branches = [],
+    employees = [],
     activeBranchId,
     appSettings
   } = useData();
@@ -91,7 +92,7 @@ export const ReportsExportModule: React.FC = () => {
     licenseNo: appSettings.sipNumber
   };
 
-  const [activeMainTab, setActiveMainTab] = useState<'financialPdf' | 'medicalPdf' | 'csvExport'>('financialPdf');
+  const [activeMainTab, setActiveMainTab] = useState<'financialPdf' | 'medicalPdf' | 'csvExport' | 'bisnis'>('financialPdf');
   const [selectedMonth, setSelectedMonth] = useState<string>('Agustus');
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [selectedBranchName, setSelectedBranchName] = useState<string>('Cabang Utama Jakarta Selatan');
@@ -369,7 +370,8 @@ export const ReportsExportModule: React.FC = () => {
         tabs={[
           { id: 'financialPdf', label: 'Laporan Keuangan (PDF)', icon: DollarSign },
           { id: 'medicalPdf', label: 'Rekapitulasi Medis (PDF)', icon: Stethoscope },
-          { id: 'csvExport', label: 'Ekspor Excel (.CSV)', icon: FileSpreadsheet }
+          { id: 'csvExport', label: 'Ekspor Excel (.CSV)', icon: FileSpreadsheet },
+          { id: 'bisnis', label: 'Laporan Bisnis', icon: TrendingUp }
         ]}
         activeTab={activeMainTab}
         onTabChange={(tabId) => setActiveMainTab(tabId as any)}
@@ -920,6 +922,164 @@ export const ReportsExportModule: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* TAB 4: LAPORAN BISNIS */}
+          {activeMainTab === 'bisnis' && (() => {
+            // Top 5 layanan by revenue from invoice items in selected period
+            const svcMap: Record<string, number> = {};
+            periodInvoices.forEach((inv) => inv.items.forEach((item) => {
+              svcMap[item.name] = (svcMap[item.name] || 0) + item.totalPrice;
+            }));
+            const topServices = Object.entries(svcMap).sort(([, a], [, b]) => b - a).slice(0, 5);
+
+            // Returning pets: petId with >1 visit (all-time, not period-filtered)
+            const visitCount: Record<string, number> = {};
+            clinicVisits.forEach((v) => { visitCount[v.petId] = (visitCount[v.petId] || 0) + 1; });
+            const totalUnique = Object.keys(visitCount).length;
+            const returning = Object.values(visitCount).filter((c) => c > 1).length;
+            const retentionRate = totalUnique > 0 ? Math.round((returning / totalUnique) * 100) : 0;
+
+            // Top 3 dokter by visit count in selected period
+            const docMap: Record<string, number> = {};
+            clinicVisits.filter((v) => v.queuedAt?.startsWith(periodKey)).forEach((v) => {
+              if (v.doctorName) docMap[v.doctorName] = (docMap[v.doctorName] || 0) + 1;
+            });
+            const topDoctors = Object.entries(docMap).sort(([, a], [, b]) => b - a).slice(0, 3);
+
+            const fmt = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
+
+            return (
+              <div className="space-y-6">
+                {/* KPI Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Total Omzet', value: fmt(totalMonthlyRevenue), sub: selectedMonth + ' ' + selectedYear },
+                    { label: 'Net Profit', value: fmt(netProfit), sub: `Margin ${profitMargin}%` },
+                    { label: 'Pasien Kembali', value: `${returning} pasien`, sub: `Retensi ${retentionRate}%` },
+                    { label: 'Total Kunjungan', value: `${totalPatientEncounters} kunjungan`, sub: 'Sepanjang waktu' },
+                  ].map((kpi) => (
+                    <div key={kpi.label} className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-sm">
+                      <p className="text-[10px] font-bold text-[#6B6656] uppercase tracking-wider">{kpi.label}</p>
+                      <p className="text-lg font-extrabold text-[#1B2A45] mt-1 font-display">{kpi.value}</p>
+                      <p className="text-[10px] text-[#B8905A] font-semibold mt-0.5">{kpi.sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Top 5 Layanan */}
+                  <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-sm">
+                    <h3 className="font-bold text-sm text-[#1B2A45] font-display mb-4 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-[#B8905A]" /> Top 5 Layanan by Omzet
+                    </h3>
+                    {topServices.length === 0 ? (
+                      <p className="text-xs text-[#6B6656]">Belum ada data invoice untuk periode ini.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {topServices.map(([name, rev], i) => {
+                          const pct = totalMonthlyRevenue > 0 ? Math.round((rev / totalMonthlyRevenue) * 100) : 0;
+                          return (
+                            <div key={name} className="space-y-1">
+                              <div className="flex justify-between text-xs">
+                                <span className="font-semibold text-[#1B2A45] flex items-center gap-1.5">
+                                  <span className="w-5 h-5 rounded-full bg-[#1B2A45] text-[#D9B98A] text-[9px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                                  {name}
+                                </span>
+                                <span className="font-bold text-[#B8905A]">{fmt(rev)}</span>
+                              </div>
+                              <div className="h-1.5 bg-[#F6F1E6] rounded-full overflow-hidden">
+                                <div className="h-full bg-[#B8905A] rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                              <p className="text-[10px] text-[#6B6656] text-right">{pct}% dari omzet</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Retensi + Top Dokter */}
+                  <div className="space-y-4">
+                    {/* Retensi */}
+                    <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-sm">
+                      <h3 className="font-bold text-sm text-[#1B2A45] font-display mb-3 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-[#B8905A]" /> Retensi Pasien
+                      </h3>
+                      <div className="flex items-center gap-4">
+                        <div className="relative w-20 h-20 flex-shrink-0">
+                          <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#F6F1E6" strokeWidth="3.5" />
+                            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#B8905A" strokeWidth="3.5"
+                              strokeDasharray={`${retentionRate} ${100 - retentionRate}`} strokeLinecap="round" />
+                          </svg>
+                          <span className="absolute inset-0 flex items-center justify-center text-sm font-extrabold text-[#1B2A45]">{retentionRate}%</span>
+                        </div>
+                        <div className="text-xs space-y-1">
+                          <p className="text-[#6B6656]">Total pasien unik: <span className="font-bold text-[#1B2A45]">{totalUnique}</span></p>
+                          <p className="text-[#6B6656]">Kembali ≥2×: <span className="font-bold text-[#B8905A]">{returning}</span></p>
+                          <p className="text-[10px] text-[#6B6656] mt-1">Benchmark industri: &gt;30% baik, &gt;50% sangat baik</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Top Dokter */}
+                    <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-sm">
+                      <h3 className="font-bold text-sm text-[#1B2A45] font-display mb-3 flex items-center gap-2">
+                        <Stethoscope className="w-4 h-4 text-[#B8905A]" /> Dokter Paling Produktif
+                      </h3>
+                      {topDoctors.length === 0 ? (
+                        <p className="text-xs text-[#6B6656]">Belum ada kunjungan di periode ini.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {topDoctors.map(([doc, count], i) => (
+                            <div key={doc} className="flex items-center justify-between text-xs bg-[#F6F1E6] rounded-lg px-3 py-2">
+                              <span className="font-semibold text-[#1B2A45] flex items-center gap-2">
+                                <span className="text-[9px] font-bold text-[#B8905A]">#{i + 1}</span> {doc}
+                              </span>
+                              <span className="font-bold text-[#B8905A]">{count} kunjungan</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              {/* Estimasi Pajak */}
+              {(() => {
+                const petShopRevenue = periodInvoices.reduce((s, inv) =>
+                  s + inv.items.filter((i: any) => i.category === 'Pet Shop').reduce((a: number, i: any) => a + i.totalPrice, 0), 0);
+                const ppn = Math.round(petShopRevenue * 0.11);
+                const totalSalary = employees.reduce((s: number, e: any) => s + (e.baseSalary || 0), 0);
+                const pph21 = Math.round(totalSalary * 0.05);
+                const fmt2 = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
+                return (
+                  <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-sm">
+                    <h3 className="font-bold text-sm text-[#1B2A45] font-display mb-4 flex items-center gap-2">
+                      <BadgePercent className="w-4 h-4 text-[#B8905A]" /> Estimasi Kewajiban Pajak
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                      {[
+                        { label: 'Omzet Pet Shop (Dasar PPN)', value: fmt2(petShopRevenue), sub: 'Barang kena pajak' },
+                        { label: 'PPN 11% (terutang)', value: fmt2(ppn), sub: 'Tagihan ke konsumen' },
+                        { label: 'Estimasi PPh21 Karyawan', value: fmt2(pph21), sub: `5% × gaji pokok ${employees.length} karyawan` },
+                      ].map((row) => (
+                        <div key={row.label} className="bg-[#F6F1E6] rounded-lg p-3 border border-[#E1D6BE]">
+                          <p className="text-[10px] text-[#6B6656] font-bold uppercase tracking-wider">{row.label}</p>
+                          <p className="text-base font-extrabold text-[#1B2A45] mt-1">{row.value}</p>
+                          <p className="text-[10px] text-[#B8905A] font-semibold">{row.sub}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-[#6B6656] mt-3">* Estimasi — konsultasikan dengan akuntan publik untuk pelaporan resmi SPT.</p>
+                  </div>
+                );
+              })()}
+
+              <p className="text-center text-[11px] text-[#B8A98A]">Data per periode: {selectedMonth} {selectedYear}</p>
+              </div>
+            );
+          })()}
 
       {/* FULL-FIDELITY PDF REPORT PREVIEW MODAL */}
       {showPreviewModal && (

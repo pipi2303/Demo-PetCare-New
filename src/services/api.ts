@@ -5,11 +5,13 @@
 import { authHeaders } from '../utils/authToken';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const activeBranch = localStorage.getItem('activeBranchId') || 'all';
   const res = await fetch(`/api${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders(),
+      'X-Branch-Id': activeBranch,
       ...(options.headers || {}),
     },
   });

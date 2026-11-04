@@ -74,7 +74,7 @@ export const ClientPortalModule: React.FC<ClientPortalModuleProps> = ({ activeMo
   };
 
   const handleSharePassport = () => {
-    navigator.clipboard.writeText(`https://petcare.id/passport/${selectedPet?.id}`);
+    navigator.clipboard.writeText(`${window.location.origin}/passport/${selectedPet?.id}`);
     addToast(`Link Paspor Digital untuk ${selectedPet?.name} berhasil disalin ke clipboard!`, 'success');
   };
 

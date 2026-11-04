@@ -347,6 +347,40 @@ export const HRMModule: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Coverage warnings: branch+shift combos covered by only 1 person or all on leave */}
+          {(() => {
+            const coverageMap = new Map<string, { total: number; onLeave: number; names: string[] }>();
+            employees.forEach((emp) => {
+              const key = `${emp.branchId || 'utama'}::${emp.shift || 'Belum diatur'}`;
+              const entry = coverageMap.get(key) || { total: 0, onLeave: 0, names: [] };
+              entry.total++;
+              entry.names.push(emp.name);
+              if (activeLeaveByEmployee.has(emp.id)) entry.onLeave++;
+              coverageMap.set(key, entry);
+            });
+            const risks = Array.from(coverageMap.entries()).filter(([, v]) => v.total - v.onLeave <= 0 || (v.total === 1 && v.onLeave === 0));
+            if (risks.length === 0) return null;
+            return (
+              <div className="mt-3 space-y-2">
+                {risks.map(([key, v]) => {
+                  const [branchId, shift] = key.split('::');
+                  const branchName = branches.find((b) => b.id === branchId)?.name || 'Cabang Utama';
+                  const noStaff = v.total - v.onLeave <= 0;
+                  return (
+                    <div key={key} className={`flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${noStaff ? 'bg-rose-50 border border-rose-200 text-rose-800' : 'bg-amber-50 border border-amber-200 text-amber-800'}`}>
+                      <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                      <span>
+                        <strong>{noStaff ? '🔴 Tidak ada coverage' : '🟡 Coverage tipis'}:</strong>{' '}
+                        Shift <strong>{shift}</strong> di <strong>{branchName}</strong> —{' '}
+                        {noStaff ? 'semua staf sedang cuti/izin' : `hanya ${v.names[0]} (single point of failure)`}.
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 

@@ -37,6 +37,8 @@ import { TenantAdminModule } from './components/modules/TenantAdminModule';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ResetPasswordScreen } from './components/auth/ResetPasswordScreen';
 import { LockScreen } from './components/auth/LockScreen';
+import { OnboardingWizard } from './components/auth/OnboardingWizard';
+import { PetPassportPage } from './components/public/PetPassportPage';
 import { useIdleTimer } from './hooks/useIdleTimer';
 import { getRoleInfo } from './utils/roleUtils';
 import {
@@ -173,6 +175,10 @@ const MainAppContent: React.FC = () => {
 
   if (!user || isLoginScreenOpen) {
     return <LoginScreen onSuccessfulLogin={() => closeLoginScreen()} />;
+  }
+
+  if (user && !appSettings.clinicName) {
+    return <OnboardingWizard onDone={() => {}} />;
   }
 
   return (
@@ -470,6 +476,11 @@ const MainAppContent: React.FC = () => {
 };
 
 export default function App() {
+  const passportMatch = window.location.pathname.match(/^\/passport\/(.+)$/);
+  if (passportMatch) {
+    return <PetPassportPage petId={passportMatch[1]} />;
+  }
+
   return (
     <ErrorBoundary>
       <ThemeProvider>
