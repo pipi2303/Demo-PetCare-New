@@ -9,6 +9,11 @@ import { TriageUrgencyModal } from '../clinic/TriageUrgencyModal';
 import { computeTriageHeuristic } from '../../utils/aiTriageUrgency';
 import { DeduplicationModal, detectDuplicateCustomers, detectDuplicatePets } from '../master/DeduplicationModal';
 import {
+  MasterDataGovernanceModal,
+  MasterEntity360Modal,
+  CrossModuleQuickActionModal,
+} from '../master/MasterDataInsightsHub';
+import {
   Users,
   Dog,
   Search,
@@ -41,7 +46,10 @@ import {
   Warehouse,
   BookOpen,
   Printer,
-  GitMerge
+  GitMerge,
+  Layers,
+  Stethoscope,
+  Eye
 } from 'lucide-react';
 
 export const MasterDataModule: React.FC = () => {
@@ -109,9 +117,12 @@ export const MasterDataModule: React.FC = () => {
     updateCoA,
     deleteCoA,
     clinicVisits = [],
+    addClinicVisit,
     soapNotes = [],
     medicalRecords = [],
     vacHistories = [],
+    vacSchedules = [],
+    addVacSchedule,
     labTests = [],
     invoices = [],
     branches = []
@@ -119,6 +130,12 @@ export const MasterDataModule: React.FC = () => {
   const { addToast } = useToast();
   const [showDeduplicationModal, setShowDeduplicationModal] = useState(false);
   const [dedupInitialMode, setDedupInitialMode] = useState<'customers' | 'pets'>('customers');
+  const [showGovernanceModal, setShowGovernanceModal] = useState(false);
+  const [governanceInitialSection, setGovernanceInitialSection] = useState<'architecture' | 'integration' | 'optimization'>('architecture');
+  const [entity360Target, setEntity360Target] = useState<
+    { type: 'customer'; customer: Customer } | { type: 'pet'; pet: Pet } | null
+  >(null);
+  const [quickDispatchPet, setQuickDispatchPet] = useState<Pet | null>(null);
 
   const duplicateCustomerGroups = React.useMemo(
     () => detectDuplicateCustomers(customers),
@@ -128,6 +145,176 @@ export const MasterDataModule: React.FC = () => {
     () => detectDuplicatePets(pets, customers),
     [pets, customers]
   );
+
+  const handleSyncCustomerMetrics = async (): Promise<number> => {
+    let syncedCount = 0;
+    for (const c of customers) {
+      const actualPets = pets.filter((p) => p.customerId === c.id).length;
+      const paidTotal = invoices
+        .filter((inv) => inv.customerId === c.id && inv.status === 'Lunas')
+        .reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+      const nextSpent = Math.max(c.totalSpent || 0, paidTotal);
+      if (c.petCount !== actualPets || c.totalSpent !== nextSpent) {
+        await updateCustomer(c.id, {
+          petCount: actualPets,
+          totalSpent: nextSpent,
+        } as any);
+        syncedCount++;
+      }
+    }
+    return syncedCount;
+  };
+
+  const handleBulkAdjustServicePrices = async (
+    category: string,
+    percentDelta: number
+  ): Promise<number> => {
+    const targets = services.filter((s) => category === 'All' || s.category === category);
+    let count = 0;
+    for (const s of targets) {
+      const nextPrice = Math.max(
+        1000,
+        Math.round((s.price * (1 + percentDelta / 100)) / 1000) * 1000
+      );
+      if (nextPrice !== s.price) {
+        await updateService(s.id, { price: nextPrice });
+        count++;
+      }
+    }
+    return count;
+  };
+
+  const handleExportUniversalCSV = (entityKey: string) => {
+    let headers: string[] = [];
+    let rows: (string | number)[][] = [];
+    let filename = `MasterData_${entityKey}_${new Date().toISOString().substring(0, 10)}.csv`;
+
+    if (entityKey === 'customers') {
+      headers = ['ID', 'Nama', 'Telepon/WA', 'Email', 'NIK', 'Tier', 'Poin', 'Total Transaksi', 'Jumlah Hewan'];
+      rows = customers.map((c) => [
+        c.id,
+        `"${c.name}"`,
+        c.phone,
+        c.email || '-',
+        c.nik || '-',
+        c.membershipTier,
+        c.loyaltyPoints,
+        c.totalSpent,
+        pets.filter((p) => p.customerId === c.id).length,
+      ]);
+    } else if (entityKey === 'pets') {
+      headers = ['ID', 'Nama Hewan', 'Spesies', 'Ras', 'Gender', 'Berat (kg)', 'Microchip', 'Pemilik', 'Alergi'];
+      rows = pets.map((p) => [
+        p.id,
+        `"${p.name}"`,
+        p.species,
+        `"${p.breed}"`,
+        p.gender,
+        p.weightKg,
+        p.microchipNo || '-',
+        `"${p.customerName}"`,
+        `"${p.allergies || 'Tidak Ada'}"`,
+      ]);
+    } else if (entityKey === 'services') {
+      headers = ['Kode', 'Nama Layanan', 'Kategori', 'Durasi (Menit)', 'Tarif (Rp)', 'Status'];
+      rows = services.map((s) => [
+        s.code,
+        `"${s.name}"`,
+        s.category,
+        s.estimatedDurationMins,
+        s.price,
+        s.isActive ? 'Aktif' : 'Nonaktif',
+      ]);
+    } else if (entityKey === 'staff') {
+      headers = ['NIK', 'Nama Staff', 'Peran', 'Departemen', 'SIP', 'Telepon', 'Status'];
+      rows = employees.map((e) => [
+        e.nik,
+        `"${e.name}"`,
+        `"${e.role}"`,
+        e.department,
+        e.sipNumber || '-',
+        e.phone,
+        e.status,
+      ]);
+    } else if (entityKey === 'drugs') {
+      headers = ['Kode', 'Nama Obat/Vaksin', 'Kategori', 'Stok', 'Min Stok', 'Satuan', 'Harga Satuan', 'Batch', 'Kedaluwarsa'];
+      rows = drugs.map((d) => [
+        d.code,
+        `"${d.name}"`,
+        d.category,
+        d.stock,
+        d.minStock,
+        d.unit,
+        d.unitPrice,
+        d.batchNumber,
+        d.expiryDate,
+      ]);
+    } else {
+      headers = ['Kode Akun', 'Nama Akun', 'Tipe', 'Deskripsi'];
+      rows = chartOfAccounts.map((a) => [a.code, `"${a.name}"`, a.type, `"${a.description || ''}"`]);
+    }
+
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addToast(`Dataset ${entityKey.toUpperCase()} berhasil di-export ke CSV!`, 'success');
+  };
+
+  const handleDispatchClinicVisit = async (payload: {
+    pet: Pet;
+    serviceCategory: string;
+    doctorName: string;
+    complaint: string;
+    isEmergency: boolean;
+  }) => {
+    const doc = employees.find((e) => e.name === payload.doctorName);
+    await addClinicVisit({
+      customerId: payload.pet.customerId,
+      customerName: payload.pet.customerName,
+      petId: payload.pet.id,
+      petName: payload.pet.name,
+      petSpecies: payload.pet.species,
+      petBreed: payload.pet.breed,
+      doctorId: doc?.id || 'EMP-01',
+      doctorName: payload.doctorName,
+      complaint: `[${payload.serviceCategory}${payload.isEmergency ? ' - PRIORITAS IGD' : ''}] ${payload.complaint}`,
+      triageUrgency: payload.isEmergency ? 'P1' : 'P3',
+    });
+    addToast(
+      `Pasien ${payload.pet.name} berhasil didaftarkan ke Antrean Poliklinik (${payload.doctorName})!`,
+      'success'
+    );
+  };
+
+  const handleScheduleVaccine = async (payload: {
+    pet: Pet;
+    vaccineName: string;
+    scheduledDate: string;
+    doctorName: string;
+  }) => {
+    const owner = customers.find((c) => c.id === payload.pet.customerId);
+    await addVacSchedule({
+      petId: payload.pet.id,
+      petName: payload.pet.name,
+      customerName: payload.pet.customerName,
+      customerPhone: owner?.phone || '081200000000',
+      vaccineName: payload.vaccineName,
+      dueDate: payload.scheduledDate,
+      status: 'Mendatang',
+      notes: `Dijadwalkan dari Master Data bersama ${payload.doctorName}`,
+    });
+    addToast(
+      `Jadwal vaksinasi ${payload.vaccineName} untuk ${payload.pet.name} (${payload.scheduledDate}) berhasil dibuat!`,
+      'success'
+    );
+  };
 
   const handleCreateSampleDuplicates = () => {
     const baseCustomer = customers[0];
@@ -1051,6 +1238,23 @@ export const MasterDataModule: React.FC = () => {
           <div className="flex items-center gap-1.5 shrink-0 pl-2 border-l border-[#B8905A]/25">
             <button
               type="button"
+              onClick={() => {
+                setGovernanceInitialSection(
+                  activeTab === 'services' || activeTab === 'drugs' ? 'optimization' : 'architecture'
+                );
+                setShowGovernanceModal(true);
+              }}
+              title="Pusat Arsitektur, Integrasi & Optimasi Master Data"
+              aria-label="Pusat Arsitektur, Integrasi & Optimasi Master Data"
+              className="group relative w-8 h-8 rounded-lg bg-[#101A2C]/90 hover:bg-[#101A2C] text-[#D9B98A] hover:text-[#FFFDF9] border border-[#B8905A]/40 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            >
+              <Layers className="w-4 h-4 text-[#B8905A] group-hover:text-[#FFFDF9] transition-colors" />
+              <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                Arsitektur, Integrasi &amp; Optimasi
+              </span>
+            </button>
+            <button
+              type="button"
               onClick={() => setShowQuickPrintModal(true)}
               title="Quick Print"
               aria-label="Quick Print"
@@ -1499,13 +1703,42 @@ export const MasterDataModule: React.FC = () => {
                         {c.loyaltyPoints} Pts
                       </td>
                       <td className="py-3.5 px-4 text-center font-bold text-[#1B2A45]">
-                        {c.petCount} Ekor
+                        <button
+                          type="button"
+                          onClick={() => setEntity360Target({ type: 'customer', customer: c })}
+                          title="Lihat Hierarki Hewan & Rekam Medis 360°"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#F6F1E6] hover:bg-[#E1D6BE] border border-[#E1D6BE] text-xs font-bold text-[#1B2A45] cursor-pointer transition-colors"
+                        >
+                          <Dog className="w-3 h-3 text-[#B8905A]" />
+                          {pets.filter((p) => p.customerId === c.id).length} Ekor
+                        </button>
                       </td>
                       <td className="py-3.5 px-4 text-right font-bold text-[#1B2A45]">
                         Rp {(c.totalSpent || 0).toLocaleString('id-ID')}
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setEntity360Target({ type: 'customer', customer: c })}
+                            title="Profil Relasi 360° (Hewan, Rekam Medis & Invoice)"
+                            className="p-1.5 hover:bg-[#F6F1E6] text-[#1B2A45] border border-[#E1D6BE]/80 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-4 h-4 text-[#B8905A]" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPet(null);
+                              resetPetForm();
+                              setPetForm((prev) => ({ ...prev, customerId: c.id }));
+                              setShowAddPetModal(true);
+                            }}
+                            title={`Tambah Pasien Hewan untuk ${c.name}`}
+                            className="p-1.5 hover:bg-[#F6F1E6] text-[#1B2A45] border border-[#E1D6BE]/80 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => startEditCustomer(c)}
                             title="Edit Pelanggan"
@@ -1778,11 +2011,27 @@ export const MasterDataModule: React.FC = () => {
                         <AlertTriangle className="w-3.5 h-3.5" /> Triase AI
                       </button>
                       <button
+                        type="button"
+                        onClick={() => setQuickDispatchPet(p)}
+                        className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                        title="Kirim Langsung ke Antrean Poliklinik / Jadwal Vaksinasi"
+                      >
+                        <Stethoscope className="w-3.5 h-3.5 text-emerald-700" /> +Poli
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEntity360Target({ type: 'pet', pet: p })}
+                        className="p-1.5 bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] border border-[#E1D6BE] rounded-lg transition-colors cursor-pointer"
+                        title="Profil Relasi 360° & Rekam Medis"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-[#B8905A]" />
+                      </button>
+                      <button
                         onClick={() => setSelectedPetForPassport(p)}
-                        className="py-1.5 px-2.5 bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1"
+                        className="p-1.5 bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] border border-[#E1D6BE] rounded-lg transition-colors cursor-pointer"
                         title="Buka Paspor Digital"
                       >
-                        <Award className="w-3.5 h-3.5 text-[#1B2A45]" /> Paspor
+                        <Award className="w-3.5 h-3.5 text-[#1B2A45]" />
                       </button>
                       <button
                         onClick={() => startEditPet(p)}
@@ -3887,6 +4136,66 @@ export const MasterDataModule: React.FC = () => {
         onCreateSampleDuplicates={handleCreateSampleDuplicates}
         onSuccessToast={(msg) => addToast(msg, 'success')}
         onErrorToast={(msg) => addToast(msg, 'error')}
+      />
+
+      {/* Master Data Governance, Architecture & Bulk Optimization Hub */}
+      <MasterDataGovernanceModal
+        isOpen={showGovernanceModal}
+        onClose={() => setShowGovernanceModal(false)}
+        initialSection={governanceInitialSection}
+        customers={customers}
+        pets={pets}
+        services={services}
+        employees={employees}
+        drugs={drugs}
+        hotelRooms={hotelRooms}
+        groomingPackages={groomingPackages}
+        clinicVisits={clinicVisits}
+        invoices={invoices}
+        vacSchedules={vacSchedules}
+        chartOfAccounts={chartOfAccounts}
+        onSyncCustomerMetrics={handleSyncCustomerMetrics}
+        onBulkAdjustServicePrices={handleBulkAdjustServicePrices}
+        onExportUniversalCSV={handleExportUniversalCSV}
+        onOpenDeduplication={(mode) => {
+          setDedupInitialMode(mode);
+          setShowDeduplicationModal(true);
+        }}
+        onSelectEntity360={(target) => setEntity360Target(target)}
+        onSuccessToast={(msg) => addToast(msg, 'success')}
+      />
+
+      {/* 360 Entity Relational Inspector Modal */}
+      <MasterEntity360Modal
+        target={entity360Target}
+        onClose={() => setEntity360Target(null)}
+        customers={customers}
+        pets={pets}
+        clinicVisits={clinicVisits}
+        soapNotes={soapNotes}
+        vacHistories={vacHistories}
+        vacSchedules={vacSchedules}
+        labTests={labTests}
+        invoices={invoices}
+        onSwitchTarget={(next) => setEntity360Target(next)}
+        onQuickAddPetForCustomer={(c) => {
+          setEditingPet(null);
+          resetPetForm();
+          setPetForm((prev) => ({ ...prev, customerId: c.id }));
+          setShowAddPetModal(true);
+        }}
+        onOpenQuickDispatch={(p) => setQuickDispatchPet(p)}
+      />
+
+      {/* Cross-Module Operational Quick Dispatch Modal */}
+      <CrossModuleQuickActionModal
+        pet={quickDispatchPet}
+        onClose={() => setQuickDispatchPet(null)}
+        employees={employees}
+        services={services}
+        drugs={drugs}
+        onDispatchClinicVisit={handleDispatchClinicVisit}
+        onScheduleVaccine={handleScheduleVaccine}
       />
     </div>
   );
