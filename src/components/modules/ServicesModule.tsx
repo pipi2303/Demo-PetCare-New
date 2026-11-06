@@ -741,96 +741,205 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
   const telehealthActiveCount = telehealthSessions.filter((t) => t.status === 'Menunggu' || t.status === 'Berlangsung').length;
   const ambulanceStandbyCount = ambulanceUnits.filter((u) => u.status === 'Tersedia').length;
 
-  const SERVICE_TABS = [
-    { id: 'booking', label: 'Booking & Antrian', icon: CalendarCheck, count: bookingReadyCount, countLabel: 'siap' },
-    { id: 'grooming', label: 'Grooming Salon', icon: Scissors, count: groomingActiveCount, countLabel: 'proses' },
-    { id: 'petHotel', label: 'Pet Hotel Boarding', icon: Hotel, count: hotelActiveCount, countLabel: 'aktif' },
-    { id: 'telehealth', label: 'Telehealth Video', icon: Video, count: telehealthActiveCount, countLabel: 'antre' },
-    { id: 'ambulance', label: 'Ambulance Rescue', icon: Ambulance, count: ambulanceStandbyCount, countLabel: 'standby' }
-  ] as const;
+  // Dedicated sub-view states for Booking, Grooming, and Pet Hotel
+  const [groomingSubView, setGroomingSubView] = useState<'pipeline' | 'gallery'>('pipeline');
+  const [hotelSubView, setHotelSubView] = useState<'boarding' | 'monitoring'>('boarding');
+
+  const telehealthCompletedCount = telehealthSessions.filter(
+    (t) => t.status === 'Selesai' || t.status === 'Dibatalkan'
+  ).length;
+  const activeAmbulanceRequests = ambulanceRequests.filter(
+    (r) => r.status !== 'Completed' && r.status !== 'Cancelled'
+  );
+
+  // Per-module header configuration
+  const renderModuleHeader = () => {
+    if (currentTab === 'booking') {
+      return (
+        <SystemNotificationHeader
+          icon={CalendarCheck}
+          title="Booking & Antrian Layanan"
+          description="Sistem booking online, kalender drag & drop jadwal dokter, nomor antrian otomatis & kiosk self check-in."
+          badges={[
+            { label: `${doctorBookings.length} Total Booking`, variant: 'gold' },
+            { label: `${bookingReadyCount} Siap Check-In`, variant: 'emerald' }
+          ]}
+          tabs={[
+            { id: 'calendar', label: 'Kalender Drag & Drop (Visual)', icon: LayoutGrid, count: doctorBookings.length },
+            { id: 'table', label: 'Daftar & Antrean Booking', icon: TableIcon, count: bookingReadyCount },
+            { id: 'kiosk', label: 'Kiosk Check-In & Layar TV', icon: Smartphone }
+          ]}
+          activeTab={bookingSubView}
+          onTabChange={(tabId) => setBookingSubView(tabId as 'calendar' | 'table' | 'kiosk')}
+          actions={
+            <button
+              type="button"
+              onClick={() => setShowAddBookingModal(true)}
+              title="Buat Janji Temu Baru"
+              className="bg-[#B8905A] text-[#101A2C]"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Buat Janji Temu Baru</span>
+            </button>
+          }
+        />
+      );
+    }
+
+    if (currentTab === 'grooming') {
+      return (
+        <SystemNotificationHeader
+          icon={Scissors}
+          title="Grooming Salon & Spa Anabul"
+          description="Pantau progres pengerjaan salon & spa anabul secara live dari penyerahan hingga siap dijemput."
+          badges={[
+            { label: `${groomingActiveCount} Grooming Proses`, variant: 'purple' },
+            { label: `${groomingSessions.filter((s) => s.stage === 'Selesai').length} Siap Dijemput`, variant: 'emerald' }
+          ]}
+          tabs={[
+            { id: 'pipeline', label: 'Kanban Pipeline Grooming', icon: Scissors, count: groomingActiveCount },
+            { id: 'gallery', label: 'Galeri Before / After Salon', icon: Sparkles, count: 3 }
+          ]}
+          activeTab={groomingSubView}
+          onTabChange={(tabId) => setGroomingSubView(tabId as 'pipeline' | 'gallery')}
+          actions={
+            <button
+              type="button"
+              onClick={() => setShowAddGroomingModal(true)}
+              title="Masukkan Pasien Grooming"
+              className="bg-[#B8905A] text-[#101A2C]"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Masukkan Pasien Grooming</span>
+            </button>
+          }
+        />
+      );
+    }
+
+    if (currentTab === 'petHotel') {
+      return (
+        <SystemNotificationHeader
+          icon={Hotel}
+          title="Pet Hotel Boarding & CCTV"
+          description="Pengelolaan reservasi kamar, jadwal makan harian, serta integrasi CCTV live stream untuk pemilik."
+          badges={[
+            { label: `${hotelActiveCount} Kamar Terisi`, variant: 'blue' },
+            { label: `${dailyMonitorings.length} Log Pakan Harian`, variant: 'gold' }
+          ]}
+          tabs={[
+            { id: 'boarding', label: 'Kamar & Tamu Boarding Aktif', icon: Hotel, count: hotelActiveCount },
+            { id: 'monitoring', label: 'Log Pakan & Observasi Harian', icon: Utensils, count: dailyMonitorings.length }
+          ]}
+          activeTab={hotelSubView}
+          onTabChange={(tabId) => setHotelSubView(tabId as 'boarding' | 'monitoring')}
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAddMonitoringModal(true)}
+                title="Catat Log Monitoring Pakan Harian"
+                className="bg-[#101A2C] text-[#D9B98A]"
+              >
+                <Utensils className="w-4 h-4" />
+                <span>Log Monitoring Harian</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddHotelModal(true)}
+                title="Check-In Boarding Baru"
+                className="bg-[#B8905A] text-[#101A2C]"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Check-In Boarding Baru</span>
+              </button>
+            </>
+          }
+        />
+      );
+    }
+
+    if (currentTab === 'telehealth') {
+      return (
+        <SystemNotificationHeader
+          icon={Video}
+          title="Telehealth Video Konsultasi"
+          description="Konsultasi dokter hewan online via video call terenkripsi & pengiriman e-resep langsung ke Apotek."
+          badges={[
+            { label: `${telehealthActiveCount} Antrean Video`, variant: 'blue' },
+            { label: `${telehealthCompletedCount} Sesi Selesai`, variant: 'emerald' }
+          ]}
+          tabs={[
+            {
+              id: 'telehealth',
+              label: 'Telehealth Video',
+              icon: Video,
+              count: telehealthActiveCount,
+              badge: activeCallSession ? 'LIVE' : undefined,
+              badgeVariant: 'rose'
+            }
+          ]}
+          activeTab="telehealth"
+          actions={
+            <button
+              type="button"
+              onClick={() => setShowAddTeleModal(true)}
+              title="Buat Jadwal Telehealth Baru"
+              className="bg-[#B8905A] text-[#101A2C]"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Buat Jadwal Telehealth</span>
+            </button>
+          }
+        />
+      );
+    }
+
+    return (
+      <SystemNotificationHeader
+        icon={Ambulance}
+        title="Ambulance & Emergency Rescue 24/7"
+        description="Pusat komando pemanggilan ambulance darurat dengan GPS tracking lokasi penjemputan & triase medis."
+        badges={[
+          { label: `${activeAmbulanceRequests.length} Dispatch Aktif`, variant: 'rose', pulse: activeAmbulanceRequests.length > 0 },
+          { label: `${ambulanceStandbyCount} Armada Standby`, variant: 'emerald' }
+        ]}
+        tabs={[
+          {
+            id: 'ambulance',
+            label: 'Ambulance Rescue',
+            icon: Ambulance,
+            count: ambulanceStandbyCount,
+            badge: activeAmbulanceRequests.length > 0 ? 'DARURAT' : undefined,
+            badgeVariant: 'rose'
+          }
+        ]}
+        activeTab="ambulance"
+        actions={
+          <button
+            type="button"
+            onClick={() => setShowAddAmbulanceModal(true)}
+            title="Terima Panggilan Darurat Ambulance"
+            className="bg-rose-600 text-white"
+          >
+            <ShieldAlert className="w-4 h-4" />
+            <span>Terima Panggilan Darurat</span>
+          </button>
+        }
+      />
+    );
+  };
 
   return (
     <div className="space-y-4 pb-12">
-      {/* Compact & Informative SystemNotificationHeader */}
-      <SystemNotificationHeader
-        icon={CalendarCheck}
-        title="Pusat Kendali Layanan PetCare"
-        description="Monitoring & manajemen antrian dokter hewan, jadwal salon grooming, kamar pet hotel, konsultasi video telehealth & armada ambulance rescue."
-        badges={[
-          { label: 'Live Hub Services', variant: 'emerald' },
-          { label: `${doctorBookings.length} Booking`, variant: 'gold' },
-          { label: `${hotelActiveCount} Kamar Hotel`, variant: 'blue' },
-          { label: `${groomingActiveCount} Grooming Aktif`, variant: 'purple' },
-          { label: `${ambulanceStandbyCount} Ambulance Siap`, variant: 'amber' }
-        ]}
-        tabs={[
-          { id: 'booking', label: 'Booking & Antrian', icon: CalendarCheck, count: bookingReadyCount },
-          { id: 'grooming', label: 'Grooming Salon', icon: Scissors, count: groomingActiveCount },
-          { id: 'petHotel', label: 'Pet Hotel Boarding', icon: Hotel, count: hotelActiveCount },
-          { id: 'telehealth', label: 'Telehealth Video', icon: Video, count: telehealthActiveCount },
-          { id: 'ambulance', label: 'Ambulance Rescue', icon: Ambulance, count: ambulanceStandbyCount }
-        ]}
-        activeTab={currentTab}
-        onTabChange={(tabId) => handleTabChange(tabId as any)}
-      />
+      {/* Dedicated Header per Sidebar Menu */}
+      {renderModuleHeader()}
 
       {/* ========================================================================= */}
-      {/* TAB 1: BOOKING & ANTRIAN */}
+      {/* MENU 1: BOOKING & ANTRIAN */}
       {/* ========================================================================= */}
       {currentTab === 'booking' && (
         <div className="space-y-4">
-          {/* Sub-view Switcher: Drag-and-Drop Visual Calendar vs Data Table */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-3 shadow-2xs">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-amber-500/15 text-[#B8905A]">
-                <CalendarCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm text-[#1B2A45] font-display">Manajemen Janji Temu & Antrean Pasien</h3>
-                <p className="text-[11px] text-[#6B6656]">Kelola jadwal dokter secara visual dengan drag & drop atau tabel data</p>
-              </div>
-            </div>
-
-            <div className="flex items-center bg-[#F6F1E6] p-1 rounded-xl border border-[#E1D6BE]">
-              <button
-                type="button"
-                onClick={() => setBookingSubView('calendar')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  bookingSubView === 'calendar'
-                    ? 'bg-[#1B2A45] text-white shadow-2xs'
-                    : 'text-[#6B6656] hover:text-[#1B2A45]'
-                }`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5 text-amber-400" />
-                <span>Kalender Drag & Drop (Visual)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setBookingSubView('table')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  bookingSubView === 'table'
-                    ? 'bg-[#1B2A45] text-white shadow-2xs'
-                    : 'text-[#6B6656] hover:text-[#1B2A45]'
-                }`}
-              >
-                <TableIcon className="w-3.5 h-3.5" />
-                <span>Tabel Data List</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setBookingSubView('kiosk')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  bookingSubView === 'kiosk'
-                    ? 'bg-[#1B2A45] text-white shadow-2xs'
-                    : 'text-[#6B6656] hover:text-[#1B2A45]'
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>Kiosk Check-In & WA</span>
-              </button>
-            </div>
-          </div>
-
           {/* Sub-view: Calendar / Table / Self Check-In Kiosk */}
           {bookingSubView === 'calendar' ? (
             <BookingCalendarView
@@ -1039,300 +1148,309 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: GROOMING SALON */}
+      {/* MENU 2: GROOMING SALON */}
       {/* ========================================================================= */}
       {currentTab === 'grooming' && (
         <div className="space-y-6">
-          {/* Header Action */}
-          <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs flex justify-between items-center">
-            <div>
-              <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
-                <Scissors className="w-4 h-4 text-[#B8905A]" /> Grooming Pipeline & Stage Tracker
-              </h3>
-              <p className="text-xs text-[#6B6656] mt-0.5">
-                Pantau progres pengerjaan salon & spa anabul secara live dari penyerahan hingga siap dijemput.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowAddGroomingModal(true)}
-              className="px-4 py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" /> Masukkan Pasien Grooming
-            </button>
-          </div>
+          {groomingSubView === 'pipeline' ? (
+            <>
+              {/* Header Action */}
+              <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs flex justify-between items-center">
+                <div>
+                  <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
+                    <Scissors className="w-4 h-4 text-[#B8905A]" /> Grooming Pipeline & Stage Tracker
+                  </h3>
+                  <p className="text-xs text-[#6B6656] mt-0.5">
+                    Pantau progres pengerjaan salon & spa anabul secara live dari penyerahan hingga siap dijemput.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowAddGroomingModal(true)}
+                  className="px-4 py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Masukkan Pasien Grooming
+                </button>
+              </div>
 
-          {/* Kanban / Stage Pipeline Board */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 overflow-x-auto">
-            {stageOrder.map((stage, idx) => {
-              const sessionsInStage = groomingSessions.filter((s) => s.stage === stage);
+              {/* Kanban / Stage Pipeline Board */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4 overflow-x-auto">
+                {stageOrder.map((stage, idx) => {
+                  const sessionsInStage = groomingSessions.filter((s) => s.stage === stage);
 
-              return (
-                <div key={stage} className="bg-[#F6F1E6] rounded-2xl border border-[#E1D6BE] p-3 space-y-3 shrink-0 min-w-[200px]">
-                  <div className="flex justify-between items-center border-b border-[#E1D6BE] pb-2">
-                    <span className="font-bold text-xs text-[#1B2A45] font-display uppercase tracking-wider">
-                      {idx + 1}. {stage}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-[#1B2A45] text-[#D9B98A] font-bold text-[10px]">
-                      {sessionsInStage.length}
-                    </span>
-                  </div>
+                  return (
+                    <div key={stage} className="bg-[#F6F1E6] rounded-2xl border border-[#E1D6BE] p-3 space-y-3 shrink-0 min-w-[200px]">
+                      <div className="flex justify-between items-center border-b border-[#E1D6BE] pb-2">
+                        <span className="font-bold text-xs text-[#1B2A45] font-display uppercase tracking-wider">
+                          {idx + 1}. {stage}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-[#1B2A45] text-[#D9B98A] font-bold text-[10px]">
+                          {sessionsInStage.length}
+                        </span>
+                      </div>
 
-                  <div className="space-y-2">
-                    {sessionsInStage.length === 0 ? (
-                      <p className="text-[11px] text-[#6B6656] text-center py-6 italic">Kosong</p>
-                    ) : (
-                      sessionsInStage.map((s) => (
-                        <div key={s.id} className="bg-[#FFFDF9] rounded-xl p-3 border border-[#E1D6BE] shadow-2xs space-y-2 text-xs">
-                          <div className="flex justify-between items-start">
-                            <span className="font-bold text-[#1B2A45] text-sm">{s.petName}</span>
-                            <span className="text-[10px] text-[#B8905A] font-semibold">{s.groomerName}</span>
-                          </div>
+                      <div className="space-y-2">
+                        {sessionsInStage.length === 0 ? (
+                          <p className="text-[11px] text-[#6B6656] text-center py-6 italic">Kosong</p>
+                        ) : (
+                          sessionsInStage.map((s) => (
+                            <div key={s.id} className="bg-[#FFFDF9] rounded-xl p-3 border border-[#E1D6BE] shadow-2xs space-y-2 text-xs">
+                              <div className="flex justify-between items-start">
+                                <span className="font-bold text-[#1B2A45] text-sm">{s.petName}</span>
+                                <span className="text-[10px] text-[#B8905A] font-semibold">{s.groomerName}</span>
+                              </div>
 
-                          <p className="text-[11px] text-[#6B6656]">Paket: <strong>{s.packageType}</strong></p>
-                          {s.notes && (
-                            <p className="text-[10px] text-[#22242B] bg-[#F6F1E6] p-1.5 rounded border border-[#E1D6BE]">
-                              {s.notes}
-                            </p>
-                          )}
+                              <p className="text-[11px] text-[#6B6656]">Paket: <strong>{s.packageType}</strong></p>
+                              {s.notes && (
+                                <p className="text-[10px] text-[#22242B] bg-[#F6F1E6] p-1.5 rounded border border-[#E1D6BE]">
+                                  {s.notes}
+                                </p>
+                              )}
 
-                          {stage !== 'Selesai' && (
-                            <button
-                              onClick={() => handleAdvanceGroomingStage(s)}
-                              disabled={advancingGroomingIds.has(s.id)}
-                              className="w-full py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] disabled:opacity-50 disabled:cursor-not-allowed text-[#FFFDF9] font-bold text-[11px] rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1 mt-1"
-                            >
-                              Lanjut ke {stageOrder[idx + 1]} <ChevronRight className="w-3 h-3 text-[#D9B98A]" />
-                            </button>
-                          )}
-                          {stage === 'Selesai' && (
-                            <div className="space-y-1 mt-1">
-                              <span className="w-full py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded block text-center border border-emerald-300">
-                                ✓ Siap Diambil Pemilik
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDiaryPetId(s.petId);
-                                  setShowDiaryModal(true);
-                                }}
-                                className="w-full py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:brightness-110 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer"
-                              >
-                                <Camera className="w-3.5 h-3.5" />
-                                <span>Kirim Foto Hasil ke WA</span>
-                              </button>
+                              {stage !== 'Selesai' && (
+                                <button
+                                  onClick={() => handleAdvanceGroomingStage(s)}
+                                  disabled={advancingGroomingIds.has(s.id)}
+                                  className="w-full py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] disabled:opacity-50 disabled:cursor-not-allowed text-[#FFFDF9] font-bold text-[11px] rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1 mt-1"
+                                >
+                                  Lanjut ke {stageOrder[idx + 1]} <ChevronRight className="w-3 h-3 text-[#D9B98A]" />
+                                </button>
+                              )}
+                              {stage === 'Selesai' && (
+                                <div className="space-y-1 mt-1">
+                                  <span className="w-full py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded block text-center border border-emerald-300">
+                                    ✓ Siap Diambil Pemilik
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDiaryPetId(s.petId);
+                                      setShowDiaryModal(true);
+                                    }}
+                                    className="w-full py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:brightness-110 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                  >
+                                    <Camera className="w-3.5 h-3.5" />
+                                    <span>Kirim Foto Hasil ke WA</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Before & After Showcase Gallery */}
-          <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-4">
-            <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2 border-b border-[#E1D6BE] pb-2">
-              <Sparkles className="w-4 h-4 text-[#B8905A]" /> Galeri Transformasi Before / After Grooming
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[
-                { pet: 'Mimi (Persia Medium)', service: 'Full Grooming & Lion Cut', groomer: 'Agus P.', before: 'Bulu gimbal & kusam', after: 'Wangi, bersih & terawat' },
-                { pet: 'Rocky (Golden Retriever)', service: 'Mandi Jamur & Blower Heavy Duty', groomer: 'Rudi H.', before: 'Bulu basah & berbau', after: 'Bulu halus berseri' },
-                { pet: 'Luna (Poodle Cut)', service: 'Teddy Bear Style Cut & Ear Cleaning', groomer: 'Agus P.', before: 'Bulu menutupi mata', after: 'Cute Teddy Bear haircut' }
-              ].map((item, i) => (
-                <div key={i} className="bg-[#F6F1E6] rounded-xl p-4 border border-[#E1D6BE] space-y-2">
-                  <div className="flex justify-between items-center border-b border-[#E1D6BE] pb-1">
-                    <span className="font-bold text-xs text-[#1B2A45]">{item.pet}</span>
-                    <span className="text-[10px] font-bold text-[#B8905A]">{item.groomer}</span>
-                  </div>
-                  <p className="text-[11px] text-[#6B6656]">{item.service}</p>
-                  <div className="grid grid-cols-2 gap-2 text-[10px] pt-1">
-                    <div className="bg-rose-50 text-rose-800 p-2 rounded border border-rose-200">
-                      <strong>Before:</strong> {item.before}
+                          ))
+                        )}
+                      </div>
                     </div>
-                    <div className="bg-emerald-50 text-emerald-800 p-2 rounded border border-emerald-200">
-                      <strong>After:</strong> {item.after}
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            /* Before & After Showcase Gallery */
+            <div className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-4">
+              <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2 border-b border-[#E1D6BE] pb-2">
+                <Sparkles className="w-4 h-4 text-[#B8905A]" /> Galeri Transformasi Before / After Grooming
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[
+                  { pet: 'Mimi (Persia Medium)', service: 'Full Grooming & Lion Cut', groomer: 'Agus P.', before: 'Bulu gimbal & kusam', after: 'Wangi, bersih & terawat' },
+                  { pet: 'Rocky (Golden Retriever)', service: 'Mandi Jamur & Blower Heavy Duty', groomer: 'Rudi H.', before: 'Bulu basah & berbau', after: 'Bulu halus berseri' },
+                  { pet: 'Luna (Poodle Cut)', service: 'Teddy Bear Style Cut & Ear Cleaning', groomer: 'Agus P.', before: 'Bulu menutupi mata', after: 'Cute Teddy Bear haircut' }
+                ].map((item, i) => (
+                  <div key={i} className="bg-[#F6F1E6] rounded-xl p-4 border border-[#E1D6BE] space-y-2">
+                    <div className="flex justify-between items-center border-b border-[#E1D6BE] pb-1">
+                      <span className="font-bold text-xs text-[#1B2A45]">{item.pet}</span>
+                      <span className="text-[10px] font-bold text-[#B8905A]">{item.groomer}</span>
+                    </div>
+                    <p className="text-[11px] text-[#6B6656]">{item.service}</p>
+                    <div className="grid grid-cols-2 gap-2 text-[10px] pt-1">
+                      <div className="bg-rose-50 text-rose-800 p-2 rounded border border-rose-200">
+                        <strong>Before:</strong> {item.before}
+                      </div>
+                      <div className="bg-emerald-50 text-emerald-800 p-2 rounded border border-emerald-200">
+                        <strong>After:</strong> {item.after}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: PET HOTEL BOARDING */}
+      {/* MENU 3: PET HOTEL BOARDING */}
       {/* ========================================================================= */}
       {currentTab === 'petHotel' && (
         <div className="space-y-6">
-          {/* Header Action */}
-          <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
-                <Hotel className="w-4 h-4 text-[#B8905A]" /> Manajemen Penitipan & Rawat Boarding
-              </h3>
-              <p className="text-xs text-[#6B6656] mt-0.5">
-                Pengelolaan reservasi kamar, jadwal makan harian, serta integrasi CCTV live stream untuk pemilik.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => setShowAddMonitoringModal(true)}
-                className="px-3.5 py-2 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-2xs transition-all flex items-center gap-1.5"
-              >
-                <Utensils className="w-4 h-4 text-[#D9B98A]" /> + Log Monitoring Harian
-              </button>
-              <button
-                onClick={() => setShowAddHotelModal(true)}
-                className="px-3.5 py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
-              >
-                <Plus className="w-4 h-4" /> Check-In Boarding Baru
-              </button>
-            </div>
-          </div>
-
-          {/* Active Hotel Guests — kartu yang statusnya sudah 'Selesai' (sudah
-              check-out) disembunyikan dari sini; sebelumnya tetap tampil
-              dengan tombol Check-Out aktif, sehingga klik ulang membuat
-              invoice duplikat untuk masa inap yang sama. */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {hotelReservations.filter((res) => res.status !== 'Selesai').map((res) => (
-              <div key={res.id} className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
-                <div className="flex justify-between items-start border-b border-[#E1D6BE] pb-2">
-                  <div>
-                    <span className="font-bold text-[#1B2A45] text-base block">{res.petName}</span>
-                    <span className="text-[11px] text-[#6B6656]">Pemilik: {res.customerName}</span>
-                  </div>
-                  <span className="px-2.5 py-1 bg-[#1B2A45] text-[#D9B98A] text-[10px] font-bold rounded-lg border border-[#B8905A]/30">
-                    {res.roomNo}
-                  </span>
-                </div>
-
-                <div className="text-xs space-y-1.5 bg-[#F6F1E6] p-3 rounded-xl border border-[#E1D6BE]">
-                  <p className="flex justify-between">
-                    <span className="text-[#6B6656]">Tipe Kamar:</span>
-                    <span className="font-bold text-[#1B2A45]">{res.roomType}</span>
+          {hotelSubView === 'boarding' ? (
+            <>
+              {/* Header Action */}
+              <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-4 shadow-2xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
+                    <Hotel className="w-4 h-4 text-[#B8905A]" /> Manajemen Penitipan & Rawat Boarding
+                  </h3>
+                  <p className="text-xs text-[#6B6656] mt-0.5">
+                    Pengelolaan reservasi kamar, jadwal makan harian, serta integrasi CCTV live stream untuk pemilik.
                   </p>
-                  <p className="flex justify-between">
-                    <span className="text-[#6B6656]">Periode Stay:</span>
-                    <span className="font-semibold text-[#1B2A45]">{res.checkInDate} s/d {res.checkOutDate}</span>
-                  </p>
-                  {res.notes && (
-                    <p className="pt-1 text-[11px] text-[#22242B] border-t border-[#E1D6BE]">
-                      <strong>Catatan Pakan:</strong> {res.notes}
-                    </p>
-                  )}
                 </div>
-
-                <div className="flex items-center justify-between gap-2 pt-1">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => setSelectedCCTV(res.petName)}
-                    className="flex-1 py-2 bg-[#101A2C] hover:bg-[#101A2C]/80 text-[#D9B98A] border border-[#B8905A]/30 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5"
+                    onClick={() => setShowAddMonitoringModal(true)}
+                    className="px-3.5 py-2 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-2xs transition-all flex items-center gap-1.5"
                   >
-                    <Tv className="w-3.5 h-3.5" /> CCTV Stream Live
+                    <Utensils className="w-4 h-4 text-[#D9B98A]" /> + Log Monitoring Harian
                   </button>
                   <button
-                    disabled={checkingOutIds.has(res.id)}
-                    onClick={async () => {
-                      if (checkingOutIds.has(res.id)) return;
-                      setCheckingOutIds((prev) => new Set(prev).add(res.id));
-
-                      // Reservasi Pet Hotel sebelumnya tidak pernah membuat
-                      // invoice sama sekali — tamu check-out tanpa tagihan
-                      // yang pernah tercatat. Sekarang diteruskan ke Kasir
-                      // sebagai invoice 'Belum Dibayar' saat check-out.
-                      const pet = pets.find((p) => p.id === res.petId);
-                      const cust = customers.find((c) => c.id === pet?.customerId);
-                      try {
-                        await addInvoice({
-                          customerId: cust?.id || 'guest',
-                          customerName: res.customerName,
-                          petName: res.petName,
-                          items: [
-                            {
-                              id: 'inv_item_' + Date.now() + Math.random(),
-                              category: 'Pet Hotel',
-                              name: `Boarding ${res.roomType} (${res.totalNights} malam) - ${res.petName}`,
-                              quantity: res.totalNights,
-                              unitPrice: res.dailyRate,
-                              totalPrice: res.totalCost
-                            }
-                          ],
-                          subtotal: res.totalCost,
-                          discountAmount: 0,
-                          totalAmount: res.totalCost,
-                          paidAmount: 0,
-                          paymentMethod: 'Tunai',
-                          status: 'Belum Dibayar',
-                          loyaltyPointsEarned: 0,
-                          cashierName: 'Staf Pet Hotel'
-                        });
-                        updateHotelStatus(res.id, 'Selesai');
-                        addToast(`Pasien ${res.petName} check-out. Tagihan Rp ${res.totalCost.toLocaleString('id-ID')} diteruskan ke Kasir.`, 'success');
-                      } catch (err: any) {
-                        addToast(err?.message || 'Gagal menerbitkan tagihan pet hotel.', 'error');
-                        setCheckingOutIds((prev) => {
-                          const next = new Set(prev);
-                          next.delete(res.id);
-                          return next;
-                        });
-                      }
-                    }}
-                    className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-2xs transition-all"
+                    onClick={() => setShowAddHotelModal(true)}
+                    className="px-3.5 py-2 bg-[#B8905A] hover:bg-[#9E7848] text-[#FFFDF9] font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
                   >
-                    Check-Out
+                    <Plus className="w-4 h-4" /> Check-In Boarding Baru
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
 
-          {/* Daily Monitoring History */}
-          <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
-            <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2 border-b border-[#E1D6BE] pb-2">
-              <Pill className="w-4 h-4 text-[#B8905A]" /> Rekam Catatan Pengawasan & Pakan Harian
-            </h3>
+              {/* Active Hotel Guests */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {hotelReservations.filter((res) => res.status !== 'Selesai').map((res) => (
+                  <div key={res.id} className="bg-[#FFFDF9] rounded-2xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
+                    <div className="flex justify-between items-start border-b border-[#E1D6BE] pb-2">
+                      <div>
+                        <span className="font-bold text-[#1B2A45] text-base block">{res.petName}</span>
+                        <span className="text-[11px] text-[#6B6656]">Pemilik: {res.customerName}</span>
+                      </div>
+                      <span className="px-2.5 py-1 bg-[#1B2A45] text-[#D9B98A] text-[10px] font-bold rounded-lg border border-[#B8905A]/30">
+                        {res.roomNo}
+                      </span>
+                    </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-[#22242B]">
-                <thead className="bg-[#F6F1E6] text-[#1B2A45] font-bold uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3">Tanggal</th>
-                    <th className="p-3">Nama Pasien</th>
-                    <th className="p-3">Nomor Kamar</th>
-                    <th className="p-3">Pakan Pagi / Sore</th>
-                    <th className="p-3">Catatan Observasi</th>
-                    <th className="p-3">Petugas Jaga</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E1D6BE]">
-                  {dailyMonitorings.map((m) => (
-                    <tr key={m.id}>
-                      <td className="p-3 font-semibold text-[#1B2A45]">{m.date}</td>
-                      <td className="p-3 font-bold text-[#1B2A45]">{m.petName}</td>
-                      <td className="p-3">{m.roomNo}</td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                          {m.morningFeeding ? 'Pagi ✓' : '-'} | {m.eveningFeeding ? 'Sore ✓' : '-'}
-                        </span>
-                      </td>
-                      <td className="p-3">{m.notes}</td>
-                      <td className="p-3 font-medium text-[#6B6656]">{m.staffName}</td>
+                    <div className="text-xs space-y-1.5 bg-[#F6F1E6] p-3 rounded-xl border border-[#E1D6BE]">
+                      <p className="flex justify-between">
+                        <span className="text-[#6B6656]">Tipe Kamar:</span>
+                        <span className="font-bold text-[#1B2A45]">{res.roomType}</span>
+                      </p>
+                      <p className="flex justify-between">
+                        <span className="text-[#6B6656]">Periode Stay:</span>
+                        <span className="font-semibold text-[#1B2A45]">{res.checkInDate} s/d {res.checkOutDate}</span>
+                      </p>
+                      {res.notes && (
+                        <p className="pt-1 text-[11px] text-[#22242B] border-t border-[#E1D6BE]">
+                          <strong>Catatan Pakan:</strong> {res.notes}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <button
+                        onClick={() => setSelectedCCTV(res.petName)}
+                        className="flex-1 py-2 bg-[#101A2C] hover:bg-[#101A2C]/80 text-[#D9B98A] border border-[#B8905A]/30 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <Tv className="w-3.5 h-3.5" /> CCTV Stream Live
+                      </button>
+                      <button
+                        disabled={checkingOutIds.has(res.id)}
+                        onClick={async () => {
+                          if (checkingOutIds.has(res.id)) return;
+                          setCheckingOutIds((prev) => new Set(prev).add(res.id));
+
+                          const pet = pets.find((p) => p.id === res.petId);
+                          const cust = customers.find((c) => c.id === pet?.customerId);
+                          try {
+                            await addInvoice({
+                              customerId: cust?.id || 'guest',
+                              customerName: res.customerName,
+                              petName: res.petName,
+                              items: [
+                                {
+                                  id: 'inv_item_' + Date.now() + Math.random(),
+                                  category: 'Pet Hotel',
+                                  name: `Boarding ${res.roomType} (${res.totalNights} malam) - ${res.petName}`,
+                                  quantity: res.totalNights,
+                                  unitPrice: res.dailyRate,
+                                  totalPrice: res.totalCost
+                                }
+                              ],
+                              subtotal: res.totalCost,
+                              discountAmount: 0,
+                              totalAmount: res.totalCost,
+                              paidAmount: 0,
+                              paymentMethod: 'Tunai',
+                              status: 'Belum Dibayar',
+                              loyaltyPointsEarned: 0,
+                              cashierName: 'Staf Pet Hotel'
+                            });
+                            updateHotelStatus(res.id, 'Selesai');
+                            addToast(`Pasien ${res.petName} check-out. Tagihan Rp ${res.totalCost.toLocaleString('id-ID')} diteruskan ke Kasir.`, 'success');
+                          } catch (err: any) {
+                            addToast(err?.message || 'Gagal menerbitkan tagihan pet hotel.', 'error');
+                            setCheckingOutIds((prev) => {
+                              const next = new Set(prev);
+                              next.delete(res.id);
+                              return next;
+                            });
+                          }
+                        }}
+                        className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-2xs transition-all"
+                      >
+                        Check-Out
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            /* Daily Monitoring History */
+            <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-[#E1D6BE] pb-2">
+                <h3 className="font-bold text-sm text-[#1B2A45] font-display flex items-center gap-2">
+                  <Pill className="w-4 h-4 text-[#B8905A]" /> Rekam Catatan Pengawasan & Pakan Harian
+                </h3>
+                <button
+                  onClick={() => setShowAddMonitoringModal(true)}
+                  className="px-3 py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg flex items-center gap-1.5"
+                >
+                  <Utensils className="w-3.5 h-3.5 text-[#D9B98A]" /> + Catat Log Baru
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-[#22242B]">
+                  <thead className="bg-[#F6F1E6] text-[#1B2A45] font-bold uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3">Tanggal</th>
+                      <th className="p-3">Nama Pasien</th>
+                      <th className="p-3">Nomor Kamar</th>
+                      <th className="p-3">Pakan Pagi / Sore</th>
+                      <th className="p-3">Catatan Observasi</th>
+                      <th className="p-3">Petugas Jaga</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#E1D6BE]">
+                    {dailyMonitorings.map((m) => (
+                      <tr key={m.id}>
+                        <td className="p-3 font-semibold text-[#1B2A45]">{m.date}</td>
+                        <td className="p-3 font-bold text-[#1B2A45]">{m.petName}</td>
+                        <td className="p-3">{m.roomNo}</td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                            {m.morningFeeding ? 'Pagi ✓' : '-'} | {m.eveningFeeding ? 'Sore ✓' : '-'}
+                          </span>
+                        </td>
+                        <td className="p-3">{m.notes}</td>
+                        <td className="p-3 font-medium text-[#6B6656]">{m.staffName}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 4: TELEHEALTH VIDEO CONSULTATION */}
+      {/* MENU 4: TELEHEALTH VIDEO CONSULTATION */}
       {/* ========================================================================= */}
       {currentTab === 'telehealth' && (
         <div className="space-y-6">
@@ -1501,10 +1619,6 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                       }
                       setIsSendingTeleRx(true);
 
-                      // Potong stok apotek untuk tiap obat terstruktur & catat
-                      // ke rekam medis pasien — sebelumnya resep cuma teks WA
-                      // yang hilang begitu terkirim, stok tidak pernah
-                      // berkurang.
                       telePrescribedDrugs.forEach((rx) => dispenseDrug(rx.drugId, rx.qty));
                       if (addMedicalRecord) {
                         addMedicalRecord({
@@ -1547,7 +1661,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                     <Video className="w-4 h-4 text-[#B8905A]" /> Jadwal Konsultasi Telehealth Video
                   </h3>
                   <p className="text-xs text-[#6B6656] mt-0.5">
-                    Layanan periksa kesehatan anabul jarak jauh melalui panggilan video terenskripsi.
+                    Layanan periksa kesehatan anabul jarak jauh melalui panggilan video terenkripsi.
                   </p>
                 </div>
                 <button
@@ -1613,7 +1727,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
                                   setActiveCallSession(th);
                                   addToast(`Memulai sesi video call dengan ${th.petName}...`, 'info');
                                 }}
-                                className="px-3 py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs transition-all flex items-center gap-1.5 justify-end ml-auto"
+                                className="px-3 py-1.5 bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs rounded-lg shadow-2xs transition-all flex items-center gap-1.5 justify-end ml-auto cursor-pointer"
                               >
                                 <Video className="w-3.5 h-3.5 text-[#D9B98A]" /> Masuk Room Video
                               </button>
@@ -1631,7 +1745,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 5: AMBULANCE RESCUE DISPATCHER */}
+      {/* MENU 5: AMBULANCE RESCUE DISPATCHER */}
       {/* ========================================================================= */}
       {currentTab === 'ambulance' && (
         <div className="space-y-6">
@@ -1653,7 +1767,7 @@ export const ServicesModule: React.FC<ServicesModuleProps> = ({ activeModule = '
               onClick={() => setShowAddAmbulanceModal(true)}
               className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2 shrink-0 animate-bounce"
             >
-              <ShieldAlert className="w-4 h-4" /> TERIMA PANGGULAN DARURAT
+              <ShieldAlert className="w-4 h-4" /> TERIMA PANGGILAN DARURAT
             </button>
           </div>
 
