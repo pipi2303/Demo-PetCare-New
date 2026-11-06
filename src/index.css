@@ -142,15 +142,30 @@
    `#modal-root`, a container that lives inside `.content-area`, so they
    get the exact same containment. */
 .content-area {
-  position: relative;
   contain: layout;
+}
+
+/* Lock background scrolling completely whenever a modal is open */
+html.modal-scroll-locked,
+body.modal-scroll-locked,
+#main-scroll-container.modal-scroll-locked {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+
+/* Prevent scroll chaining from inside modal overlays to the background page */
+.content-area div.fixed.inset-0,
+.content-area div.fixed.inset-0 * {
+  overscroll-behavior: contain;
 }
 
 /* Printing invoices/reports must never be clipped to one screen height by
    the content-area's internal scroll container — restore normal flow only
    for print output. */
 @media print {
-  .content-area {
+  .content-area,
+  #main-scroll-container {
+    position: static !important;
     height: auto !important;
     overflow: visible !important;
     contain: none !important;

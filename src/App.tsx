@@ -233,15 +233,105 @@ const MainAppContent: React.FC = () => {
       }
     };
 
+    const syncModalScrollLock = () => {
+      const hasAnyOpenModal = Array.from(
+        document.querySelectorAll<HTMLElement>('div.fixed.inset-0')
+      ).some((el) => el.children.length > 0 && el.getClientRects().length > 0);
+
+      const scrollContainer = document.getElementById('main-scroll-container');
+      if (hasAnyOpenModal) {
+        document.documentElement.classList.add('modal-scroll-locked');
+        document.body.classList.add('modal-scroll-locked');
+        scrollContainer?.classList.add('modal-scroll-locked');
+      } else {
+        document.documentElement.classList.remove('modal-scroll-locked');
+        document.body.classList.remove('modal-scroll-locked');
+        scrollContainer?.classList.remove('modal-scroll-locked');
+      }
+    };
+
+    // Prevent mouse-wheel or touch scrolling from leaking to the background when a modal is open
+    const findScrollableModalAncestor = (
+      startNode: HTMLElement | null,
+      modalOverlay: HTMLElement
+    ): HTMLElement | null => {
+      let el: HTMLElement | null = startNode;
+      while (el && el !== modalOverlay && modalOverlay.contains(el)) {
+        const style = window.getComputedStyle(el);
+        const overflowY = style.overflowY;
+        const isScrollableY =
+          (overflowY === 'auto' || overflowY === 'scroll') &&
+          el.scrollHeight > el.clientHeight + 1;
+        if (isScrollableY) {
+          return el;
+        }
+        el = el.parentElement;
+      }
+      return null;
+    };
+
+    const handleWheelCapture = (e: WheelEvent) => {
+      const topOverlay = getTopDismissibleOverlay();
+      if (!topOverlay) return;
+
+      const target = e.target as HTMLElement | null;
+      const scrollableBox = findScrollableModalAncestor(target, topOverlay);
+      if (!scrollableBox) {
+        // Cursor is outside any scrollable section of the modal -> block scroll completely
+        e.preventDefault();
+        return;
+      }
+
+      const { scrollTop, scrollHeight, clientHeight } = scrollableBox;
+      const deltaY = e.deltaY;
+      const isAtTop = deltaY < 0 && scrollTop <= 0;
+      const isAtBottom = deltaY > 0 && scrollTop + clientHeight >= scrollHeight - 1;
+      if (isAtTop || isAtBottom) {
+        e.preventDefault();
+      }
+    };
+
+    const handleTouchMoveCapture = (e: TouchEvent) => {
+      const topOverlay = getTopDismissibleOverlay();
+      if (!topOverlay) return;
+      const target = e.target as HTMLElement | null;
+      const scrollableBox = findScrollableModalAncestor(target, topOverlay);
+      if (!scrollableBox) {
+        e.preventDefault();
+      }
+    };
+
+    const observer = new MutationObserver(() => {
+      syncModalScrollLock();
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+    syncModalScrollLock();
+
     window.addEventListener('pointerdown', handlePointerDownCapture, true);
     window.addEventListener('click', handleClick);
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('wheel', handleWheelCapture, { passive: false, capture: true });
+    window.addEventListener('touchmove', handleTouchMoveCapture, { passive: false, capture: true });
     return () => {
+      observer.disconnect();
+      document.documentElement.classList.remove('modal-scroll-locked');
+      document.body.classList.remove('modal-scroll-locked');
+      document.getElementById('main-scroll-container')?.classList.remove('modal-scroll-locked');
       window.removeEventListener('pointerdown', handlePointerDownCapture, true);
       window.removeEventListener('click', handleClick);
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('wheel', handleWheelCapture, true);
+      window.removeEventListener('touchmove', handleTouchMoveCapture, true);
     };
   }, []);
+
+  // Scroll to top when switching modules
+  useEffect(() => {
+    document.getElementById('main-scroll-container')?.scrollTo({ top: 0 });
+  }, [activeModule]);
 
   const openPublicBooking = () => {
     setShowQueueDisplay(true);
@@ -292,17 +382,22 @@ const MainAppContent: React.FC = () => {
         onOpenAI={() => setActiveModule('aiAssistant')}
       />
 
-      {/* Main View Area — this is the "AREA CONTENT UTAMA": the containing
-          block for every modal/dialog in the app (see .content-area in
-          index.css). It now scrolls internally (h-screen + overflow-y-auto)
-          so its box always matches the visible viewport slice next to the
-          Sidebar and below the Header, which is what keeps a centered modal
-          visible instead of centering somewhere down a long scrolled page. */}
+      {/* Main View Area — .content-area is a fixed non-scrolling viewport slice
+          below the Header (top-16) and next to the Sidebar (left-16 / left-64)
+          with `contain: layout`. Because .content-area itself never scrolls,
+          any `position: fixed; inset: 0` modal rendered inside any module is
+          always locked to 100% of the visible content viewport and cannot
+          scroll out of view. All normal page scrolling happens inside
+          #main-scroll-container, which automatically locks when a modal opens. */}
       <main
-        className={`content-area h-screen overflow-y-auto pt-20 pb-12 px-4 md:px-6 transition-all duration-300 ${
-          isCollapsed ? 'ml-16' : 'ml-64'
+        className={`content-area fixed top-16 right-0 bottom-0 overflow-hidden transition-all duration-300 ${
+          isCollapsed ? 'left-16' : 'left-64'
         }`}
       >
+        <div
+          id="main-scroll-container"
+          className="h-full w-full overflow-y-auto pt-5 pb-12 px-4 md:px-6"
+        >
         <div className="max-w-7xl mx-auto space-y-5">
           {/* WhatsApp Status Banner */}
           <WAStatusBanner />
@@ -350,14 +445,14 @@ const MainAppContent: React.FC = () => {
             </div>
           )}
 
-          {/* Animated Module Container */}
+          {/* Animated Module Container (opacity-only so no transform traps fixed modals) */}
           <AnimatePresence mode="wait">
             <motion.div
               key={activeModule}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
               className="w-full"
             >
               {/* If module is restricted for the current user's profile, show informative role-restricted view */}
@@ -486,6 +581,7 @@ const MainAppContent: React.FC = () => {
               )}
             </motion.div>
           </AnimatePresence>
+        </div>
         </div>
 
         {/* Modal portal target — stays INSIDE .content-area so anything

@@ -15,6 +15,13 @@ import {
   MasterRecordQuickViewModal,
   QuickViewEntity,
 } from '../master/MasterDataInsightsHub';
+import { MasterDataExportImportModal } from '../master/MasterDataExportImportModal';
+import {
+  exportClientsToCSV,
+  exportClientsToPDF,
+  exportPatientsToCSV,
+  exportPatientsToPDF,
+} from '../../utils/masterDataExportImport';
 import {
   Users,
   Dog,
@@ -35,6 +42,9 @@ import {
   Truck,
   DollarSign,
   Download,
+  Upload,
+  FileText,
+  FileSpreadsheet,
   AlertTriangle,
   Clock,
   UserCheck,
@@ -127,11 +137,17 @@ export const MasterDataModule: React.FC = () => {
     addVacSchedule,
     labTests = [],
     invoices = [],
-    branches = []
+    branches = [],
+    appSettings,
   } = useData();
   const { addToast } = useToast();
   const [showDeduplicationModal, setShowDeduplicationModal] = useState(false);
   const [dedupInitialMode, setDedupInitialMode] = useState<'customers' | 'pets'>('customers');
+  const [exportImportModal, setExportImportModal] = useState<{
+    isOpen: boolean;
+    mode: 'export' | 'import';
+    entity: 'customers' | 'pets';
+  }>({ isOpen: false, mode: 'export', entity: 'customers' });
   const [showGovernanceModal, setShowGovernanceModal] = useState(false);
   const [governanceInitialSection, setGovernanceInitialSection] = useState<'architecture' | 'integration' | 'optimization'>('architecture');
   const [entity360Target, setEntity360Target] = useState<
@@ -1293,14 +1309,30 @@ export const MasterDataModule: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportCustomersCSV}
-                  title="Export CSV"
-                  aria-label="Export CSV"
+                  onClick={() =>
+                    setExportImportModal({ isOpen: true, mode: 'export', entity: 'customers' })
+                  }
+                  title="Bulk Export Pelanggan (CSV / PDF / Excel)"
+                  aria-label="Bulk Export Pelanggan (CSV / PDF / Excel)"
                   className="group relative w-8 h-8 bg-[#101A2C]/90 text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#101A2C] hover:text-[#FFFDF9] rounded-lg transition-colors flex items-center justify-center cursor-pointer shrink-0"
                 >
                   <Download className="w-4 h-4" />
                   <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                    Export CSV
+                    Bulk Export (CSV / PDF)
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExportImportModal({ isOpen: true, mode: 'import', entity: 'customers' })
+                  }
+                  title="Import Excel Pelanggan"
+                  aria-label="Import Excel Pelanggan"
+                  className="group relative w-8 h-8 bg-[#101A2C]/90 text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#101A2C] hover:text-[#FFFDF9] rounded-lg transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Import Excel Pelanggan
                   </span>
                 </button>
                 <button
@@ -1342,6 +1374,34 @@ export const MasterDataModule: React.FC = () => {
                   )}
                   <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
                     Deduplikasi Pasien ({duplicatePetGroups.length})
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExportImportModal({ isOpen: true, mode: 'export', entity: 'pets' })
+                  }
+                  title="Bulk Export Pasien Hewan (CSV / PDF / Excel)"
+                  aria-label="Bulk Export Pasien Hewan (CSV / PDF / Excel)"
+                  className="group relative w-8 h-8 bg-[#101A2C]/90 text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#101A2C] hover:text-[#FFFDF9] rounded-lg transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                >
+                  <Download className="w-4 h-4" />
+                  <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Bulk Export Pasien (CSV / PDF)
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExportImportModal({ isOpen: true, mode: 'import', entity: 'pets' })
+                  }
+                  title="Import Excel Pasien Hewan"
+                  aria-label="Import Excel Pasien Hewan"
+                  className="group relative w-8 h-8 bg-[#101A2C]/90 text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#101A2C] hover:text-[#FFFDF9] rounded-lg transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Import Excel Pasien
                   </span>
                 </button>
                 <button
@@ -1536,18 +1596,63 @@ export const MasterDataModule: React.FC = () => {
           </div>
 
           {activeTab === 'customers' && (
-            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
-              <span className="text-xs font-semibold text-[#6B6656] whitespace-nowrap">Tier:</span>
-              <select
-                value={tierFilter}
-                onChange={(e) => setTierFilter(e.target.value)}
-                className="bg-[#F6F1E6]/60 border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none focus:border-[#1B2A45]"
-              >
-                <option value="All">Semua Tier</option>
-                <option value="Platinum">Platinum</option>
-                <option value="Gold">Gold</option>
-                <option value="Silver">Silver</option>
-              </select>
+            <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-[#6B6656] whitespace-nowrap">Tier:</span>
+                <select
+                  value={tierFilter}
+                  onChange={(e) => setTierFilter(e.target.value)}
+                  className="bg-[#F6F1E6]/60 border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none focus:border-[#1B2A45]"
+                >
+                  <option value="All">Semua Tier</option>
+                  <option value="Platinum">Platinum</option>
+                  <option value="Gold">Gold</option>
+                  <option value="Silver">Silver</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 pl-1 sm:border-l border-[#E1D6BE]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportClientsToCSV(filteredCustomers, pets);
+                    addToast(`${filteredCustomers.length} data pelanggan berhasil di-export ke CSV!`, 'success');
+                  }}
+                  className="px-2.5 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Download CSV Data Pelanggan"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>CSV</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportClientsToPDF(
+                      filteredCustomers,
+                      pets,
+                      appSettings,
+                      tierFilter === 'All' && !searchTerm ? 'Semua Data Pelanggan' : 'Hasil Filter Pelanggan'
+                    );
+                    addToast(`Laporan PDF Pelanggan (${filteredCustomers.length} klien) berhasil diunduh!`, 'success');
+                  }}
+                  className="px-2.5 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Download Laporan PDF Data Pelanggan"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExportImportModal({ isOpen: true, mode: 'import', entity: 'customers' })
+                  }
+                  className="px-3 py-2 rounded-lg bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="Import Massal Pelanggan dari Template Excel / CSV"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-[#D9B98A]" />
+                  <span>Import Excel</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -1581,6 +1686,51 @@ export const MasterDataModule: React.FC = () => {
                   <option value="P3">P3 - Semi-Mendesak ({triageCounts.P3})</option>
                   <option value="P4">P4 - Rutin ({triageCounts.P4})</option>
                 </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 pl-1 sm:border-l border-[#E1D6BE]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportPatientsToCSV(filteredPets, customers);
+                    addToast(`${filteredPets.length} data pasien hewan berhasil di-export ke CSV!`, 'success');
+                  }}
+                  className="px-2.5 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Download CSV Data Pasien Hewan"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>CSV</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportPatientsToPDF(
+                      filteredPets,
+                      customers,
+                      appSettings,
+                      speciesFilter === 'All' && triageFilter === 'All' && !searchTerm
+                        ? 'Semua Data Pasien Hewan'
+                        : 'Hasil Filter Pasien Hewan'
+                    );
+                    addToast(`Laporan PDF Pasien Hewan (${filteredPets.length} pasien) berhasil diunduh!`, 'success');
+                  }}
+                  className="px-2.5 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Download Laporan PDF Data Pasien Hewan"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExportImportModal({ isOpen: true, mode: 'import', entity: 'pets' })
+                  }
+                  className="px-3 py-2 rounded-lg bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="Import Massal Pasien Hewan dari Template Excel / CSV"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-[#D9B98A]" />
+                  <span>Import Excel</span>
+                </button>
               </div>
             </div>
           )}
@@ -4186,6 +4336,23 @@ export const MasterDataModule: React.FC = () => {
         drugs={drugs}
         onDispatchClinicVisit={handleDispatchClinicVisit}
         onScheduleVaccine={handleScheduleVaccine}
+      />
+
+      {/* Bulk Export (CSV / PDF / Excel) & Standardized Excel Import Modal */}
+      <MasterDataExportImportModal
+        isOpen={exportImportModal.isOpen}
+        onClose={() => setExportImportModal((prev) => ({ ...prev, isOpen: false }))}
+        initialMode={exportImportModal.mode}
+        initialEntity={exportImportModal.entity}
+        customers={customers}
+        filteredCustomers={filteredCustomers}
+        pets={pets}
+        filteredPets={filteredPets}
+        appSettings={appSettings}
+        onAddCustomer={addCustomer}
+        onAddPet={addPet}
+        onSuccessToast={(msg) => addToast(msg, 'success')}
+        onErrorToast={(msg) => addToast(msg, 'error')}
       />
     </div>
   );
