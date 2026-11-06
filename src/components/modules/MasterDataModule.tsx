@@ -12,6 +12,8 @@ import {
   MasterDataGovernanceModal,
   MasterEntity360Modal,
   CrossModuleQuickActionModal,
+  MasterRecordQuickViewModal,
+  QuickViewEntity,
 } from '../master/MasterDataInsightsHub';
 import {
   Users,
@@ -136,6 +138,7 @@ export const MasterDataModule: React.FC = () => {
     { type: 'customer'; customer: Customer } | { type: 'pet'; pet: Pet } | null
   >(null);
   const [quickDispatchPet, setQuickDispatchPet] = useState<Pet | null>(null);
+  const [quickViewEntity, setQuickViewEntity] = useState<QuickViewEntity | null>(null);
 
   const duplicateCustomerGroups = React.useMemo(
     () => detectDuplicateCustomers(customers),
@@ -1675,7 +1678,12 @@ export const MasterDataModule: React.FC = () => {
                   </tr>
                 ) : (
                   filteredCustomers.map((c) => (
-                    <tr key={c.id} className="hover:bg-[#F6F1E6]/50 transition-colors">
+                    <tr
+                      key={c.id}
+                      onClick={() => setEntity360Target({ type: 'customer', customer: c })}
+                      title="Klik di mana saja pada baris untuk membuka Profil Detail Pelanggan 360°"
+                      className="hover:bg-[#F6F1E6]/50 transition-colors cursor-pointer"
+                    >
                       <td className="py-3.5 px-4">
                         <p className="font-bold text-[#1B2A45] text-sm">{c.name}</p>
                         <p className="text-[10px] text-[#1B2A45]/60 font-mono">ID: {c.id} {c.nik ? `• NIK: ${c.nik}` : ''}</p>
@@ -1705,7 +1713,10 @@ export const MasterDataModule: React.FC = () => {
                       <td className="py-3.5 px-4 text-center font-bold text-[#1B2A45]">
                         <button
                           type="button"
-                          onClick={() => setEntity360Target({ type: 'customer', customer: c })}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEntity360Target({ type: 'customer', customer: c });
+                          }}
                           title="Lihat Hierarki Hewan & Rekam Medis 360°"
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#F6F1E6] hover:bg-[#E1D6BE] border border-[#E1D6BE] text-xs font-bold text-[#1B2A45] cursor-pointer transition-colors"
                         >
@@ -1716,7 +1727,7 @@ export const MasterDataModule: React.FC = () => {
                       <td className="py-3.5 px-4 text-right font-bold text-[#1B2A45]">
                         Rp {(c.totalSpent || 0).toLocaleString('id-ID')}
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
@@ -1767,105 +1778,6 @@ export const MasterDataModule: React.FC = () => {
       {/* Tab 2: Pets Cards Grid with AI Triage Urgency Indicators */}
       {activeTab === 'pets' && (
         <div className="space-y-4">
-          {/* AI Triage Urgency Summary Dashboard Banner */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-[#1B2A45] via-[#223657] to-[#101A2C] border border-[#B8905A]/40 text-[#FFFDF9] shadow-sm">
-            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
-                  <AlertTriangle className="w-5 h-5 animate-pulse" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-full bg-[#B8905A]/30 text-[#D9B98A] border border-[#B8905A]/40 text-[10px] font-extrabold uppercase tracking-wider">
-                      AI Triage Urgency Engine
-                    </span>
-                    <span className="text-[11px] text-emerald-300 font-bold flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                      Real-time EMR Analysis
-                    </span>
-                  </div>
-                  <h3 className="font-bold text-sm text-[#FFFDF9] mt-0.5 font-display">
-                    Sistem Skrining & Triase Urgensi Pasien Rawat Jalan & Darurat
-                  </h3>
-                  <p className="text-xs text-[#EDE6D6]/80 mt-0.5">
-                    Menganalisis keluhan utama, tanda vital, dan catatan SOAP untuk memprioritaskan penanganan medis hewan.
-                  </p>
-                </div>
-              </div>
-
-              {/* Triage Quick Filter Tabs */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full lg:w-auto shrink-0">
-                <button
-                  onClick={() => setTriageFilter(triageFilter === 'P1' ? 'All' : 'P1')}
-                  className={`px-3 py-2 rounded-lg border text-left transition-all ${
-                    triageFilter === 'P1'
-                      ? 'bg-rose-500/30 border-rose-400 ring-2 ring-rose-400/50'
-                      : 'bg-rose-950/40 border-rose-800/60 hover:bg-rose-900/40'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-rose-300 uppercase">P1 Kritis</span>
-                    <span className="text-xs font-black text-white px-1.5 py-0.2 rounded bg-rose-600/60">
-                      {triageCounts.P1}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-rose-200/70 mt-0.5 truncate">Gawat Darurat Segera</p>
-                </button>
-
-                <button
-                  onClick={() => setTriageFilter(triageFilter === 'P2' ? 'All' : 'P2')}
-                  className={`px-3 py-2 rounded-lg border text-left transition-all ${
-                    triageFilter === 'P2'
-                      ? 'bg-amber-500/30 border-amber-400 ring-2 ring-amber-400/50'
-                      : 'bg-amber-950/40 border-amber-800/60 hover:bg-amber-900/40'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-amber-300 uppercase">P2 Mendesak</span>
-                    <span className="text-xs font-black text-white px-1.5 py-0.2 rounded bg-amber-600/60">
-                      {triageCounts.P2}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-amber-200/70 mt-0.5 truncate">&lt; 15 Menit</p>
-                </button>
-
-                <button
-                  onClick={() => setTriageFilter(triageFilter === 'P3' ? 'All' : 'P3')}
-                  className={`px-3 py-2 rounded-lg border text-left transition-all ${
-                    triageFilter === 'P3'
-                      ? 'bg-yellow-500/30 border-yellow-400 ring-2 ring-yellow-400/50'
-                      : 'bg-yellow-950/40 border-yellow-800/60 hover:bg-yellow-900/40'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-yellow-300 uppercase">P3 Semi-Mendesak</span>
-                    <span className="text-xs font-black text-white px-1.5 py-0.2 rounded bg-yellow-600/60">
-                      {triageCounts.P3}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-yellow-200/70 mt-0.5 truncate">&lt; 60 Menit</p>
-                </button>
-
-                <button
-                  onClick={() => setTriageFilter(triageFilter === 'P4' ? 'All' : 'P4')}
-                  className={`px-3 py-2 rounded-lg border text-left transition-all ${
-                    triageFilter === 'P4'
-                      ? 'bg-emerald-500/30 border-emerald-400 ring-2 ring-emerald-400/50'
-                      : 'bg-emerald-950/40 border-emerald-800/60 hover:bg-emerald-900/40'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-emerald-300 uppercase">P4 Rutin</span>
-                    <span className="text-xs font-black text-white px-1.5 py-0.2 rounded bg-emerald-600/60">
-                      {triageCounts.P4}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-emerald-200/70 mt-0.5 truncate">Standar Antrian</p>
-                </button>
-              </div>
-            </div>
-          </div>
-
           {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredPets.length === 0 ? (
@@ -1892,7 +1804,9 @@ export const MasterDataModule: React.FC = () => {
                 return (
                   <div
                     key={p.id}
-                    className={`bg-white border rounded-xl p-4 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-3 relative overflow-hidden ${severityBorderClass}`}
+                    onClick={() => setEntity360Target({ type: 'pet', pet: p })}
+                    title="Klik di mana saja pada kartu untuk membuka Detail & Rekam Medis Pasien 360°"
+                    className={`bg-white border rounded-xl p-4 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-3 relative overflow-hidden cursor-pointer ${severityBorderClass}`}
                   >
                     <div>
                       {/* Top Header: Pet image, Name, and Triage Urgency Badge */}
@@ -1920,7 +1834,7 @@ export const MasterDataModule: React.FC = () => {
                         </div>
 
                         {/* Interactive Triage Urgency Badge */}
-                        <div className="shrink-0">
+                        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                           <TriageUrgencyBadge
                             pet={p}
                             clinicVisit={visit}
@@ -1945,13 +1859,14 @@ export const MasterDataModule: React.FC = () => {
                               Indikasi Triase:
                             </span>
                             <button
-                              onClick={() =>
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedPetForTriageModal({
                                   pet: p,
                                   clinicVisit: visit,
                                   soapNote: soap
-                                })
-                              }
+                                });
+                              }}
                               className="text-[10px] text-[#1B2A45] hover:text-[#B8905A] font-bold underline cursor-pointer"
                             >
                               Detail AI &rarr;
@@ -1990,7 +1905,10 @@ export const MasterDataModule: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5 pt-2 border-t border-[#E1D6BE]/60">
+                    <div
+                      className="flex items-center gap-1.5 pt-2 border-t border-[#E1D6BE]/60"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
                         onClick={() =>
                           setSelectedPetForTriageModal({
@@ -2080,7 +1998,12 @@ export const MasterDataModule: React.FC = () => {
                   </tr>
                 ) : (
                   filteredServices.map((s) => (
-                    <tr key={s.id} className="hover:bg-[#F6F1E6]/50 transition-colors">
+                    <tr
+                      key={s.id}
+                      onClick={() => setQuickViewEntity({ type: 'service', data: s })}
+                      title="Klik di mana saja pada baris untuk melihat Detail Layanan"
+                      className="hover:bg-[#F6F1E6]/50 transition-colors cursor-pointer"
+                    >
                       <td className="py-3.5 px-4">
                         <p className="font-bold text-[#1B2A45] text-sm">{s.name}</p>
                         <p className="text-[10px] text-[#1B2A45]/60 font-mono">Kode: {s.code}</p>
@@ -2106,7 +2029,7 @@ export const MasterDataModule: React.FC = () => {
                           {s.isActive ? 'Aktif' : 'Nonaktif'}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => startEditService(s)}
@@ -2165,7 +2088,12 @@ export const MasterDataModule: React.FC = () => {
                   </tr>
                 ) : (
                   filteredStaff.map((emp) => (
-                    <tr key={emp.id} className="hover:bg-[#F6F1E6]/50 transition-colors">
+                    <tr
+                      key={emp.id}
+                      onClick={() => setQuickViewEntity({ type: 'staff', data: emp })}
+                      title="Klik di mana saja pada baris untuk melihat Detail Dokter & Staff"
+                      className="hover:bg-[#F6F1E6]/50 transition-colors cursor-pointer"
+                    >
                       <td className="py-3.5 px-4">
                         <p className="font-bold text-[#1B2A45] text-sm">{emp.name}</p>
                         <p className="text-[10px] text-[#1B2A45]/60 font-mono">NIK: {emp.nik}</p>
@@ -2188,7 +2116,7 @@ export const MasterDataModule: React.FC = () => {
                       <td className="py-3.5 px-4 text-center font-bold text-emerald-700">
                         {emp.commissionRatePercent}%
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => startEditStaff(emp)}
@@ -2242,7 +2170,12 @@ export const MasterDataModule: React.FC = () => {
                   </tr>
                 ) : (
                   filteredSuppliers.map((sup) => (
-                    <tr key={sup.id} className="hover:bg-[#F6F1E6]/50 transition-colors">
+                    <tr
+                      key={sup.id}
+                      onClick={() => setQuickViewEntity({ type: 'supplier', data: sup })}
+                      title="Klik di mana saja pada baris untuk melihat Detail Supplier"
+                      className="hover:bg-[#F6F1E6]/50 transition-colors cursor-pointer"
+                    >
                       <td className="py-3.5 px-4">
                         <p className="font-bold text-[#1B2A45] text-sm">{sup.name}</p>
                         <p className="text-[10px] text-[#1B2A45]/60 font-mono">Kode: {sup.code}</p>
@@ -2262,7 +2195,7 @@ export const MasterDataModule: React.FC = () => {
                       <td className="py-3.5 px-4 text-[#1B2A45]/80 max-w-xs truncate">
                         {sup.address}
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => startEditSupplier(sup)}
@@ -2316,7 +2249,12 @@ export const MasterDataModule: React.FC = () => {
                   </tr>
                 ) : (
                   filteredDrugs.map((d) => (
-                    <tr key={d.id} className="hover:bg-[#F6F1E6]/50 transition-colors">
+                    <tr
+                      key={d.id}
+                      onClick={() => setQuickViewEntity({ type: 'drug', data: d })}
+                      title="Klik di mana saja pada baris untuk melihat Detail Obat & Vaksin"
+                      className="hover:bg-[#F6F1E6]/50 transition-colors cursor-pointer"
+                    >
                       <td className="py-3.5 px-4">
                         <p className="font-bold text-[#1B2A45] text-sm">{d.name}</p>
                         <p className="text-[10px] text-[#1B2A45]/60 font-mono">Kode: {d.code} • {d.location}</p>
@@ -2339,7 +2277,7 @@ export const MasterDataModule: React.FC = () => {
                       <td className="py-3.5 px-4 text-right font-black text-[#1B2A45] text-sm">
                         Rp {d.unitPrice.toLocaleString('id-ID')}
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => startEditDrug(d)}
@@ -2393,7 +2331,12 @@ export const MasterDataModule: React.FC = () => {
                   </tr>
                 ) : (
                   filteredHotelRooms.map((r) => (
-                    <tr key={r.id} className="hover:bg-[#F6F1E6]/50 transition-colors">
+                    <tr
+                      key={r.id}
+                      onClick={() => setQuickViewEntity({ type: 'hotelRoom', data: r })}
+                      title="Klik di mana saja pada baris untuk melihat Detail Kamar/Kandang Hotel"
+                      className="hover:bg-[#F6F1E6]/50 transition-colors cursor-pointer"
+                    >
                       <td className="py-3.5 px-4">
                         <p className="font-bold text-[#1B2A45] text-sm">{r.roomNo}</p>
                         {r.notes && <p className="text-[10px] text-[#1B2A45]/60">{r.notes}</p>}
@@ -2416,7 +2359,7 @@ export const MasterDataModule: React.FC = () => {
                           {r.isActive ? 'Aktif' : 'Nonaktif'}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => startEditHotelRoom(r)}
@@ -2470,7 +2413,12 @@ export const MasterDataModule: React.FC = () => {
                   </tr>
                 ) : (
                   filteredGroomingPackages.map((p) => (
-                    <tr key={p.id} className="hover:bg-[#F6F1E6]/50 transition-colors">
+                    <tr
+                      key={p.id}
+                      onClick={() => setQuickViewEntity({ type: 'groomingPackage', data: p })}
+                      title="Klik di mana saja pada baris untuk melihat Detail Paket Grooming"
+                      className="hover:bg-[#F6F1E6]/50 transition-colors cursor-pointer"
+                    >
                       <td className="py-3.5 px-4">
                         <p className="font-bold text-[#1B2A45] text-sm">{p.name}</p>
                         {p.description && <p className="text-[10px] text-[#1B2A45]/60">{p.description}</p>}
@@ -2495,7 +2443,7 @@ export const MasterDataModule: React.FC = () => {
                           {p.isActive ? 'Aktif' : 'Nonaktif'}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => startEditGroomingPackage(p)}
@@ -2549,7 +2497,12 @@ export const MasterDataModule: React.FC = () => {
                   </tr>
                 ) : (
                   filteredAmbulanceUnits.map((u) => (
-                    <tr key={u.id} className="hover:bg-[#F6F1E6]/50 transition-colors">
+                    <tr
+                      key={u.id}
+                      onClick={() => setQuickViewEntity({ type: 'ambulanceUnit', data: u })}
+                      title="Klik di mana saja pada baris untuk melihat Detail Armada Ambulance"
+                      className="hover:bg-[#F6F1E6]/50 transition-colors cursor-pointer"
+                    >
                       <td className="py-3.5 px-4">
                         <p className="font-bold text-[#1B2A45] text-sm">{u.vehicleName}</p>
                         <p className="text-[10px] text-[#1B2A45]/60 font-mono">Kode: {u.code}</p>
@@ -2573,7 +2526,7 @@ export const MasterDataModule: React.FC = () => {
                           {u.status}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => startEditAmbulanceUnit(u)}
@@ -2626,7 +2579,12 @@ export const MasterDataModule: React.FC = () => {
                   </tr>
                 ) : (
                   filteredEFormTemplates.map((t) => (
-                    <tr key={t.id} className="hover:bg-[#F6F1E6]/50 transition-colors">
+                    <tr
+                      key={t.id}
+                      onClick={() => setQuickViewEntity({ type: 'eFormTemplate', data: t })}
+                      title="Klik di mana saja pada baris untuk melihat Detail & Struktur Field Template E-Form"
+                      className="hover:bg-[#F6F1E6]/50 transition-colors cursor-pointer"
+                    >
                       <td className="py-3.5 px-4 font-bold text-[#1B2A45] text-sm">{t.title}</td>
                       <td className="py-3.5 px-4">
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#F6F1E6] border border-[#E1D6BE] text-[#1B2A45]">
@@ -2635,7 +2593,7 @@ export const MasterDataModule: React.FC = () => {
                       </td>
                       <td className="py-3.5 px-4 text-[#1B2A45]/80 max-w-xs truncate">{t.description}</td>
                       <td className="py-3.5 px-4 text-center font-semibold text-[#1B2A45]">{t.fields.length} field</td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => startEditEFormTemplate(t)}
@@ -2830,7 +2788,12 @@ export const MasterDataModule: React.FC = () => {
                   <div key={type}>
                     <div className="px-4 py-1.5 bg-[#F5EDD8]/60 text-[10px] font-bold text-[#8A7560] uppercase tracking-wider">{type}</div>
                     {accs.map((a) => (
-                      <div key={a.id} className="flex items-center justify-between px-4 py-2.5 border-t border-[#E1D6BE]/50 hover:bg-[#F5EDD8]/30">
+                      <div
+                        key={a.id}
+                        onClick={() => setQuickViewEntity({ type: 'coa', data: a })}
+                        title="Klik di mana saja pada baris untuk melihat Detail Akun GL"
+                        className="flex items-center justify-between px-4 py-2.5 border-t border-[#E1D6BE]/50 hover:bg-[#F5EDD8]/30 cursor-pointer transition-colors"
+                      >
                         <div className="flex items-center gap-3">
                           <span className="font-mono text-xs font-bold text-[#B8905A] w-12">{a.code}</span>
                           <div>
@@ -2838,7 +2801,7 @@ export const MasterDataModule: React.FC = () => {
                             {a.description && <p className="text-[10px] text-[#8A7560]">{a.description}</p>}
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                           <button onClick={() => { setEditingCoaId(a.id); setCoaForm({ code: a.code, name: a.name, type: a.type, description: a.description }); }}
                             className="p-1.5 hover:bg-[#F5EDD8] text-[#1B2A45] rounded">
                             <Edit3 className="w-3.5 h-3.5" />
@@ -4185,6 +4148,33 @@ export const MasterDataModule: React.FC = () => {
           setShowAddPetModal(true);
         }}
         onOpenQuickDispatch={(p) => setQuickDispatchPet(p)}
+        onEditCustomer={(c) => startEditCustomer(c)}
+        onEditPet={(p) => startEditPet(p)}
+      />
+
+      {/* Universal Master Record Detail Quick-View Modal (Click Anywhere on Row to Open View) */}
+      <MasterRecordQuickViewModal
+        entity={quickViewEntity}
+        onClose={() => setQuickViewEntity(null)}
+        onEdit={(ent) => {
+          if (ent.type === 'service') startEditService(ent.data);
+          else if (ent.type === 'staff') startEditStaff(ent.data);
+          else if (ent.type === 'supplier') startEditSupplier(ent.data);
+          else if (ent.type === 'drug') startEditDrug(ent.data);
+          else if (ent.type === 'hotelRoom') startEditHotelRoom(ent.data);
+          else if (ent.type === 'groomingPackage') startEditGroomingPackage(ent.data);
+          else if (ent.type === 'ambulanceUnit') startEditAmbulanceUnit(ent.data);
+          else if (ent.type === 'eFormTemplate') startEditEFormTemplate(ent.data);
+          else if (ent.type === 'coa') {
+            setEditingCoaId(ent.data.id);
+            setCoaForm({
+              code: ent.data.code,
+              name: ent.data.name,
+              type: ent.data.type,
+              description: ent.data.description,
+            });
+          }
+        }}
       />
 
       {/* Cross-Module Operational Quick Dispatch Modal */}

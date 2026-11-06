@@ -147,14 +147,100 @@ const MainAppContent: React.FC = () => {
   }, [userRole, activeModule, isModuleAllowed, user, isLoginScreenOpen]);
 
   useEffect(() => {
+    const getTopDismissibleOverlay = (): HTMLElement | null => {
+      const overlays = Array.from(
+        document.querySelectorAll<HTMLElement>('div.fixed.inset-0')
+      ).filter((el) => {
+        // Jangan tutup LockScreen (z-[999]) atau OnboardingWizard
+        if (el.className.includes('z-[999]')) return false;
+        if (el.children.length === 0) return false;
+        return true;
+      });
+      return overlays.length > 0 ? overlays[overlays.length - 1] : null;
+    };
+
+    const triggerOverlayClose = (overlay: HTMLElement) => {
+      if (!overlay.isConnected) return;
+      // 1. Coba trigger event klik langsung pada elemen backdrop overlay
+      overlay.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+      // 2. Fallback: jika overlay belum punya handler onClick pada backdrop,
+      //    cari tombol tutup (ikon X / aria-label Tutup/Close) di dalam dialog card
+      setTimeout(() => {
+        if (!overlay.isConnected) return;
+        const closeIcon = overlay.querySelector('button svg.lucide-x');
+        const closeBtn =
+          (closeIcon?.closest('button') as HTMLButtonElement | null) ||
+          overlay.querySelector<HTMLButtonElement>(
+            'button[aria-label*="Tutup"], button[aria-label*="Close"], button[title*="Tutup"], button[title*="Close"]'
+          );
+        if (closeBtn) {
+          closeBtn.click();
+        }
+      }, 0);
+    };
+
+    let activeOverlayOnPointerDown: HTMLElement | null = null;
+    let pointerDownOutsideCard = false;
+
+    const handlePointerDownCapture = (e: PointerEvent) => {
+      const topOverlay = getTopDismissibleOverlay();
+      if (!topOverlay) {
+        activeOverlayOnPointerDown = null;
+        pointerDownOutsideCard = false;
+        return;
+      }
+      const modalCard = topOverlay.firstElementChild as HTMLElement | null;
+      const target = e.target as Node | null;
+      if (modalCard && target && !modalCard.contains(target)) {
+        activeOverlayOnPointerDown = topOverlay;
+        pointerDownOutsideCard = true;
+      } else {
+        activeOverlayOnPointerDown = null;
+        pointerDownOutsideCard = false;
+      }
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      if (!activeOverlayOnPointerDown || !pointerDownOutsideCard) return;
+      const overlay = activeOverlayOnPointerDown;
+      activeOverlayOnPointerDown = null;
+      pointerDownOutsideCard = false;
+
+      const modalCard = overlay.firstElementChild as HTMLElement | null;
+      const target = e.target as Node | null;
+      if (!modalCard || (target && modalCard.contains(target))) return;
+
+      // Beri kesempatan handler React bawaan (jika klik tepat di backdrop) berjalan dulu
+      setTimeout(() => {
+        if (overlay.isConnected) {
+          triggerOverlayClose(overlay);
+        }
+      }, 0);
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setIsSearchOpen(true);
+        return;
+      }
+      if (e.key === 'Escape') {
+        const topOverlay = getTopDismissibleOverlay();
+        if (topOverlay) {
+          triggerOverlayClose(topOverlay);
+        }
       }
     };
+
+    window.addEventListener('pointerdown', handlePointerDownCapture, true);
+    window.addEventListener('click', handleClick);
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDownCapture, true);
+      window.removeEventListener('click', handleClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const openPublicBooking = () => {

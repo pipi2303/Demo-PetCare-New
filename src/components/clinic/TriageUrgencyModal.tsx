@@ -291,16 +291,45 @@ export const TriageUrgencyModal: React.FC<TriageUrgencyModalProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showOverrideMenu) {
+          setShowOverrideMenu(false);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, showOverrideMenu, onClose]);
+
   const config = getUrgencyConfig(triageData.level);
   const IconComponent = config.icon;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-[#FFFDF9] dark:bg-[#15233B] w-full max-w-2xl rounded-2xl shadow-2xl border border-[#E1D6BE] dark:border-[#B8905A]/30 overflow-hidden flex flex-col max-h-[90vh]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200 cursor-pointer"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="bg-[#FFFDF9] dark:bg-[#15233B] w-full max-w-2xl rounded-2xl shadow-2xl border border-[#E1D6BE] dark:border-[#B8905A]/30 overflow-hidden flex flex-col max-h-[90vh] cursor-default"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (showOverrideMenu && !(e.target as HTMLElement).closest('[data-override-menu]')) {
+            setShowOverrideMenu(false);
+          }
+        }}
+      >
         {/* Color-Coded Header Banner */}
         <div className={`${config.headerBg} p-5 text-white border-b ${config.border} relative shrink-0`}>
           <button
             onClick={onClose}
+            aria-label="Tutup"
             className="absolute top-4 right-4 p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -427,8 +456,9 @@ export const TriageUrgencyModal: React.FC<TriageUrgencyModalProps> = ({
               </h4>
               <button
                 type="button"
+                data-override-menu="true"
                 onClick={() => setShowOverrideMenu(!showOverrideMenu)}
-                className="text-[10px] text-[#B8905A] hover:underline font-bold flex items-center gap-1"
+                className="text-[10px] text-[#B8905A] hover:underline font-bold flex items-center gap-1 cursor-pointer"
               >
                 <Sliders className="w-3 h-3" /> Ubah Manual Prioritas
               </button>
@@ -436,7 +466,10 @@ export const TriageUrgencyModal: React.FC<TriageUrgencyModalProps> = ({
 
             {/* Manual Override Selection Pill Bar */}
             {showOverrideMenu && (
-              <div className="p-2.5 rounded-lg bg-[#F6F1E6] dark:bg-[#101A2C] border border-[#B8905A]/40 flex items-center gap-2 flex-wrap">
+              <div
+                data-override-menu="true"
+                className="p-2.5 rounded-lg bg-[#F6F1E6] dark:bg-[#101A2C] border border-[#B8905A]/40 flex items-center gap-2 flex-wrap"
+              >
                 <span className="text-[10px] font-bold text-[#1B2A45] dark:text-[#FFFDF9]">Pilih Level:</span>
                 {(['P1', 'P2', 'P3', 'P4'] as TriageUrgencyLevel[]).map((lvl) => (
                   <button

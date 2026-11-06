@@ -4,9 +4,12 @@ import {
   Pet,
   ServiceItem,
   Employee,
+  Supplier,
   Drug,
   HotelRoom,
   GroomingPackage,
+  AmbulanceUnit,
+  EFormTemplate,
   ClinicVisit,
   SOAPNote,
   VacHistory,
@@ -40,6 +43,8 @@ import {
   Pill,
   Plus,
   Sparkles,
+  Edit3,
+  Eye,
 } from 'lucide-react';
 
 interface MasterDataGovernanceModalProps {
@@ -663,6 +668,8 @@ interface MasterEntity360ModalProps {
   onSwitchTarget: (next: { type: 'customer'; customer: Customer } | { type: 'pet'; pet: Pet }) => void;
   onQuickAddPetForCustomer: (customer: Customer) => void;
   onOpenQuickDispatch: (pet: Pet) => void;
+  onEditCustomer?: (customer: Customer) => void;
+  onEditPet?: (pet: Pet) => void;
 }
 
 export const MasterEntity360Modal: React.FC<MasterEntity360ModalProps> = ({
@@ -679,6 +686,8 @@ export const MasterEntity360Modal: React.FC<MasterEntity360ModalProps> = ({
   onSwitchTarget,
   onQuickAddPetForCustomer,
   onOpenQuickDispatch,
+  onEditCustomer,
+  onEditPet,
 }) => {
   if (!target) return null;
 
@@ -706,13 +715,13 @@ export const MasterEntity360Modal: React.FC<MasterEntity360ModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#101A2C]/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5"
+      className="fixed inset-0 z-50 bg-[#101A2C]/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 cursor-pointer"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="bg-[#FFFDF9] border border-[#E1D6BE] rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-[#1B2A45]"
+        className="bg-[#FFFDF9] border border-[#E1D6BE] rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-[#1B2A45] cursor-default"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -724,7 +733,7 @@ export const MasterEntity360Modal: React.FC<MasterEntity360ModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-[#FFFDF9]">
-                  Profil Relasi 360° — {isCustomer ? customer?.name : target.pet.name}
+                  Detail &amp; Relasi 360° — {isCustomer ? customer?.name : target.pet.name}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#B8905A]/25 text-[#D9B98A] border border-[#B8905A]/40">
                   {isCustomer ? `${ownedPets.length} Pasien Terdaftar` : target.pet.species}
@@ -736,13 +745,32 @@ export const MasterEntity360Modal: React.FC<MasterEntity360ModalProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-[#101A2C]/80 hover:bg-[#101A2C] text-[#D9B98A] hover:text-white border border-[#B8905A]/30 flex items-center justify-center cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {(isCustomer ? customer && onEditCustomer : onEditPet) && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  if (isCustomer && customer && onEditCustomer) {
+                    onEditCustomer(customer);
+                  } else if (!isCustomer && onEditPet) {
+                    onEditPet(target.pet);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg bg-[#B8905A] hover:brightness-105 text-[#101A2C] font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5" /> Edit Data
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Tutup"
+              className="w-8 h-8 rounded-lg bg-[#101A2C]/80 hover:bg-[#101A2C] text-[#D9B98A] hover:text-white border border-[#B8905A]/30 flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -1171,6 +1199,281 @@ export const CrossModuleQuickActionModal: React.FC<CrossModuleQuickActionModalPr
                 : 'Simpan ke Jadwal Vaksinasi Klinik'}
             </button>
           </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export type QuickViewEntity =
+  | { type: 'service'; data: ServiceItem }
+  | { type: 'staff'; data: Employee }
+  | { type: 'supplier'; data: Supplier }
+  | { type: 'drug'; data: Drug }
+  | { type: 'hotelRoom'; data: HotelRoom }
+  | { type: 'groomingPackage'; data: GroomingPackage }
+  | { type: 'ambulanceUnit'; data: AmbulanceUnit }
+  | { type: 'eFormTemplate'; data: EFormTemplate }
+  | { type: 'coa'; data: ChartOfAccount };
+
+interface MasterRecordQuickViewModalProps {
+  entity: QuickViewEntity | null;
+  onClose: () => void;
+  onEdit: (entity: QuickViewEntity) => void;
+}
+
+export const MasterRecordQuickViewModal: React.FC<MasterRecordQuickViewModalProps> = ({
+  entity,
+  onClose,
+  onEdit,
+}) => {
+  if (!entity) return null;
+
+  const getHeaderMeta = (): {
+    title: string;
+    subtitle: string;
+    badge: string;
+    fields: { label: string; value: string; highlight?: boolean }[];
+  } => {
+    switch (entity.type) {
+      case 'service': {
+        const s = entity.data;
+        return {
+          title: s.name,
+          subtitle: `Katalog Layanan • Kode: ${s.code}`,
+          badge: s.isActive ? 'Aktif' : 'Nonaktif',
+          fields: [
+            { label: 'Kode Layanan', value: s.code },
+            { label: 'Kategori Layanan', value: s.category },
+            { label: 'Estimasi Durasi', value: `${s.estimatedDurationMins} Menit` },
+            { label: 'Tarif Standar', value: `Rp ${s.price.toLocaleString('id-ID')}`, highlight: true },
+            { label: 'Status Layanan', value: s.isActive ? 'Aktif Ditawarkan' : 'Nonaktif' },
+            { label: 'Deskripsi', value: s.description || 'Tidak ada catatan deskripsi tambahan.' },
+          ],
+        };
+      }
+      case 'staff': {
+        const emp = entity.data;
+        return {
+          title: emp.name,
+          subtitle: `Dokter & Staff • NIK: ${emp.nik}`,
+          badge: emp.status,
+          fields: [
+            { label: 'NIK Karyawan', value: emp.nik },
+            { label: 'Jabatan / Peran', value: emp.role },
+            { label: 'Departemen', value: emp.department },
+            { label: 'Nomor SIP / Lisensi', value: emp.sipNumber || '-' },
+            { label: 'Jadwal Shift', value: emp.shift || 'Pagi (08:00 - 16:00)' },
+            { label: 'Kontak WhatsApp', value: emp.phone, highlight: true },
+            { label: 'Email', value: emp.email || '-' },
+            { label: 'Komisi Tindakan', value: `${emp.commissionRatePercent}%` },
+          ],
+        };
+      }
+      case 'supplier': {
+        const sup = entity.data;
+        return {
+          title: sup.name,
+          subtitle: `Pemasok / Distributor • Kode: ${sup.code}`,
+          badge: sup.category,
+          fields: [
+            { label: 'Kode Supplier', value: sup.code },
+            { label: 'Kategori Pasokan', value: sup.category },
+            { label: 'Contact Person (PIC)', value: sup.contactPerson, highlight: true },
+            { label: 'Nomor Telepon / WA', value: sup.phone },
+            { label: 'Email Korporat', value: sup.email || '-' },
+            { label: 'Alamat Kantor / Gudang', value: sup.address || '-' },
+          ],
+        };
+      }
+      case 'drug': {
+        const d = entity.data;
+        return {
+          title: d.name,
+          subtitle: `Master Obat & Vaksin • Kode: ${d.code}`,
+          badge: d.stock <= d.minStock ? 'Stok Kritis' : 'Stok Tersedia',
+          fields: [
+            { label: 'Kode Farmasi', value: d.code },
+            { label: 'Kategori Sediaan', value: d.category },
+            { label: 'Stok Tersedia', value: `${d.stock} ${d.unit} (Min: ${d.minStock})`, highlight: true },
+            { label: 'Harga Jual Satuan', value: `Rp ${d.unitPrice.toLocaleString('id-ID')}`, highlight: true },
+            { label: 'Nomor Batch', value: d.batchNumber || '-' },
+            { label: 'Tanggal Kedaluwarsa', value: d.expiryDate || '-' },
+            { label: 'Lokasi Penyimpanan', value: d.location || 'Apotek' },
+          ],
+        };
+      }
+      case 'hotelRoom': {
+        const r = entity.data;
+        return {
+          title: `Kamar / Kandang ${r.roomNo}`,
+          subtitle: `Fasilitas Pet Hotel Boarding`,
+          badge: r.isActive ? 'Aktif' : 'Nonaktif',
+          fields: [
+            { label: 'Nomor Kamar/Kandang', value: r.roomNo },
+            { label: 'Tipe Kamar', value: r.roomType },
+            { label: 'Kapasitas Maksimal', value: `${r.capacity} Ekor` },
+            { label: 'Tarif Sewa per Malam', value: `Rp ${r.dailyRate.toLocaleString('id-ID')}`, highlight: true },
+            { label: 'Status Operasional', value: r.isActive ? 'Siap Digunakan' : 'Nonaktif' },
+            { label: 'Catatan Fasilitas', value: r.notes || 'Dilengkapi tempat makan, minum & sanitasi harian.' },
+          ],
+        };
+      }
+      case 'groomingPackage': {
+        const p = entity.data;
+        return {
+          title: p.name,
+          subtitle: `Paket Grooming Salon & Spa`,
+          badge: p.packageType,
+          fields: [
+            { label: 'Tipe Paket', value: p.packageType },
+            { label: 'Estimasi Durasi', value: `${p.estimatedDurationMins} Menit` },
+            { label: 'Tarif Ukuran Small', value: `Rp ${p.priceSmall.toLocaleString('id-ID')}`, highlight: true },
+            { label: 'Tarif Ukuran Medium', value: `Rp ${p.priceMedium.toLocaleString('id-ID')}`, highlight: true },
+            { label: 'Tarif Ukuran Large', value: `Rp ${p.priceLarge.toLocaleString('id-ID')}`, highlight: true },
+            { label: 'Deskripsi Paket', value: p.description || '-' },
+          ],
+        };
+      }
+      case 'ambulanceUnit': {
+        const u = entity.data;
+        return {
+          title: u.vehicleName,
+          subtitle: `Armada Ambulance • Kode: ${u.code}`,
+          badge: u.status,
+          fields: [
+            { label: 'Kode Unit', value: u.code },
+            { label: 'Plat Nomor Kendaraan', value: u.plateNo, highlight: true },
+            { label: 'Status Kesiapan', value: u.status },
+            { label: 'Pengemudi Bertugas', value: u.currentDriver || '-' },
+            { label: 'Paramedik Veteriner', value: u.currentParamedic || '-' },
+            { label: 'Kelengkapan Alat Medis', value: u.equipmentStatus || '-' },
+          ],
+        };
+      }
+      case 'eFormTemplate': {
+        const t = entity.data;
+        return {
+          title: t.title,
+          subtitle: `Template E-Form & Digital Consent`,
+          badge: t.category,
+          fields: [
+            { label: 'Kategori Formulir', value: t.category },
+            { label: 'Jumlah Field Input', value: `${t.fields.length} Field`, highlight: true },
+            { label: 'Deskripsi Formulir', value: t.description || '-' },
+            {
+              label: 'Daftar Komponen Field',
+              value: t.fields.map((f) => `${f.label} (${f.type}${f.required ? '*' : ''})`).join(', ') || '-',
+            },
+          ],
+        };
+      }
+      case 'coa': {
+        const a = entity.data;
+        return {
+          title: `${a.code} — ${a.name}`,
+          subtitle: `Chart of Accounts (Bagan Akun Buku Besar)`,
+          badge: a.type,
+          fields: [
+            { label: 'Kode Akun GL', value: a.code, highlight: true },
+            { label: 'Nama Akun', value: a.name },
+            { label: 'Klasifikasi Akun', value: a.type },
+            { label: 'Status Akun', value: a.isActive ? 'Aktif' : 'Nonaktif' },
+            { label: 'Deskripsi / Catatan', value: a.description || '-' },
+          ],
+        };
+      }
+    }
+  };
+
+  const meta = getHeaderMeta();
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-[#101A2C]/75 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="bg-[#FFFDF9] border border-[#E1D6BE] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden text-[#1B2A45] cursor-default"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#1B2A45] via-[#16233A] to-[#101A2C] px-5 py-3.5 border-b border-[#B8905A]/30 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[#B8905A]/20 border border-[#B8905A]/40 flex items-center justify-center text-[#D9B98A] shrink-0">
+              <Eye className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-[#FFFDF9] truncate">{meta.title}</h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#B8905A]/25 text-[#D9B98A] border border-[#B8905A]/40">
+                  {meta.badge}
+                </span>
+              </div>
+              <p className="text-[11px] text-[#D9B98A]/85 truncate">{meta.subtitle}</p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup"
+            className="w-8 h-8 rounded-lg bg-[#101A2C]/80 hover:bg-[#101A2C] text-[#D9B98A] hover:text-white border border-[#B8905A]/30 flex items-center justify-center cursor-pointer shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Detail Fields Grid */}
+        <div className="p-5 space-y-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {meta.fields.map((f, idx) => (
+              <div
+                key={idx}
+                className={`p-3 rounded-xl border ${
+                   idx === meta.fields.length - 1 && meta.fields.length % 2 !== 0
+                    ? 'sm:col-span-2'
+                    : ''
+                } ${
+                  f.highlight
+                    ? 'bg-[#F6F1E6] border-[#B8905A]/50'
+                    : 'bg-white border-[#E1D6BE]'
+                }`}
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6656] block">
+                  {f.label}
+                </span>
+                <p className="text-xs font-bold text-[#1B2A45] mt-0.5 break-words">{f.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-2 flex items-center justify-between gap-2 border-t border-[#E1D6BE]">
+            <span className="text-[11px] text-[#6B6656] italic">
+              Klik di luar kotak ini atau tekan Esc untuk menutup.
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-3.5 py-2 rounded-lg bg-[#F6F1E6] hover:bg-[#E1D6BE] text-[#1B2A45] font-bold text-xs cursor-pointer"
+              >
+                Tutup
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onEdit(entity);
+                }}
+                className="px-3.5 py-2 rounded-lg bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-[#D9B98A]" /> Edit Data
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
