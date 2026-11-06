@@ -61,7 +61,6 @@ const statVariants: Record<string, { bg: string; text: string }> = {
 };
 
 export const SystemNotificationHeader: React.FC<SystemNotificationHeaderProps> = ({
-  icon,
   title,
   subtitle,
   description,
@@ -79,8 +78,6 @@ export const SystemNotificationHeader: React.FC<SystemNotificationHeaderProps> =
   const [showQuickPrintModal, setShowQuickPrintModal] = useState(false);
 
   const desc = description || subtitle;
-  const hasBottomContent = (tabs && tabs.length > 0) || (stats && stats.length > 0) || Boolean(children);
-
   const activeTabItem = tabs?.find((t) => t.id === activeTab);
 
   // Helper to extract a display title string for printable sheet
@@ -122,10 +119,10 @@ export const SystemNotificationHeader: React.FC<SystemNotificationHeaderProps> =
       return (
         <span
           key={index}
-          className={`px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 border ${variantClass}`}
+          className={`px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1.5 border whitespace-nowrap shrink-0 ${variantClass}`}
         >
           {b.pulse && <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />}
-          {renderIconElement(b.icon, 'w-3 h-3')}
+          {renderIconElement(b.icon, 'w-3.5 h-3.5')}
           <span>{b.label}</span>
         </span>
       );
@@ -133,112 +130,208 @@ export const SystemNotificationHeader: React.FC<SystemNotificationHeaderProps> =
     return null;
   };
 
+  // Extract plain text from ReactNode for tooltip labels
+  const extractTextLabel = (node: React.ReactNode): string => {
+    if (typeof node === 'string' || typeof node === 'number') {
+      return String(node).trim();
+    }
+    if (Array.isArray(node)) {
+      return node.map(extractTextLabel).filter(Boolean).join(' ').trim();
+    }
+    if (React.isValidElement(node)) {
+      const props = node.props as { children?: React.ReactNode };
+      return extractTextLabel(props.children);
+    }
+    return '';
+  };
+
+  // Extract the first icon element (non-span element) from button children
+  const extractIconChild = (node: React.ReactNode): React.ReactNode => {
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        const found = extractIconChild(child);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (React.isValidElement(node)) {
+      if (node.type === React.Fragment) {
+        const props = node.props as { children?: React.ReactNode };
+        return extractIconChild(props.children);
+      }
+      if (node.type !== 'span') {
+        const existingProps = node.props as { className?: string };
+        const hasColor = existingProps.className && /text-/.test(existingProps.className);
+        return React.cloneElement(node as React.ReactElement<{ className?: string }>, {
+          className: `w-4 h-4 shrink-0 ${hasColor ? existingProps.className : ''}`
+        });
+      }
+    }
+    return null;
+  };
+
+  // Recursively convert any <button> elements inside `actions` into icon-only buttons with tooltips
+  const renderIconOnlyActions = (node: React.ReactNode, keyPrefix = 'act'): React.ReactNode => {
+    if (!node) return null;
+    if (Array.isArray(node)) {
+      return node.map((child, idx) => renderIconOnlyActions(child, `${keyPrefix}-${idx}`));
+    }
+    if (React.isValidElement(node)) {
+      const elProps = node.props as Record<string, any>;
+      if (node.type === React.Fragment || node.type === 'div') {
+        // If it's a wrapper div that only wraps buttons, unwrap and convert its children
+        if (node.type === 'div' && elProps.children) {
+          const childArr = React.Children.toArray(elProps.children);
+          const hasButtons = childArr.some(
+            (c) => React.isValidElement(c) && (c.type === 'button' || c.type === React.Fragment)
+          );
+          if (hasButtons) {
+            return childArr.map((child, idx) => renderIconOnlyActions(child, `${keyPrefix}-${idx}`));
+          }
+        }
+        return React.Children.map(elProps.children, (child, idx) =>
+          renderIconOnlyActions(child, `${keyPrefix}-${idx}`)
+        );
+      }
+      if (node.type === 'button') {
+        const tooltipText = elProps.title || elProps['aria-label'] || extractTextLabel(elProps.children) || 'Aksi';
+        const iconEl = extractIconChild(elProps.children) || <Sliders className="w-4 h-4" />;
+        const cls: string = elProps.className || '';
+        const isPrimaryBrass =
+          cls.includes('from-[#B8905A]') ||
+          cls.includes('bg-[#B8905A]') ||
+          cls.includes('from-amber');
+        const isEmerald = cls.includes('from-emerald') || cls.includes('bg-emerald');
+        const isRose = cls.includes('from-rose') || cls.includes('bg-rose');
+
+        const buttonStyle = isPrimaryBrass
+          ? 'bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] shadow-2xs'
+          : isEmerald
+          ? 'bg-gradient-to-r from-emerald-700 to-teal-800 hover:brightness-110 text-white shadow-2xs'
+          : isRose
+          ? 'bg-rose-700 hover:bg-rose-800 text-white shadow-2xs'
+          : 'bg-[#101A2C]/90 hover:bg-[#101A2C] text-[#D9B98A] hover:text-[#FFFDF9] border border-[#B8905A]/40';
+
+        return (
+          <button
+            key={node.key ?? keyPrefix}
+            type={elProps.type || 'button'}
+            onClick={elProps.onClick}
+            disabled={elProps.disabled}
+            title={tooltipText}
+            aria-label={tooltipText}
+            className={`group relative w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer disabled:opacity-50 shrink-0 ${buttonStyle}`}
+          >
+            {iconEl}
+            <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+              {tooltipText}
+            </span>
+          </button>
+        );
+      }
+    }
+    return node;
+  };
+
   const quickPrintButton = enableQuickPrint ? (
     <button
       type="button"
       onClick={() => setShowQuickPrintModal(true)}
-      className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#101A2C]/80 hover:bg-[#101A2C] text-[#D9B98A] hover:text-[#FFFDF9] border border-[#B8905A]/40 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer group"
-      title="Cetak ringkasan data modul saat ini secara instan (Quick Print Config)"
+      title="Quick Print"
+      aria-label="Quick Print"
+      className="group relative w-8 h-8 rounded-lg bg-[#101A2C]/90 hover:bg-[#101A2C] text-[#D9B98A] hover:text-[#FFFDF9] border border-[#B8905A]/40 flex items-center justify-center transition-colors cursor-pointer shrink-0"
     >
-      <Printer className="w-3.5 h-3.5 text-[#B8905A] group-hover:scale-110 transition-transform" />
-      <span className="hidden sm:inline">Quick Print Config</span>
-      <span className="sm:hidden">Print</span>
+      <Printer className="w-4 h-4 text-[#B8905A] group-hover:text-[#FFFDF9] transition-colors" />
+      <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+        Quick Print
+      </span>
     </button>
   ) : null;
 
   return (
     <>
       <div
-        className={`p-3.5 sm:p-4 rounded-xl bg-gradient-to-r from-[#1B2A45] via-[#16233B] to-[#101A2C] border border-[#B8905A]/40 text-[#FFFDF9] shadow-md ${
-          hasBottomContent ? 'space-y-3' : 'flex flex-col md:flex-row items-start md:items-center justify-between gap-3.5'
-        } ${className}`}
+        className={`rounded-xl border border-[#E1D6BE] bg-[#FFFDF9] shadow-xs ${className}`}
       >
-        <div className={hasBottomContent ? 'flex flex-col md:flex-row items-start md:items-center justify-between gap-3' : 'flex items-center gap-3'}>
-          <div className="flex items-center gap-3">
-            {icon && (
-              <div className="p-2.5 bg-gradient-to-br from-[#B8905A] to-[#9E7848] text-[#101A2C] rounded-xl font-black shadow-xs border border-amber-300/30 shrink-0">
-                {renderIconElement(icon, 'w-5 h-5')}
-              </div>
-            )}
-
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-sm sm:text-base font-bold font-display text-[#FFFDF9] tracking-tight">
-                  {title}
-                </h2>
-                {badges && badges.map((badge, idx) => renderBadge(badge, idx))}
-              </div>
-              {desc && (
-                <p className="text-[11px] sm:text-xs text-[#EDE6D6]/80 leading-snug">
-                  {desc}
-                </p>
-              )}
-            </div>
+        {/* Top Bar: Navigation Tabs / Compact Stats Strip + Icon-Only Action Buttons with Tooltips */}
+        <div
+          className={`px-3 sm:px-4 py-2.5 bg-gradient-to-r from-[#1B2A45] via-[#16233B] to-[#101A2C] text-[#FFFDF9] flex items-center justify-between gap-3 ${
+            children ? 'rounded-t-xl border-b border-[#B8905A]/30' : 'rounded-xl'
+          }`}
+        >
+          {/* Left Strip: Tabs, Stats, or Compact Context Badges */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-navy min-w-0 flex-1 pb-1">
+            {tabs && tabs.length > 0 ? (
+              tabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => onTabChange && onTabChange(tab.id)}
+                    title={tab.count !== undefined ? `${tab.label} (${tab.count})` : tab.label}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+                      isActive
+                        ? 'bg-[#B8905A] text-[#101A2C] font-bold shadow-2xs'
+                        : 'text-[#EDE6D6]/80 hover:bg-[#1B2A45] hover:text-[#FFFDF9]'
+                    }`}
+                  >
+                    {renderIconElement(tab.icon, 'w-3.5 h-3.5 shrink-0')}
+                    <span>{tab.label}</span>
+                    {tab.count !== undefined && (
+                      <span
+                        className={`font-mono text-[11px] tabular-nums ${
+                          isActive ? 'text-[#101A2C]/80 font-bold' : 'text-[#D9B98A]/80'
+                        }`}
+                      >
+                        {tab.count}
+                      </span>
+                    )}
+                    {tab.badge && (
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[9px] font-extrabold uppercase ${
+                          tab.badgeVariant === 'rose'
+                            ? 'bg-rose-500/30 text-rose-300 animate-pulse'
+                            : 'bg-[#B8905A]/30 text-[#D9B98A]'
+                        }`}
+                      >
+                        {tab.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            ) : stats && stats.length > 0 ? (
+              stats.map((st, i) => {
+                const style = statVariants[st.variant || 'default'] || statVariants.default;
+                return (
+                  <div
+                    key={i}
+                    className={`px-3 py-1 rounded-lg border flex items-center gap-2 whitespace-nowrap shrink-0 ${style.bg}`}
+                  >
+                    <span className="text-[10px] text-[#EDE6D6]/75 uppercase font-semibold">{st.label}</span>
+                    <span className={`text-xs font-black font-mono tabular-nums ${style.text}`}>{st.value}</span>
+                  </div>
+                );
+              })
+            ) : badges && badges.length > 0 ? (
+              badges.map((badge, idx) => renderBadge(badge, idx))
+            ) : null}
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end flex-wrap">
+          {/* Right Strip: Icon-Only Action Buttons with Tooltips */}
+          <div className="flex items-center gap-1.5 shrink-0 pl-2 border-l border-[#B8905A]/25">
             {quickPrintButton}
-            {actions}
+            {renderIconOnlyActions(actions)}
           </div>
         </div>
 
-        {/* Stats Bar */}
-        {stats && stats.length > 0 && (
-          <div className={`grid grid-cols-2 sm:grid-cols-${Math.min(stats.length, 4)} gap-2 pt-2.5 border-t border-white/10`}>
-            {stats.map((st, i) => {
-              const style = statVariants[st.variant || 'default'] || statVariants.default;
-              return (
-                <div
-                  key={i}
-                  className={`px-3 py-1.5 rounded-lg border flex items-center justify-between ${style.bg}`}
-                >
-                  <span className="text-[10px] text-[#EDE6D6]/70 uppercase font-semibold">{st.label}</span>
-                  <span className={`text-xs font-black font-mono ${style.text}`}>{st.value}</span>
-                </div>
-              );
-            })}
+        {/* Optional Nested Toolbar / Filter Content */}
+        {children && (
+          <div className="p-3 sm:px-4 bg-[#101A2C]/95 rounded-b-xl text-[#FFFDF9]">
+            {children}
           </div>
         )}
-
-        {/* Tabs Navigation Strip */}
-        {tabs && tabs.length > 0 && (
-          <div className="flex items-center gap-1.5 pt-2.5 border-t border-white/10 overflow-x-auto">
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => onTabChange && onTabChange(tab.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                    isActive
-                      ? 'bg-[#B8905A] text-[#101A2C] shadow-xs font-black'
-                      : 'bg-[#101A2C]/70 text-[#EDE6D6]/80 hover:bg-[#1F2E47] hover:text-[#FFFDF9] border border-white/10'
-                  }`}
-                >
-                  {renderIconElement(tab.icon, 'w-3.5 h-3.5')}
-                  <span>
-                    {tab.label}
-                    {tab.count !== undefined ? ` (${tab.count})` : ''}
-                  </span>
-                  {tab.badge && (
-                    <span
-                      className={`px-1.5 py-0.2 rounded-full text-[9px] font-extrabold uppercase ${
-                        tab.badgeVariant === 'rose'
-                          ? 'bg-rose-500/30 text-rose-300 animate-pulse'
-                          : 'bg-[#B8905A]/30 text-[#D9B98A]'
-                      }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Custom Nested Bottom Content */}
-        {children}
       </div>
 
       {/* Quick Print Config Modal */}
@@ -255,4 +348,5 @@ export const SystemNotificationHeader: React.FC<SystemNotificationHeaderProps> =
     </>
   );
 };
+
 

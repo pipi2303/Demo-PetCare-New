@@ -126,9 +126,16 @@ import {
   createCustomer,
   updateCustomer as updateCustomerRecord,
   deleteCustomer as deleteCustomerRecord,
-  adjustCustomerPoints
+  adjustCustomerPoints,
+  mergeCustomers
 } from "./server/customerService";
-import { listPets, createPet, updatePet as updatePetRecord, deletePet as deletePetRecord } from "./server/petService";
+import {
+  listPets,
+  createPet,
+  updatePet as updatePetRecord,
+  deletePet as deletePetRecord,
+  mergePets
+} from "./server/petService";
 import {
   listServices,
   createService,
@@ -148,8 +155,18 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Standard security headers
-  app.use(helmet({ contentSecurityPolicy: false }));
+  // Trust reverse proxy (Cloud Run / AI Studio preview proxy) so X-Forwarded-For works with express-rate-limit
+  app.set("trust proxy", 1);
+
+  // Standard security headers (frameguard & CORP disabled so preview iframe can embed the app)
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      frameguard: false,
+      crossOriginResourcePolicy: false,
+      crossOriginOpenerPolicy: false,
+    })
+  );
 
   // Serve uploaded files (signatures, photos) from disk
   app.use("/uploads", express.static(uploadsDir(), { maxAge: "7d" }));
@@ -168,14 +185,13 @@ async function startServer() {
     next();
   });
 
-  // Structured (JSON) access logging — one line per request with method,
-  // path, status, response time, request id. Replaces having no request
-  // visibility at all in production; never logs the Authorization header
-  // (session tokens) or the request/response body (which can carry
-  // passwords/PINs on the auth routes).
+  // Structured (JSON) access logging for API requests only
   app.use(
     pinoHttp({
       level: process.env.LOG_LEVEL || "info",
+      autoLogging: {
+        ignore: (req) => !req.url?.startsWith("/api"),
+      },
       redact: {
         paths: ["req.headers.authorization", "req.headers.cookie"],
         remove: true
@@ -190,17 +206,13 @@ async function startServer() {
 
   app.use(express.json({ limit: "25mb" }));
 
-  // Rate limiting for authentication endpoints — this app previously had
-  // none, which meant /api/auth/login-pin (a 4-digit PIN, only 10,000
-  // possible values) and /api/auth/login could be brute-forced with no
-  // slowdown. These limiters are IP-based, not a full replacement for
-  // per-account lockout, but they raise the cost of automated guessing to a
-  // level a single attacker can't easily script around.
+  // Rate limiting for authentication endpoints
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 20,
+    limit: 100,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: false,
     message: { success: false, message: "Terlalu banyak percobaan. Coba lagi dalam beberapa menit." }
   });
 
@@ -208,9 +220,10 @@ async function startServer() {
   // endpoints get a tighter limit than password-based ones.
   const pinLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 8,
+    limit: 30,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: false,
     message: { success: false, message: "Terlalu banyak percobaan PIN. Coba lagi dalam beberapa menit." }
   });
 
@@ -222,6 +235,7 @@ async function startServer() {
     keyGenerator: (req) => (req as any).session?.email || req.ip || "unknown",
     standardHeaders: true,
     legacyHeaders: false,
+    validate: false,
     message: { success: false, message: "Terlalu banyak permintaan AI. Coba lagi dalam 1 menit." }
   });
 
@@ -412,7 +426,7 @@ async function startServer() {
   app.get("/api/backup/status", requireSession, async (_req, res) => {
     try {
       const status = await getBackupStatus();
-      res.json(status);
+      res.json({ ...status, data: status });
     } catch (err: any) {
       res.status(500).json({ error: safeMessage(err) });
     }
@@ -529,9 +543,22 @@ async function startServer() {
         return res.status(401).json({ success: false, message: "Email atau kata sandi tidak sesuai." });
       }
       const token = await createSession(account.email, account.role, account.ownershipType);
-      res.json({ success: true, token, account });
+      res.json({ success: true, token, account, data: { token, account } });
     } catch (err: any) {
       res.status(500).json({ success: false, message: safeMessage(err)});
+    }
+  });
+
+  app.get("/api/auth/me", requireSession, async (req, res) => {
+    try {
+      const email = (req as any).session?.email;
+      const account = email ? await getAccountInfo(email) : null;
+      if (!account) {
+        return res.status(404).json({ success: false, message: "Akun tidak ditemukan." });
+      }
+      res.json({ success: true, account, data: account });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: safeMessage(err) });
     }
   });
 
@@ -1978,6 +2005,16 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
     catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
   });
 
+  app.post("/api/customers/merge", requireRole(...STAFF_ROLES), async (req, res) => {
+    try {
+      const { primaryId, duplicateIds } = req.body || {};
+      const merged = await mergeCustomers(String(primaryId || ""), Array.isArray(duplicateIds) ? duplicateIds : []);
+      res.json({ success: true, data: merged });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: safeMessage(error) });
+    }
+  });
+
   app.get("/api/pets", requireSession, async (_req, res) => {
     try { res.json({ success: true, data: await listPets() }); }
     catch (error: any) { res.status(500).json({ success: false, message: safeMessage(error)}); }
@@ -1998,6 +2035,16 @@ Please determine the optimal widget ordering, primary focus tool, layout mode, a
   app.delete("/api/pets/:id", requireRole(...STAFF_ROLES), async (req, res) => {
     try { await deletePetRecord(req.params.id); res.json({ success: true }); }
     catch (error: any) { res.status(400).json({ success: false, message: safeMessage(error)}); }
+  });
+
+  app.post("/api/pets/merge", requireRole(...STAFF_ROLES), async (req, res) => {
+    try {
+      const { primaryId, duplicateIds } = req.body || {};
+      const merged = await mergePets(String(primaryId || ""), Array.isArray(duplicateIds) ? duplicateIds : []);
+      res.json({ success: true, data: merged });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: safeMessage(error) });
+    }
   });
 
   app.get("/api/services", requireSession, async (_req, res) => {

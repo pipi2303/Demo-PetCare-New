@@ -284,6 +284,14 @@ export const NotificationsModule: React.FC<NotificationsModuleProps> = ({ setAct
           ),
           { label: `${notifications.length} Total Pesan`, variant: 'gold' }
         ]}
+        tabs={[
+          { id: 'all', label: 'Semua Notifikasi', icon: Bell, count: allNotifications.length },
+          { id: 'Vaksin', label: 'Vaksinasi', icon: Syringe },
+          { id: 'Stok', label: 'Stok Obat', icon: Package },
+          { id: 'Booking', label: 'Booking', icon: Calendar }
+        ]}
+        activeTab={filterType}
+        onTabChange={(tabId) => setFilterType(tabId as any)}
         actions={
           <>
             <button

@@ -10,6 +10,7 @@ import { ExportInventoryPdfModal } from '../inventory/ExportInventoryPdfModal';
 import { StockItem } from '../../types';
 import { QuickPOModal, QuickPOLineItem } from '../common/QuickPOModal';
 import { StockMutationModal } from '../inventory/StockMutationModal';
+import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import {
   Package,
   AlertTriangle,
@@ -358,162 +359,74 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({ activeModule, 
 
   return (
     <div className="space-y-6">
-      {/* Banner */}
-      <div className="bg-[#1B2A45] rounded-xl p-5 text-[#FFFDF9] border border-[#B8905A]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2.5 py-0.5 rounded-full bg-[#B8905A]/30 text-[#D9B98A] border border-[#B8905A]/40 text-[11px] font-semibold uppercase tracking-wider">
-              Stok & Manajemen Logistik Multi-Gudang
-            </span>
-            {expiringItems.length > 0 && (
-              <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] font-extrabold flex items-center gap-1 animate-pulse">
-                <Flame className="w-3 h-3 text-rose-400" />
-                {expiringItems.length} Item Kadaluarsa &lt; 30 Hari
-              </span>
-            )}
-          </div>
-          <h2 className="text-xl font-bold mt-1 text-[#FFFDF9] font-display">
-            Monitoring Stok, Stock Opname & Mutasi Transfer Cabang
-          </h2>
-          <p className="text-xs text-[#EDE6D6]/80 mt-0.5">
-            Peringatan stok minimum real-time, audit fisik Stock Opname, log mutasi persediaan & transfer antar gudang.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* AI PO Suggestion Tab */}
-          <button
-            id="inventory-tab-ai-po"
-            onClick={() => setActiveTab('aiPoSuggest')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
-              activeTab === 'aiPoSuggest'
-                ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-md font-extrabold'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#15233B]'
-            }`}
-          >
-            <ShoppingCart className="w-4 h-4 text-emerald-400" />
-            <span>Saran PO AI (30H)</span>
-            {lowStockItems.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-rose-500/30 text-rose-300 text-[9px] font-extrabold uppercase animate-pulse">
-                {lowStockItems.length} Reorder
-              </span>
-            )}
-          </button>
-
-          {/* Export PDF Button */}
-          <button
-            onClick={() => setIsPdfExportModalOpen(true)}
-            className="px-3.5 py-2 bg-gradient-to-r from-[#B8905A] to-[#D9B98A] hover:brightness-110 text-[#1B2A45] font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
-            title="Ekspor Laporan Stok & Analisis Tren Depresi ke PDF Resmi Manajemen"
-          >
-            <FileText className="w-4 h-4 text-[#1B2A45]" />
-            <span>Ekspor PDF Laporan</span>
-          </button>
-
-          <button
-            id="inventory-tab-depletion"
-            onClick={() => setActiveTab('depletion')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
-              activeTab === 'depletion'
-                ? 'bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 text-white shadow-md font-extrabold'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#15233B]'
-            }`}
-          >
-            <TrendingDown className="w-4 h-4 text-amber-400" />
-            <span>Tren Depresi 30H</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-amber-500/30 text-amber-300 text-[9px] font-extrabold uppercase">
-              D3
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('heatmap')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
-              activeTab === 'heatmap'
-                ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md font-extrabold'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#15233B]'
-            }`}
-          >
-            <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
-            Heatmap Velocity
-            <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/30 text-emerald-300 text-[9px] font-extrabold uppercase">
-              Fast/Slow
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('auditAssistant')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
-              activeTab === 'auditAssistant'
-                ? 'bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] shadow-md font-extrabold'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#15233B]'
-            }`}
-          >
-            <Bot className="w-4 h-4 text-[#D9B98A]" />
-            AI Audit Asisten
-            <span className="px-1.5 py-0.2 rounded-full bg-rose-500/30 text-rose-300 text-[9px] font-extrabold uppercase animate-pulse">
-              Audit
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('aiForecast')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
-              activeTab === 'aiForecast'
-                ? 'bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#FFFDF9] shadow-md'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#15233B]'
-            }`}
-          >
-            <Sparkles className="w-4 h-4 text-[#D9B98A]" />
-            AI Peramalan & ROP
-          </button>
-          <button
-            onClick={() => setActiveTab('stock')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'stock'
-                ? 'bg-[#B8905A] text-[#FFFDF9] shadow-2xs'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <Package className="w-4 h-4" /> Monitoring Stok
-          </button>
-          <button
-            onClick={() => {
-              const firstItem = stockItems[0];
-              if (firstItem) setActualPhysicalQty(firstItem.stock);
-              setShowOpnameModal(true);
-            }}
-            className="px-3.5 py-2 bg-[#101A2C] hover:bg-[#101A2C]/80 text-[#D9B98A] border border-[#B8905A]/30 rounded-lg text-xs font-bold flex items-center gap-1.5"
-          >
-            <RefreshCw className="w-4 h-4" /> Manual Opname
-          </button>
-          <button
-            onClick={() => setActiveTab('movements')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'movements'
-                ? 'bg-[#B8905A] text-[#FFFDF9] shadow-2xs'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <History className="w-4 h-4" /> Log Mutasi
-          </button>
-          <button
-            onClick={() => setActiveTab('transfer')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'transfer'
-                ? 'bg-[#B8905A] text-[#FFFDF9] shadow-2xs'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <ArrowRightLeft className="w-4 h-4" /> Transfer Cabang
-          </button>
-          <button
-            onClick={() => setShowStockMutationModal(true)}
-            className="px-3.5 py-2 bg-gradient-to-r from-emerald-700 to-teal-800 hover:brightness-110 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
-            title="Buat Mutasi & Surat Jalan Digital Resmi Antar Cabang / Gudang"
-          >
-            <FileText className="w-4 h-4 text-emerald-300" />
-            <span>Mutasi & Surat Jalan</span>
-          </button>
-        </div>
-      </div>
+      <SystemNotificationHeader
+        icon={Package}
+        title="Monitoring Stok, Stock Opname & Mutasi Transfer Cabang"
+        description="Peringatan stok minimum real-time, audit fisik Stock Opname, log mutasi persediaan & transfer antar gudang."
+        tabs={[
+          { id: 'stock', label: 'Monitoring Stok', icon: Package, count: stockItems.length },
+          { id: 'movements', label: 'Log Mutasi', icon: History, count: stockMovements.length },
+          { id: 'transfer', label: 'Transfer Cabang', icon: ArrowRightLeft },
+          { id: 'depletion', label: 'Tren Depresi 30H', icon: TrendingDown, badge: 'D3' },
+          { id: 'heatmap', label: 'Heatmap Velocity', icon: Flame, badge: 'Fast/Slow' },
+          {
+            id: 'aiPoSuggest',
+            label: 'Saran PO AI (30H)',
+            icon: ShoppingCart,
+            count: lowStockItems.length > 0 ? lowStockItems.length : undefined,
+            badge: lowStockItems.length > 0 ? 'Reorder' : undefined,
+            badgeVariant: 'rose'
+          },
+          { id: 'auditAssistant', label: 'AI Audit Asisten', icon: Bot, badge: 'Audit', badgeVariant: 'rose' },
+          { id: 'aiForecast', label: 'AI Peramalan & ROP', icon: Sparkles }
+        ]}
+        activeTab={activeTab}
+        onTabChange={(tabId) => setActiveTab(tabId as any)}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setIsPdfExportModalOpen(true)}
+              title="Ekspor PDF Laporan"
+              className="bg-[#101A2C]"
+            >
+              <FileText className="w-4 h-4 text-[#D9B98A]" />
+              <span>Ekspor PDF Laporan</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const firstItem = stockItems[0];
+                if (firstItem) setActualPhysicalQty(firstItem.stock);
+                setShowOpnameModal(true);
+              }}
+              title="Manual Opname"
+              className="bg-[#101A2C]"
+            >
+              <RefreshCw className="w-4 h-4 text-[#D9B98A]" />
+              <span>Manual Opname</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowStockMutationModal(true)}
+              title="Mutasi & Surat Jalan"
+              className="from-emerald-700"
+            >
+              <ArrowRightLeft className="w-4 h-4 text-emerald-200" />
+              <span>Mutasi & Surat Jalan</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddItemModal(true)}
+              title="Tambah Item Barang Baru"
+              className="from-[#B8905A]"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Tambah Item Barang Baru</span>
+            </button>
+          </>
+        }
+      />
 
       {activeTab === 'auditAssistant' && <InventoryAuditAssistant />}
 

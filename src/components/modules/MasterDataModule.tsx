@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { Customer, Pet, Employee, Supplier, ServiceItem, MembershipTier, Drug, HotelRoom, GroomingPackage, AmbulanceUnit, EFormTemplate, ChartOfAccount } from '../../types';
-import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
+import { QuickPrintConfigModal } from '../common/QuickPrintConfigModal';
 import { usePermissions } from '../../hooks/usePermissions';
 import { TriageUrgencyBadge } from '../clinic/TriageUrgencyBadge';
 import { TriageUrgencyModal } from '../clinic/TriageUrgencyModal';
 import { computeTriageHeuristic } from '../../utils/aiTriageUrgency';
+import { DeduplicationModal, detectDuplicateCustomers, detectDuplicatePets } from '../master/DeduplicationModal';
 import {
   Users,
   Dog,
-  Database,
   Search,
   Plus,
   Edit3,
@@ -39,7 +39,9 @@ import {
   GripVertical,
   Tag,
   Warehouse,
-  BookOpen
+  BookOpen,
+  Printer,
+  GitMerge
 } from 'lucide-react';
 
 export const MasterDataModule: React.FC = () => {
@@ -58,10 +60,12 @@ export const MasterDataModule: React.FC = () => {
     addCustomer,
     updateCustomer,
     deleteCustomer,
+    mergeCustomers,
     pets = [],
     addPet,
     updatePet,
     deletePet,
+    mergePets,
     services = [],
     addService,
     updateService,
@@ -106,9 +110,65 @@ export const MasterDataModule: React.FC = () => {
     deleteCoA,
     clinicVisits = [],
     soapNotes = [],
+    medicalRecords = [],
+    vacHistories = [],
+    labTests = [],
+    invoices = [],
     branches = []
   } = useData();
   const { addToast } = useToast();
+  const [showDeduplicationModal, setShowDeduplicationModal] = useState(false);
+  const [dedupInitialMode, setDedupInitialMode] = useState<'customers' | 'pets'>('customers');
+
+  const duplicateCustomerGroups = React.useMemo(
+    () => detectDuplicateCustomers(customers),
+    [customers]
+  );
+  const duplicatePetGroups = React.useMemo(
+    () => detectDuplicatePets(pets, customers),
+    [pets, customers]
+  );
+
+  const handleCreateSampleDuplicates = () => {
+    const baseCustomer = customers[0];
+    if (baseCustomer) {
+      const normalizedDigits = baseCustomer.phone.replace(/\D/g, '');
+      const altPhone = normalizedDigits.startsWith('08')
+        ? `+62 ${normalizedDigits.slice(1, 4)}-${normalizedDigits.slice(4, 8)}-${normalizedDigits.slice(8)}`
+        : baseCustomer.phone;
+      addCustomer({
+        name: `${baseCustomer.name}`,
+        phone: altPhone,
+        email: baseCustomer.email || 'duplikat.klinik@email.com',
+        address: baseCustomer.address || 'Jl. Kemang Raya No. 12B, Jakarta Selatan',
+        nik: baseCustomer.nik || '3174051209880002',
+        membershipTier: 'Silver',
+        loyaltyPoints: 185,
+        totalSpent: 950000,
+      });
+    }
+    const basePet = pets[0];
+    if (basePet) {
+      addPet({
+        customerId: basePet.customerId,
+        ownerName: basePet.ownerName,
+        name: basePet.name,
+        species: basePet.species,
+        breed: basePet.breed,
+        gender: basePet.gender,
+        age: basePet.age,
+        weight: Number((basePet.weight + 0.3).toFixed(1)),
+        microchip: basePet.microchip,
+        allergies: basePet.allergies && basePet.allergies !== 'Tidak Ada'
+          ? `${basePet.allergies}, Alergi Ketoconazole`
+          : 'Alergi Amoxicillin, Sensitif Protein Ayam',
+        sterilized: basePet.sterilized,
+        bloodType: basePet.bloodType || 'DEA 1.1+',
+        photoUrl: basePet.photoUrl,
+        notes: 'Entri duplikat dari registrasi kunjungan darurat malam.',
+      });
+    }
+  };
 
   // Satu titik gerbang untuk semua aksi hapus di Master Data: cek izin grup
   // dulu (bukan cuma window.confirm) sebelum benar-benar menjalankan hapus.
@@ -935,256 +995,456 @@ export const MasterDataModule: React.FC = () => {
     t.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const [showQuickPrintModal, setShowQuickPrintModal] = useState(false);
+
+  const masterTabs = [
+    { id: 'customers' as const, label: 'Data Pelanggan', subtitle: 'Profil pemilik hewan, kontak WhatsApp, membership tier & poin loyalitas', icon: Users, count: (customers || []).length },
+    { id: 'pets' as const, label: 'Pasien Hewan', subtitle: 'Identitas pasien microchip, ras, alergi, status sterilisasi & paspor digital', icon: Dog, count: (pets || []).length },
+    { id: 'services' as const, label: 'Katalog Layanan', subtitle: 'Daftar tarif konsultasi, vaksinasi, tindakan medis, grooming & rawat inap', icon: Briefcase, count: (services || []).length },
+    { id: 'staff' as const, label: 'Dokter & Staff', subtitle: 'Tenaga medis, nomor SIP dokter, departemen, jadwal shift & komisi', icon: UserCheck, count: (employees || []).length },
+    { id: 'suppliers' as const, label: 'Pemasok / Supplier', subtitle: 'Distributor resmi obat farmasi, vaksin, pakan & perlengkapan klinik', icon: Truck, count: (suppliers || []).length },
+    { id: 'drugs' as const, label: 'Obat & Vaksin', subtitle: 'Master sediaan farmasi, stok minimum, nomor batch & tanggal kedaluwarsa', icon: Pill, count: (drugs || []).length },
+    { id: 'hotelRooms' as const, label: 'Kamar/Kandang Hotel', subtitle: 'Konfigurasi ruang boarding, kapasitas harian & tarif sewa', icon: Hotel, count: (hotelRooms || []).length },
+    { id: 'groomingPackages' as const, label: 'Paket Grooming', subtitle: 'Standar paket salon perawatan berdasarkan ukuran hewan & durasi', icon: Scissors, count: (groomingPackages || []).length },
+    { id: 'ambulanceUnits' as const, label: 'Armada Ambulance', subtitle: 'Unit kendaraan darurat, kru bertugas & kesiapan peralatan medis', icon: Ambulance, count: (ambulanceUnits || []).length },
+    { id: 'eFormTemplates' as const, label: 'Template E-Form', subtitle: 'Formulir persetujuan tindakan medis, operasi & rawat inap digital', icon: FileSignature, count: (eFormTemplates || []).length },
+    { id: 'categoriesWarehouses' as const, label: 'Kategori & Gudang', subtitle: 'Pengelompokan kategori produk inventaris & lokasi titik penyimpanan', icon: Tag, count: (productCategories || []).length + (warehouses || []).length },
+    { id: 'coa' as const, label: 'Chart of Accounts', subtitle: 'Struktur kode akun buku besar untuk penjurnalan & laporan keuangan', icon: BookOpen, count: (chartOfAccounts || []).length }
+  ];
+
+  const currentTabMeta = masterTabs.find((t) => t.id === activeTab) || masterTabs[0];
+
   return (
-    <div className="space-y-6">
-      {/* Compact & Informative SystemNotificationHeader */}
-      <SystemNotificationHeader
-        icon={Database}
-        title="Master Data Operations Center"
-        description="Database Terpusat: Pelanggan, Pasien Microchip, Katalog Tarif Layanan, Dokter/Staff & Pemasok."
-        badges={[
-          { label: 'Master Data Terpadu', variant: 'gold' },
-          { label: `${customers.length} Pelanggan`, variant: 'blue' },
-          { label: `${pets.length} Pasien`, variant: 'purple' },
-          { label: `${services.length} Tarif Layanan`, variant: 'emerald' }
-        ]}
-        actions={
-          <div className="flex items-center gap-2">
+    <div className="space-y-5">
+      {/* Retouched Master Data Header & Integrated Toolbar */}
+      <div className="rounded-xl border border-[#E1D6BE] bg-[#FFFDF9] shadow-xs">
+        {/* Top Bar: Category Navigation Strip + Icon-Only Action Buttons with Tooltips */}
+        <div className="px-3 sm:px-4 py-2.5 bg-gradient-to-r from-[#1B2A45] via-[#16233B] to-[#101A2C] border-b border-[#B8905A]/30 rounded-t-xl flex items-center justify-between gap-3">
+          {/* Category Navigation Strip */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-navy min-w-0 flex-1 pb-1">
+            {masterTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  title={`${tab.label} (${tab.count})`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+                    isActive
+                      ? 'bg-[#B8905A] text-[#101A2C] font-bold shadow-2xs'
+                      : 'text-[#EDE6D6]/80 hover:bg-[#1B2A45] hover:text-[#FFFDF9]'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span>{tab.label}</span>
+                  <span className={`font-mono text-[11px] tabular-nums ${isActive ? 'text-[#101A2C]/80 font-bold' : 'text-[#D9B98A]/80'}`}>
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Icon-Only Action Buttons with Tooltips */}
+          <div className="flex items-center gap-1.5 shrink-0 pl-2 border-l border-[#B8905A]/25">
+            <button
+              type="button"
+              onClick={() => setShowQuickPrintModal(true)}
+              title="Quick Print"
+              aria-label="Quick Print"
+              className="group relative w-8 h-8 rounded-lg bg-[#101A2C]/90 hover:bg-[#101A2C] text-[#D9B98A] hover:text-[#FFFDF9] border border-[#B8905A]/40 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            >
+              <Printer className="w-4 h-4 text-[#B8905A] group-hover:text-[#FFFDF9] transition-colors" />
+              <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                Quick Print
+              </span>
+            </button>
+
             {activeTab === 'customers' && (
               <>
                 <button
-                  onClick={handleExportCustomersCSV}
-                  className="px-3 py-1.5 bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#101A2C]/80 font-bold rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  type="button"
+                  onClick={() => {
+                    setDedupInitialMode('customers');
+                    setShowDeduplicationModal(true);
+                  }}
+                  title="Pembersihan Data Duplikat (Deduplication)"
+                  aria-label="Pembersihan Data Duplikat (Deduplication)"
+                  className="group relative w-8 h-8 bg-[#101A2C]/90 text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#101A2C] hover:text-[#FFFDF9] rounded-lg transition-colors flex items-center justify-center cursor-pointer shrink-0"
                 >
-                  <Download className="w-3.5 h-3.5" /> Export CSV
+                  <GitMerge className="w-4 h-4 text-[#B8905A] group-hover:text-[#FFFDF9] transition-colors" />
+                  {duplicateCustomerGroups.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-amber-500 text-[#101A2C] text-[9px] font-extrabold flex items-center justify-center shadow-xs">
+                      {duplicateCustomerGroups.length}
+                    </span>
+                  )}
+                  <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Deduplikasi Pelanggan ({duplicateCustomerGroups.length})
+                  </span>
                 </button>
                 <button
+                  type="button"
+                  onClick={handleExportCustomersCSV}
+                  title="Export CSV"
+                  aria-label="Export CSV"
+                  className="group relative w-8 h-8 bg-[#101A2C]/90 text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#101A2C] hover:text-[#FFFDF9] rounded-lg transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                >
+                  <Download className="w-4 h-4" />
+                  <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Export CSV
+                  </span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setEditingCustomer(null);
                     resetCustomerForm();
                     setShowAddCustomerModal(true);
                   }}
-                  className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] font-extrabold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Tambah Pelanggan"
+                  aria-label="Tambah Pelanggan"
+                  className="group relative w-8 h-8 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] rounded-lg shadow-2xs transition-all flex items-center justify-center cursor-pointer shrink-0"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Tambah Pelanggan
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Tambah Pelanggan
+                  </span>
                 </button>
               </>
             )}
 
             {activeTab === 'pets' && (
-              <button
-                onClick={() => {
-                  setEditingPet(null);
-                  resetPetForm();
-                  setShowAddPetModal(true);
-                }}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] font-extrabold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" /> Registrasi Pasien
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDedupInitialMode('pets');
+                    setShowDeduplicationModal(true);
+                  }}
+                  title="Pembersihan Data Duplikat Pasien (Deduplication)"
+                  aria-label="Pembersihan Data Duplikat Pasien (Deduplication)"
+                  className="group relative w-8 h-8 bg-[#101A2C]/90 text-[#D9B98A] border border-[#B8905A]/40 hover:bg-[#101A2C] hover:text-[#FFFDF9] rounded-lg transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                >
+                  <GitMerge className="w-4 h-4 text-[#B8905A] group-hover:text-[#FFFDF9] transition-colors" />
+                  {duplicatePetGroups.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-amber-500 text-[#101A2C] text-[9px] font-extrabold flex items-center justify-center shadow-xs">
+                      {duplicatePetGroups.length}
+                    </span>
+                  )}
+                  <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Deduplikasi Pasien ({duplicatePetGroups.length})
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingPet(null);
+                    resetPetForm();
+                    setShowAddPetModal(true);
+                  }}
+                  title="Registrasi Pasien"
+                  aria-label="Registrasi Pasien"
+                  className="group relative w-8 h-8 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] rounded-lg shadow-2xs transition-all flex items-center justify-center cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Registrasi Pasien
+                  </span>
+                </button>
+              </>
             )}
 
             {activeTab === 'services' && (
               <button
+                type="button"
                 onClick={() => {
                   setEditingService(null);
                   resetServiceForm();
                   setShowAddServiceModal(true);
                 }}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] font-extrabold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Tambah Layanan"
+                aria-label="Tambah Layanan"
+                className="group relative w-8 h-8 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] rounded-lg shadow-2xs transition-all flex items-center justify-center cursor-pointer shrink-0"
               >
-                <Plus className="w-3.5 h-3.5" /> Tambah Layanan
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Tambah Layanan
+                </span>
               </button>
             )}
 
             {activeTab === 'staff' && (
               <button
+                type="button"
                 onClick={() => {
                   setEditingStaff(null);
                   resetStaffForm();
                   setShowAddStaffModal(true);
                 }}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] font-extrabold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Tambah Dokter/Staff"
+                aria-label="Tambah Dokter/Staff"
+                className="group relative w-8 h-8 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] rounded-lg shadow-2xs transition-all flex items-center justify-center cursor-pointer shrink-0"
               >
-                <Plus className="w-3.5 h-3.5" /> Tambah Dokter/Staff
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Tambah Dokter/Staff
+                </span>
               </button>
             )}
 
             {activeTab === 'suppliers' && (
               <button
+                type="button"
                 onClick={() => {
                   setEditingSupplier(null);
                   resetSupplierForm();
                   setShowAddSupplierModal(true);
                 }}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] font-extrabold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Tambah Supplier"
+                aria-label="Tambah Supplier"
+                className="group relative w-8 h-8 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] rounded-lg shadow-2xs transition-all flex items-center justify-center cursor-pointer shrink-0"
               >
-                <Plus className="w-3.5 h-3.5" /> Tambah Supplier
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Tambah Supplier
+                </span>
               </button>
             )}
 
             {activeTab === 'drugs' && (
               <button
+                type="button"
                 onClick={() => {
                   resetDrugForm();
                   setShowAddDrugModal(true);
                 }}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] font-extrabold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Tambah Obat/Vaksin"
+                aria-label="Tambah Obat/Vaksin"
+                className="group relative w-8 h-8 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] rounded-lg shadow-2xs transition-all flex items-center justify-center cursor-pointer shrink-0"
               >
-                <Plus className="w-3.5 h-3.5" /> Tambah Obat/Vaksin
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Tambah Obat/Vaksin
+                </span>
               </button>
             )}
 
             {activeTab === 'hotelRooms' && (
               <button
+                type="button"
                 onClick={() => {
                   resetHotelRoomForm();
                   setShowAddHotelRoomModal(true);
                 }}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] font-extrabold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Tambah Kamar/Kandang"
+                aria-label="Tambah Kamar/Kandang"
+                className="group relative w-8 h-8 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] rounded-lg shadow-2xs transition-all flex items-center justify-center cursor-pointer shrink-0"
               >
-                <Plus className="w-3.5 h-3.5" /> Tambah Kamar/Kandang
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Tambah Kamar/Kandang
+                </span>
               </button>
             )}
 
             {activeTab === 'groomingPackages' && (
               <button
+                type="button"
                 onClick={() => {
                   resetGroomingPackageForm();
                   setShowAddGroomingPackageModal(true);
                 }}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] font-extrabold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Tambah Paket Grooming"
+                aria-label="Tambah Paket Grooming"
+                className="group relative w-8 h-8 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] rounded-lg shadow-2xs transition-all flex items-center justify-center cursor-pointer shrink-0"
               >
-                <Plus className="w-3.5 h-3.5" /> Tambah Paket Grooming
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Tambah Paket Grooming
+                </span>
               </button>
             )}
 
             {activeTab === 'ambulanceUnits' && (
               <button
+                type="button"
                 onClick={() => {
                   resetAmbulanceUnitForm();
                   setShowAddAmbulanceUnitModal(true);
                 }}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] font-extrabold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Tambah Armada"
+                aria-label="Tambah Armada"
+                className="group relative w-8 h-8 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] rounded-lg shadow-2xs transition-all flex items-center justify-center cursor-pointer shrink-0"
               >
-                <Plus className="w-3.5 h-3.5" /> Tambah Armada
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Tambah Armada
+                </span>
               </button>
             )}
 
             {activeTab === 'eFormTemplates' && (
               <button
+                type="button"
                 onClick={() => {
                   resetEFormTemplateForm();
                   setShowAddEFormTemplateModal(true);
                 }}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-[#B8905A] to-[#9E7848] text-[#101A2C] font-extrabold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Tambah Template"
+                aria-label="Tambah Template"
+                className="group relative w-8 h-8 bg-gradient-to-r from-[#B8905A] to-[#9E7848] hover:brightness-105 text-[#101A2C] rounded-lg shadow-2xs transition-all flex items-center justify-center cursor-pointer shrink-0"
               >
-                <Plus className="w-3.5 h-3.5" /> Tambah Template
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span className="pointer-events-none absolute -bottom-8 right-0 z-30 whitespace-nowrap rounded-md bg-[#101A2C] px-2 py-1 text-[11px] font-semibold text-[#FFFDF9] shadow-md border border-[#B8905A]/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Tambah Template
+                </span>
               </button>
             )}
           </div>
-        }
-        tabs={[
-          { id: 'customers', label: 'Data Pelanggan', icon: Users, count: (customers || []).length },
-          { id: 'pets', label: 'Pasien Hewan', icon: Dog, count: (pets || []).length },
-          { id: 'services', label: 'Katalog Layanan', icon: Briefcase, count: (services || []).length },
-          { id: 'staff', label: 'Dokter & Staff', icon: UserCheck, count: (employees || []).length },
-          { id: 'suppliers', label: 'Pemasok / Supplier', icon: Truck, count: (suppliers || []).length },
-          { id: 'drugs', label: 'Obat & Vaksin', icon: Pill, count: (drugs || []).length },
-          { id: 'hotelRooms', label: 'Kamar/Kandang Hotel', icon: Hotel, count: (hotelRooms || []).length },
-          { id: 'groomingPackages', label: 'Paket Grooming', icon: Scissors, count: (groomingPackages || []).length },
-          { id: 'ambulanceUnits', label: 'Armada Ambulance', icon: Ambulance, count: (ambulanceUnits || []).length },
-          { id: 'eFormTemplates', label: 'Template E-Form', icon: FileSignature, count: (eFormTemplates || []).length },
-          { id: 'categoriesWarehouses', label: 'Kategori & Gudang', icon: Tag, count: (productCategories || []).length + (warehouses || []).length },
-          { id: 'coa', label: 'Chart of Accounts', icon: BookOpen, count: (chartOfAccounts || []).length }
-        ]}
-        activeTab={activeTab}
-        onTabChange={(tabId) => setActiveTab(tabId as any)}
-      />
-
-      {/* Search & Secondary Filter Bar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-center">
-        <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 text-[#1B2A45] absolute left-3 top-3" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Cari kata kunci: nama, no. telepon, microchip, NIK, dsb..."
-            className="w-full bg-white border border-[#E1D6BE] rounded-lg pl-9 pr-4 py-2.5 text-xs text-[#1B2A45] focus:outline-none focus:border-[#1B2A45] shadow-xs font-medium"
-          />
         </div>
 
-        {activeTab === 'customers' && (
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-bold text-[#1B2A45]">Filter Tier:</span>
-            <select
-              value={tierFilter}
-              onChange={(e) => setTierFilter(e.target.value)}
-              className="bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none"
-            >
-              <option value="All">Semua Tier</option>
-              <option value="Platinum">Platinum</option>
-              <option value="Gold">Gold</option>
-              <option value="Silver">Silver</option>
-            </select>
-          </div>
-        )}
-
-        {activeTab === 'pets' && (
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-[#1B2A45]">Spesies:</span>
-              <select
-                value={speciesFilter}
-                onChange={(e) => setSpeciesFilter(e.target.value)}
-                className="bg-white border border-[#E1D6BE] rounded-lg px-2.5 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none"
+        {/* Search & Contextual Filter Toolbar */}
+        <div className="p-3 sm:px-4 bg-[#FFFDF9] flex flex-col sm:flex-row gap-2.5 items-center justify-between">
+          <div className="relative flex-1 w-full">
+            <Search className="w-4 h-4 text-[#6B6656] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={`Cari di ${currentTabMeta.label.toLowerCase()} (nama, no. telepon, kode, microchip, NIK)...`}
+              className="w-full bg-[#F6F1E6]/60 border border-[#E1D6BE] rounded-lg pl-9 pr-8 py-2 text-xs text-[#1B2A45] placeholder:text-[#6B6656] focus:outline-none focus:border-[#1B2A45] focus:bg-white transition-colors font-medium"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#6B6656] hover:text-[#1B2A45] cursor-pointer"
+                title="Bersihkan pencarian"
               >
-                <option value="All">Semua Spesies</option>
-                <option value="Anjing">Anjing</option>
-                <option value="Kucing">Kucing</option>
-                <option value="Kelinci">Kelinci</option>
-                <option value="Hamster">Hamster</option>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {activeTab === 'customers' && (
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <span className="text-xs font-semibold text-[#6B6656] whitespace-nowrap">Tier:</span>
+              <select
+                value={tierFilter}
+                onChange={(e) => setTierFilter(e.target.value)}
+                className="bg-[#F6F1E6]/60 border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none focus:border-[#1B2A45]"
+              >
+                <option value="All">Semua Tier</option>
+                <option value="Platinum">Platinum</option>
+                <option value="Gold">Gold</option>
+                <option value="Silver">Silver</option>
               </select>
             </div>
+          )}
 
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-[#1B2A45]">Triage:</span>
+          {activeTab === 'pets' && (
+            <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-[#6B6656] whitespace-nowrap">Spesies:</span>
+                <select
+                  value={speciesFilter}
+                  onChange={(e) => setSpeciesFilter(e.target.value)}
+                  className="bg-[#F6F1E6]/60 border border-[#E1D6BE] rounded-lg px-2.5 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none focus:border-[#1B2A45]"
+                >
+                  <option value="All">Semua Spesies</option>
+                  <option value="Anjing">Anjing</option>
+                  <option value="Kucing">Kucing</option>
+                  <option value="Kelinci">Kelinci</option>
+                  <option value="Hamster">Hamster</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-[#6B6656] whitespace-nowrap">Triage:</span>
+                <select
+                  value={triageFilter}
+                  onChange={(e) => setTriageFilter(e.target.value)}
+                  className="bg-[#F6F1E6]/60 border border-[#E1D6BE] rounded-lg px-2.5 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none focus:border-[#1B2A45]"
+                >
+                  <option value="All">Semua Tingkat Triage</option>
+                  <option value="P1">P1 - Kritis ({triageCounts.P1})</option>
+                  <option value="P2">P2 - Sangat Mendesak ({triageCounts.P2})</option>
+                  <option value="P3">P3 - Semi-Mendesak ({triageCounts.P3})</option>
+                  <option value="P4">P4 - Rutin ({triageCounts.P4})</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'services' && (
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <span className="text-xs font-semibold text-[#6B6656] whitespace-nowrap">Kategori:</span>
               <select
-                value={triageFilter}
-                onChange={(e) => setTriageFilter(e.target.value)}
-                className="bg-white border border-[#E1D6BE] rounded-lg px-2.5 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none"
+                value={serviceCatFilter}
+                onChange={(e) => setServiceCatFilter(e.target.value)}
+                className="bg-[#F6F1E6]/60 border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none focus:border-[#1B2A45]"
               >
-                <option value="All">Semua Tingkat Triage</option>
-                <option value="P1">🔴 P1 - Kritis / Gawat Darurat ({triageCounts.P1})</option>
-                <option value="P2">🟠 P2 - Sangat Mendesak ({triageCounts.P2})</option>
-                <option value="P3">🟡 P3 - Semi-Mendesak ({triageCounts.P3})</option>
-                <option value="P4">🟢 P4 - Rutin / Non-Urgent ({triageCounts.P4})</option>
+                <option value="All">Semua Kategori</option>
+                <option value="Konsultasi">Konsultasi</option>
+                <option value="Vaksinasi">Vaksinasi</option>
+                <option value="Grooming">Grooming</option>
+                <option value="Pet Hotel">Pet Hotel</option>
+                <option value="Lab & Radiologi">Lab & Radiologi</option>
+                <option value="Bedah & Tindakan">Bedah & Tindakan</option>
+                <option value="Ambulance">Ambulance</option>
               </select>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'services' && (
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-bold text-[#1B2A45]">Filter Kategori:</span>
-            <select
-              value={serviceCatFilter}
-              onChange={(e) => setServiceCatFilter(e.target.value)}
-              className="bg-white border border-[#E1D6BE] rounded-lg px-3 py-2 text-xs text-[#1B2A45] font-semibold focus:outline-none"
-            >
-              <option value="All">Semua Kategori</option>
-              <option value="Konsultasi">Konsultasi</option>
-              <option value="Vaksinasi">Vaksinasi</option>
-              <option value="Grooming">Grooming</option>
-              <option value="Pet Hotel">Pet Hotel</option>
-              <option value="Lab & Radiologi">Lab & Radiologi</option>
-              <option value="Bedah & Tindakan">Bedah & Tindakan</option>
-              <option value="Ambulance">Ambulance</option>
-            </select>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      <QuickPrintConfigModal
+        isOpen={showQuickPrintModal}
+        onClose={() => setShowQuickPrintModal(false)}
+        moduleTitle={`Master Data — ${currentTabMeta.label}`}
+        moduleSubtitle={currentTabMeta.subtitle}
+        activeTabLabel={currentTabMeta.label}
+      />
+
+      {/* Banner Deteksi Duplikat Rekam Medis & Pelanggan */}
+      {(activeTab === 'customers' || activeTab === 'pets') &&
+        (duplicateCustomerGroups.length > 0 || duplicatePetGroups.length > 0) && (
+          <div className="bg-amber-50/90 border border-amber-300 rounded-xl px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+            <div className="flex items-center gap-2.5 text-xs text-amber-950">
+              <div className="w-7 h-7 rounded-lg bg-amber-200/80 text-amber-900 flex items-center justify-center shrink-0">
+                <GitMerge className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="font-bold">
+                  Terdeteksi Potensi Duplikasi Master Data (
+                  {duplicateCustomerGroups.length} grup pelanggan, {duplicatePetGroups.length} grup pasien hewan)
+                </span>
+                <p className="text-[11px] text-amber-800">
+                  Gabungkan profil ganda untuk menyatukan histori kunjungan, SOAP, vaksinasi, alergi obat, dan invoice ke satu rekam medis tunggal.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDedupInitialMode(
+                  activeTab === 'pets' && duplicatePetGroups.length > 0
+                    ? 'pets'
+                    : duplicateCustomerGroups.length > 0
+                    ? 'customers'
+                    : 'pets'
+                );
+                setShowDeduplicationModal(true);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-[#1B2A45] hover:bg-[#101A2C] text-[#FFFDF9] text-xs font-bold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+            >
+              <GitMerge className="w-3.5 h-3.5 text-[#D9B98A]" />
+              Tinjau &amp; Gabungkan Duplikat
+            </button>
+          </div>
+        )}
 
       {/* Tab 1: Customers Table */}
       {activeTab === 'customers' && (
@@ -3608,6 +3868,26 @@ export const MasterDataModule: React.FC = () => {
           soapNote={selectedPetForTriageModal.soapNote}
         />
       )}
+
+      {/* Deduplication & Medical Record Consolidation Modal */}
+      <DeduplicationModal
+        isOpen={showDeduplicationModal}
+        onClose={() => setShowDeduplicationModal(false)}
+        initialMode={dedupInitialMode}
+        customers={customers}
+        pets={pets}
+        clinicVisits={clinicVisits}
+        soapNotes={soapNotes}
+        medicalRecords={medicalRecords}
+        vacHistories={vacHistories}
+        labTests={labTests}
+        invoices={invoices}
+        onMergeCustomers={mergeCustomers}
+        onMergePets={mergePets}
+        onCreateSampleDuplicates={handleCreateSampleDuplicates}
+        onSuccessToast={(msg) => addToast(msg, 'success')}
+        onErrorToast={(msg) => addToast(msg, 'error')}
+      />
     </div>
   );
 };

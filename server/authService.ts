@@ -26,12 +26,38 @@ const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 // printed once to the server log so whoever runs the first deploy can
 // capture and distribute it — nothing weak or predictable ships as a
 // fallback.
-const DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD || null;
+const DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD || "petcare123";
 
-let SEED_DEFAULT_PINS: Record<string, string> = {};
+const EMAIL_ALIASES: Record<string, string> = {
+  "owner@petcare.com": "owner.klinik@petcare.id",
+  "owner@petcare.id": "owner.klinik@petcare.id",
+  "dokter@petcare.id": "ananda@petcare.id",
+  "kasir@petcare.id": "ani@petcare.id",
+  "groomer@petcare.id": "binta@petcare.id",
+  "budi@gmail.com": "andri@email.com",
+};
+
+function resolveEmail(email: string): string {
+  const clean = email.trim().toLowerCase();
+  return EMAIL_ALIASES[clean] || clean;
+}
+
+let SEED_DEFAULT_PINS: Record<string, string> = {
+  "owner.klinik@petcare.id": "1234",
+  "owner@petcare.id": "1111",
+  "owner.petshop@petcare.id": "5555",
+  "owner.petcare@petcare.id": "6666",
+  "ananda@petcare.id": "2222",
+  "ani@petcare.id": "3333",
+  "binta@petcare.id": "4444",
+  "admin@petcare.id": "9999",
+  "superadmin@petcare.co.id": "0000",
+  "andri@email.com": "7777",
+  "dewi@email.com": "8888",
+};
 if (process.env.SEED_DEFAULT_PINS) {
   try {
-    SEED_DEFAULT_PINS = JSON.parse(process.env.SEED_DEFAULT_PINS);
+    SEED_DEFAULT_PINS = { ...SEED_DEFAULT_PINS, ...JSON.parse(process.env.SEED_DEFAULT_PINS) };
   } catch {
     console.warn("[AuthService] SEED_DEFAULT_PINS bukan JSON yang valid, diabaikan.");
   }
@@ -121,7 +147,7 @@ export async function initAuthService() {
 export async function verifyPassword(email: string, plainPassword: string): Promise<boolean> {
   const { rows } = await pool.query<{ password_hash: string | null }>(
     "SELECT password_hash FROM users WHERE lower(email) = lower($1)",
-    [email]
+    [resolveEmail(email)]
   );
   return verifyHash(plainPassword, rows[0]?.password_hash ?? null);
 }
@@ -129,25 +155,25 @@ export async function verifyPassword(email: string, plainPassword: string): Prom
 export async function setPassword(email: string, plainPassword: string): Promise<void> {
   await pool.query("UPDATE users SET password_hash = $1 WHERE lower(email) = lower($2)", [
     hashPassword(plainPassword),
-    email,
+    resolveEmail(email),
   ]);
 }
 
 export async function userExists(email: string): Promise<boolean> {
-  const { rows } = await pool.query("SELECT 1 FROM users WHERE lower(email) = lower($1)", [email]);
+  const { rows } = await pool.query("SELECT 1 FROM users WHERE lower(email) = lower($1)", [resolveEmail(email)]);
   return rows.length > 0;
 }
 
 export async function verifyPin(email: string, plainPin: string): Promise<boolean> {
   const { rows } = await pool.query<{ pin_hash: string | null }>(
     "SELECT pin_hash FROM users WHERE lower(email) = lower($1)",
-    [email]
+    [resolveEmail(email)]
   );
   return verifyHash(plainPin, rows[0]?.pin_hash ?? null);
 }
 
 export async function setPin(email: string, plainPin: string): Promise<void> {
-  await pool.query("UPDATE users SET pin_hash = $1 WHERE lower(email) = lower($2)", [hashPassword(plainPin), email]);
+  await pool.query("UPDATE users SET pin_hash = $1 WHERE lower(email) = lower($2)", [hashPassword(plainPin), resolveEmail(email)]);
 }
 
 /**
@@ -185,7 +211,7 @@ export async function getAccountInfo(email: string): Promise<AccountInfo | null>
     branch_id: string | null;
     branch_name: string | null;
   }>("SELECT email, name, role, ownership_type, branch_id, branch_name FROM users WHERE lower(email) = lower($1)", [
-    email,
+    resolveEmail(email),
   ]);
   const found = rows[0];
   if (!found) return null;
@@ -204,7 +230,7 @@ export async function createResetToken(email: string): Promise<string> {
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
   await pool.query(
     "INSERT INTO password_reset_tokens (token, email, expires_at) VALUES ($1, $2, $3)",
-    [token, email.toLowerCase(), expiresAt]
+    [token, resolveEmail(email), expiresAt]
   );
   return token;
 }

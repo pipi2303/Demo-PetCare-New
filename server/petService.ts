@@ -98,3 +98,141 @@ export async function deletePet(id: string) {
     await client.query("UPDATE customers SET pet_count = GREATEST(0, pet_count - 1) WHERE id = $1", [currentRows[0].customer_id]);
   });
 }
+
+function consolidateTextList(values: (string | null | undefined)[], ignoreTokens: string[] = []): string | null {
+  const ignoreSet = new Set(ignoreTokens.map((t) => t.toLowerCase()));
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of values) {
+    if (!raw) continue;
+    for (const part of raw.split(/[,;]+/)) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      const lower = trimmed.toLowerCase();
+      if (ignoreSet.has(lower)) continue;
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        result.push(trimmed);
+      }
+    }
+  }
+  return result.length > 0 ? result.join(", ") : null;
+}
+
+export async function mergePets(primaryId: string, duplicateIds: string[]) {
+  const cleanDupIds = Array.from(new Set(duplicateIds.filter((id) => id && id !== primaryId)));
+  if (!primaryId || cleanDupIds.length === 0) {
+    throw new Error("Pilih minimal 1 rekam pasien hewan duplikat untuk digabungkan.");
+  }
+
+  return withTransaction(async (client) => {
+    const { rows: primaryRows } = await client.query(
+      "SELECT * FROM pets WHERE id = $1 AND deleted_at IS NULL",
+      [primaryId]
+    );
+    const primary = primaryRows[0];
+    if (!primary) throw new Error("Data pasien hewan utama tidak ditemukan.");
+
+    const { rows: dupRows } = await client.query(
+      "SELECT * FROM pets WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL",
+      [cleanDupIds]
+    );
+    if (dupRows.length === 0) {
+      const { rows: custRows } = await client.query("SELECT name FROM customers WHERE id = $1", [primary.customer_id]);
+      return toPet(primary, custRows[0]?.name);
+    }
+
+    const allRows = [primary, ...dupRows];
+    const mergedBreed = allRows.find((r) => r.breed)?.breed ?? null;
+    const mergedColor = allRows.find((r) => r.color)?.color ?? null;
+    const mergedGender = allRows.find((r) => r.gender)?.gender ?? null;
+    const mergedSterilized = allRows.some((r) => Boolean(r.sterilized));
+    const mergedBirthDate = allRows.find((r) => r.birth_date)?.birth_date ?? null;
+    const mergedWeight = Number(primary.weight_kg) > 0
+      ? primary.weight_kg
+      : allRows.find((r) => Number(r.weight_kg) > 0)?.weight_kg ?? 0;
+    const mergedMicrochip = allRows.find((r) => r.microchip_no)?.microchip_no ?? null;
+    const mergedPhotoUrl = allRows.find((r) => r.photo_url)?.photo_url ?? null;
+
+    // Consolidate allergies without losing any drug/food contraindications
+    const mergedAllergies =
+      consolidateTextList(
+        allRows.map((r) => r.allergies),
+        ["tidak ada", "none", "-", "nihil"]
+      ) || primary.allergies || null;
+
+    const mergedNotes = consolidateTextList(allRows.map((r) => r.notes)) || primary.notes || null;
+
+    // Re-assign all clinical, medical, and operational records to primaryId
+    const petTablesWithPetName = [
+      "clinic_visits",
+      "soap_notes",
+      "medical_records",
+      "inpatients",
+      "discharge_notes",
+      "lab_tests",
+      "surgical_procedures",
+      "vac_schedules",
+      "vac_histories",
+      "deworming_records",
+      "pre_consult_forms",
+      "referral_letters",
+      "visit_surveys",
+      "care_plans",
+      "doc_bookings",
+      "grooming_sessions",
+      "hotel_reservations",
+      "informed_consents",
+      "patient_photos",
+      "ambulance_requests",
+    ];
+
+    for (const table of petTablesWithPetName) {
+      await client.query(
+        `UPDATE ${table} SET pet_id = $1, pet_name = $2 WHERE pet_id = ANY($3::uuid[])`,
+        [primaryId, primary.name, cleanDupIds]
+      );
+    }
+
+    // Soft-delete duplicate pets
+    await client.query(
+      "UPDATE pets SET deleted_at = now() WHERE id = ANY($1::uuid[])",
+      [cleanDupIds]
+    );
+
+    // Recalculate pet_count for all affected customers
+    const affectedCustomerIds = Array.from(new Set(allRows.map((r) => r.customer_id)));
+    for (const custId of affectedCustomerIds) {
+      await client.query(
+        `UPDATE customers
+         SET pet_count = (SELECT COUNT(*)::int FROM pets WHERE customer_id = $1 AND deleted_at IS NULL)
+         WHERE id = $1`,
+        [custId]
+      );
+    }
+
+    const { rows: updatedRows } = await client.query(
+      `UPDATE pets
+       SET breed = $1, color = $2, gender = $3, sterilized = $4, birth_date = $5,
+           weight_kg = $6, microchip_no = $7, allergies = $8, notes = $9, photo_url = $10
+       WHERE id = $11 RETURNING *`,
+      [
+        mergedBreed,
+        mergedColor,
+        mergedGender,
+        mergedSterilized,
+        mergedBirthDate,
+        mergedWeight,
+        mergedMicrochip,
+        mergedAllergies,
+        mergedNotes,
+        mergedPhotoUrl,
+        primaryId,
+      ]
+    );
+
+    const { rows: customerRows } = await client.query("SELECT name FROM customers WHERE id = $1", [primary.customer_id]);
+    return toPet(updatedRows[0], customerRows[0]?.name);
+  });
+}
+

@@ -635,88 +635,46 @@ export const PetShopModule: React.FC = () => {
           { label: `${stockItems.length} Item Katalog`, variant: 'blue' },
           { label: `${customers.length} Member Loyalty`, variant: 'emerald' }
         ]}
+        tabs={[
+          { id: 'pos', label: 'Kasir POS & Katalog Produk', icon: ShoppingCart, count: stockItems.length },
+          { id: 'analytics', label: 'Visualisasi Penjualan Kategori', icon: BarChart3, badge: 'Chart' }
+        ]}
+        activeTab={currentView}
+        onTabChange={(tabId) => setCurrentView(tabId as any)}
         actions={
-          <div className="bg-[#101A2C] px-3 py-1.5 rounded-lg border border-[#B8905A]/40 text-xs flex items-center gap-2">
-            <ShoppingCart className="w-4 h-4 text-[#D9B98A]" />
-            <span className="font-bold text-[#FFFDF9]">{draft.cart.length} Item</span>
-            <span className="text-[#D9B98A] font-mono font-bold">
-              Rp {cartSubtotal.toLocaleString('id-ID')}
-            </span>
-          </div>
-        }
-      />
-
-      {/* View Switcher Tabs (Kasir POS vs Analisis Kategori Recharts) */}
-      <div className="bg-[#FFFDF9] rounded-xl border border-[#E1D6BE] p-1.5 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setCurrentView('pos')}
-            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              currentView === 'pos'
-                ? 'bg-[#1B2A45] text-[#FFFDF9] shadow-xs font-black'
-                : 'text-[#1B2A45]/70 hover:text-[#1B2A45] hover:bg-[#F6F1E6]'
-            }`}
-          >
-            <ShoppingCart className="w-4 h-4" />
-            <span>Kasir POS & Katalog Produk</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setCurrentView('analytics')}
-            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              currentView === 'analytics'
-                ? 'bg-[#B8905A] text-[#101A2C] shadow-xs font-black'
-                : 'text-[#1B2A45]/70 hover:text-[#1B2A45] hover:bg-[#F6F1E6]'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>Visualisasi Penjualan Kategori (Recharts)</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400 text-slate-900 font-extrabold uppercase ml-0.5">
-              Chart
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowSettlementModal(true)}
-            className="flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 cursor-pointer shadow-2xs"
-            title="Buka Formulir Rekonsiliasi & Tutup Shift Kasir (End of Shift)"
-          >
-            <Coins className="w-4 h-4 text-emerald-700" />
-            <span>Tutup Shift Kasir</span>
-          </button>
-        </div>
-
-        {/* Quick Cart Status & Actions in POS view */}
-        {currentView === 'pos' && (
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <>
             <button
               type="button"
               onClick={() => setShowBarcodeScannerModal(true)}
-              className="px-3 py-1.5 bg-gradient-to-r from-[#1B2A45] to-[#101A2C] hover:brightness-110 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              title="Scan Barcode Kamera"
+              className="bg-[#101A2C]"
             >
-              <Camera className="w-3.5 h-3.5 text-[#D9B98A]" />
+              <Camera className="w-4 h-4 text-[#D9B98A]" />
               <span>Scan Barcode Kamera</span>
             </button>
-
+            <button
+              type="button"
+              onClick={() => setShowSettlementModal(true)}
+              title="Tutup Shift Kasir"
+              className="from-emerald-700"
+            >
+              <Coins className="w-4 h-4 text-emerald-200" />
+              <span>Tutup Shift Kasir</span>
+            </button>
             {draft.cart.length > 0 && (
-              <>
-                <span className="text-xs text-[#6B6656]">
-                  {draft.cart.length} item
-                </span>
-                <button
-                  onClick={discardDraft}
-                  className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  <RotateCcw className="w-3 h-3" /> Kosongkan
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={discardDraft}
+                title={`Kosongkan Keranjang (${draft.cart.length} Item)`}
+                className="bg-rose-700"
+              >
+                <RotateCcw className="w-4 h-4 text-white" />
+                <span>Kosongkan Keranjang</span>
+              </button>
             )}
-          </div>
-        )}
-      </div>
+          </>
+        }
+      />
 
       {currentView === 'analytics' ? (
         <PetShopCategoryAnalytics onBackToPOS={() => setCurrentView('pos')} />

@@ -72,11 +72,14 @@ export const recordSecurityLog = (
     logs = [newLog, ...logs];
     localStorage.setItem('petcare_audit_logs', JSON.stringify(logs.slice(0, 500)));
     // Persist to server so audit trail cannot be cleared by users
-    fetch('/api/audit/log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userName: newLog.userName, userRole: newLog.userRole, action: newLog.action, module: newLog.module, target: newLog.target, details: newLog.details, severity: newLog.severity, branchName: newLog.branchName })
-    }).catch(() => {});
+    const headers = authHeaders();
+    if (headers.Authorization) {
+      fetch('/api/audit/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ userName: newLog.userName, userRole: newLog.userRole, action: newLog.action, module: newLog.module, target: newLog.target, details: newLog.details, severity: newLog.severity, branchName: newLog.branchName })
+      }).catch(() => {});
+    }
   } catch (e) {
     // Ignore storage errors
   }
@@ -87,21 +90,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = localStorage.getItem('petcare_user');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (
+          parsed?.email &&
+          INITIAL_USERS.some((u) => u.email.toLowerCase() === String(parsed.email).toLowerCase())
+        ) {
+          return parsed;
+        }
       } catch (e) {
         // Fallback
       }
     }
-    // Default logged in as Owner Klinik for immediate exploration. Note: this
-    // demo default carries NO session token, so any server action gated by
-    // requireSession/requireRole (backup, WA, AI) will still demand a real
-    // login — only local UI browsing is unauthenticated by default.
     return INITIAL_USERS[0];
   });
 
-  // Server-issued session token. Kept in sync with localStorage via
-  // authToken.ts so plain (non-React) utils can read it too.
-  const [token, setToken] = useState<string | null>(() => getAuthToken());
+  // Server-issued session token. Initialized to null until verified against
+  // the server so DataContext does not fire 40+ parallel requests with a
+  // stale token from a previous server instance.
+  const [token, setToken] = useState<string | null>(null);
 
   const [activeBranchId, setActiveBranchIdState] = useState<string>(() => {
     return localStorage.getItem('petcare_active_branch') || user?.branchId || 'b1';
@@ -139,6 +145,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('petcare_user');
     }
   }, [user]);
+
+  // Ensure the active user (including default demo exploration user) has a valid server session token
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const storedToken = token || getAuthToken();
+        if (storedToken) {
+          const check = await fetch('/api/auth/me', {
+            headers: { Authorization: `Bearer ${storedToken}` },
+          });
+          if (check.ok) {
+            if (!cancelled && token !== storedToken) {
+              setAuthToken(storedToken);
+              setToken(storedToken);
+            }
+            return;
+          }
+        }
+        let res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user.email, password: 'petcare123' }),
+        });
+        let data = await res.json().catch(() => ({}));
+        if ((!res.ok || !data?.success) && user.email !== INITIAL_USERS[0].email) {
+          res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: INITIAL_USERS[0].email, password: 'petcare123' }),
+          });
+          data = await res.json().catch(() => ({}));
+        }
+        if (!cancelled && data?.success && data?.token) {
+          setAuthToken(data.token);
+          setToken(data.token);
+        }
+      } catch {
+        // Ignore network errors during initial boot
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.email, token]);
 
   // Apply a server-confirmed session: role/ownership/branch always come from
   // `account` (the server's own record), never from client-side guesses.

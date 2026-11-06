@@ -30,11 +30,13 @@ interface DataContextType {
   updateCustomer: (id: string, cust: Partial<Types.Customer>) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
   adjustCustomerPoints: (customerId: string, amount: number, reason: string) => Promise<void>;
+  mergeCustomers: (primaryId: string, duplicateIds: string[]) => Promise<Types.Customer>;
 
   pets: Types.Pet[];
   addPet: (pet: Omit<Types.Pet, 'id' | 'createdAt'>) => Promise<Types.Pet>;
   updatePet: (id: string, pet: Partial<Types.Pet>) => Promise<void>;
   deletePet: (id: string) => Promise<void>;
+  mergePets: (primaryId: string, duplicateIds: string[]) => Promise<Types.Pet>;
 
   services: Types.ServiceItem[];
   addService: (srv: Omit<Types.ServiceItem, 'id' | 'code'>) => Promise<Types.ServiceItem>;
@@ -265,7 +267,7 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
 
   // Helper for localStorage state initialization
   function useLocalState<T>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -305,6 +307,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   function useServerState<T>(endpoint: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
     const [state, setState] = useState<T>(initialValue);
     useEffect(() => {
+      if (!token) return;
       let active = true;
       api
         .get<T>(endpoint)
@@ -312,13 +315,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (active && data !== undefined && data !== null) setState(data);
         })
         .catch((err) => {
-          console.error(`[DataContext] Gagal memuat ${endpoint} dari server, memakai data seed lokal:`, err);
+          console.warn(`[DataContext] Memakai data seed lokal untuk ${endpoint}:`, err);
         });
       return () => {
         active = false;
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [endpoint, refreshKey]);
+    }, [endpoint, refreshKey, token]);
     return [state, setState];
   }
 
@@ -618,6 +621,192 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         newValue: `Saldo Poin: ${updated.loyaltyPoints}`
       }
     );
+  };
+
+  const mergeCustomers = async (primaryId: string, duplicateIds: string[]): Promise<Types.Customer> => {
+    const cleanDupIds = Array.from(new Set(duplicateIds.filter((id) => id && id !== primaryId)));
+    const dupSet = new Set(cleanDupIds);
+    const primary = customers.find((c) => c.id === primaryId);
+    if (!primary || cleanDupIds.length === 0) {
+      throw new Error('Pilih data pelanggan utama dan minimal 1 data duplikat.');
+    }
+    const duplicates = customers.filter((c) => dupSet.has(c.id));
+
+    const tierRank: Record<string, number> = { Regular: 1, Silver: 2, Gold: 3, Platinum: 4 };
+    let localMerged: Types.Customer = {
+      ...primary,
+      email: primary.email || duplicates.find((d) => d.email)?.email || '',
+      address: primary.address || duplicates.find((d) => d.address)?.address || '',
+      nik: primary.nik || duplicates.find((d) => d.nik)?.nik,
+      gender: primary.gender || duplicates.find((d) => d.gender)?.gender,
+      membershipTier: [primary, ...duplicates].reduce((best, cur) =>
+        (tierRank[cur.membershipTier] || 0) > (tierRank[best] || 0) ? cur.membershipTier : best,
+      primary.membershipTier),
+      loyaltyPoints: [primary, ...duplicates].reduce((sum, cur) => sum + (cur.loyaltyPoints || 0), 0),
+      totalSpent: [primary, ...duplicates].reduce((sum, cur) => sum + (cur.totalSpent || 0), 0),
+      petCount: pets.filter((p) => p.customerId === primaryId || dupSet.has(p.customerId)).length,
+    };
+
+    try {
+      const serverMerged = await api.post<Types.Customer>('/customers/merge', {
+        primaryId,
+        duplicateIds: cleanDupIds,
+      });
+      if (serverMerged) localMerged = serverMerged;
+    } catch {
+      // Fallback to local state consolidation if offline or non-UUID seed IDs
+    }
+
+    setPets((prev) =>
+      prev.map((p) => (dupSet.has(p.customerId) ? { ...p, customerId: primaryId, customerName: localMerged.name } : p))
+    );
+    setClinicVisits((prev) =>
+      prev.map((v) => (dupSet.has(v.customerId) ? { ...v, customerId: primaryId, customerName: localMerged.name } : v))
+    );
+    setInvoices((prev) =>
+      prev.map((inv) => (dupSet.has(inv.customerId) ? { ...inv, customerId: primaryId, customerName: localMerged.name } : inv))
+    );
+    setDoctorBookings((prev) =>
+      prev.map((b) => (dupSet.has(b.customerId) ? { ...b, customerId: primaryId, customerName: localMerged.name } : b))
+    );
+    setCustomerNotes((prev) =>
+      prev.map((n) => (dupSet.has(n.customerId) ? { ...n, customerId: primaryId } : n))
+    );
+    setLoyaltyEntries((prev) =>
+      prev.map((le) => (dupSet.has(le.customerId) ? { ...le, customerId: primaryId, customerName: localMerged.name } : le))
+    );
+    setInformedConsents((prev) =>
+      prev.map((ic) => (ic.customerId && dupSet.has(ic.customerId) ? { ...ic, customerId: primaryId, ownerName: localMerged.name } : ic))
+    );
+    setTelehealthSessions((prev) =>
+      prev.map((ts) => (dupSet.has(ts.customerId) ? { ...ts, customerId: primaryId, customerName: localMerged.name } : ts))
+    );
+    setCustomers((prev) =>
+      prev.filter((c) => !dupSet.has(c.id)).map((c) => (c.id === primaryId ? localMerged : c))
+    );
+
+    addAuditLog(
+      'Edit',
+      'Deduplikasi Master Pelanggan',
+      localMerged.name,
+      `Penggabungan (Deduplication) ${duplicates.length} data pelanggan duplikat [${duplicates.map((d) => d.name).join(', ')}] ke rekam utama "${localMerged.name}" (${localMerged.phone}). Seluruh pasien hewan, riwayat kunjungan, dan poin loyalitas (${localMerged.loyaltyPoints} pts) berhasil dikonsolidasikan.`,
+      {
+        severity: 'Warning',
+        previousValue: JSON.stringify(duplicates.map((d) => ({ id: d.id, name: d.name, phone: d.phone }))),
+        newValue: JSON.stringify({ id: localMerged.id, name: localMerged.name, phone: localMerged.phone, loyaltyPoints: localMerged.loyaltyPoints, petCount: localMerged.petCount })
+      }
+    );
+
+    return localMerged;
+  };
+
+  const mergePets = async (primaryId: string, duplicateIds: string[]): Promise<Types.Pet> => {
+    const cleanDupIds = Array.from(new Set(duplicateIds.filter((id) => id && id !== primaryId)));
+    const dupSet = new Set(cleanDupIds);
+    const primary = pets.find((p) => p.id === primaryId);
+    if (!primary || cleanDupIds.length === 0) {
+      throw new Error('Pilih data pasien hewan utama dan minimal 1 data duplikat.');
+    }
+    const duplicates = pets.filter((p) => dupSet.has(p.id));
+    const allPets = [primary, ...duplicates];
+
+    const mergeUniqueTokens = (vals: (string | undefined)[], ignore: string[] = []): string | undefined => {
+      const ignoreSet = new Set(ignore.map((t) => t.toLowerCase()));
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const raw of vals) {
+        if (!raw) continue;
+        for (const part of raw.split(/[,;]+/)) {
+          const trimmed = part.trim();
+          if (!trimmed) continue;
+          const lower = trimmed.toLowerCase();
+          if (ignoreSet.has(lower) || seen.has(lower)) continue;
+          seen.add(lower);
+          out.push(trimmed);
+        }
+      }
+      return out.length > 0 ? out.join(', ') : undefined;
+    };
+
+    let localMerged: Types.Pet = {
+      ...primary,
+      breed: primary.breed || duplicates.find((d) => d.breed)?.breed || '',
+      color: primary.color || duplicates.find((d) => d.color)?.color || '',
+      gender: primary.gender || duplicates.find((d) => d.gender)?.gender || 'Jantan',
+      sterilized: allPets.some((p) => Boolean(p.sterilized)),
+      birthDate: primary.birthDate || duplicates.find((d) => d.birthDate)?.birthDate || '',
+      weightKg: primary.weightKg > 0 ? primary.weightKg : duplicates.find((d) => d.weightKg > 0)?.weightKg || 0,
+      microchipNo: primary.microchipNo || duplicates.find((d) => d.microchipNo)?.microchipNo,
+      allergies: mergeUniqueTokens(allPets.map((p) => p.allergies), ['tidak ada', 'none', '-', 'nihil']) || primary.allergies,
+      notes: mergeUniqueTokens(allPets.map((p) => p.notes)) || primary.notes,
+      photoUrl: primary.photoUrl || duplicates.find((d) => d.photoUrl)?.photoUrl,
+    };
+
+    try {
+      const serverMerged = await api.post<Types.Pet>('/pets/merge', {
+        primaryId,
+        duplicateIds: cleanDupIds,
+      });
+      if (serverMerged) localMerged = serverMerged;
+    } catch {
+      // Fallback to local state consolidation if offline or non-UUID seed IDs
+    }
+
+    const reassignPet = <T extends { petId?: string; petName?: string }>(items: T[]): T[] =>
+      items.map((item) =>
+        item.petId && dupSet.has(item.petId)
+          ? { ...item, petId: primaryId, petName: localMerged.name }
+          : item
+      );
+
+    setClinicVisits((prev) => reassignPet(prev));
+    setSoapNotes((prev) => reassignPet(prev));
+    setMedicalRecords((prev) => reassignPet(prev));
+    setInpatients((prev) => reassignPet(prev));
+    setDischargeNotes((prev) => reassignPet(prev));
+    setLabTests((prev) => reassignPet(prev));
+    setSurgicalProcedures((prev) => reassignPet(prev));
+    setVacSchedules((prev) => reassignPet(prev));
+    setVacHistories((prev) => reassignPet(prev));
+    setDewormingRecords((prev) => reassignPet(prev));
+    setPreConsultForms((prev) => reassignPet(prev));
+    setReferralLetters((prev) => reassignPet(prev));
+    setVisitSurveys((prev) => reassignPet(prev));
+    setCarePlans((prev) => reassignPet(prev));
+    setDoctorBookings((prev) => reassignPet(prev));
+    setGroomingSessions((prev) => reassignPet(prev));
+    setHotelReservations((prev) => reassignPet(prev));
+    setInformedConsents((prev) => reassignPet(prev));
+    setPatientPhotos((prev) => reassignPet(prev));
+    setAmbulanceRequests((prev) => reassignPet(prev));
+
+    const remainingPets = pets
+      .filter((p) => !dupSet.has(p.id))
+      .map((p) => (p.id === primaryId ? localMerged : p));
+    setPets(remainingPets);
+
+    const affectedCustIds = new Set(allPets.map((p) => p.customerId));
+    setCustomers((prev) =>
+      prev.map((c) =>
+        affectedCustIds.has(c.id)
+          ? { ...c, petCount: remainingPets.filter((p) => p.customerId === c.id).length }
+          : c
+      )
+    );
+
+    addAuditLog(
+      'Edit',
+      'Deduplikasi Pasien & Rekam Medis',
+      localMerged.name,
+      `Penggabungan (Deduplication) ${duplicates.length} rekam pasien duplikat [${duplicates.map((d) => `${d.name} (${d.id})`).join(', ')}] ke pasien utama "${localMerged.name}" (Pemilik: ${localMerged.customerName}). Seluruh riwayat EMR, SOAP, vaksinasi, uji lab, dan peringatan alergi (${localMerged.allergies || 'Tidak ada'}) telah dikonsolidasikan.`,
+      {
+        severity: 'Kritis',
+        previousValue: JSON.stringify(duplicates.map((d) => ({ id: d.id, name: d.name, allergies: d.allergies, microchipNo: d.microchipNo }))),
+        newValue: JSON.stringify({ id: localMerged.id, name: localMerged.name, allergies: localMerged.allergies, microchipNo: localMerged.microchipNo })
+      }
+    );
+
+    return localMerged;
   };
 
   const addService = async (srvData: Omit<Types.ServiceItem, 'id' | 'code'>): Promise<Types.ServiceItem> => {
@@ -1529,10 +1718,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateCustomer,
         deleteCustomer,
         adjustCustomerPoints,
+        mergeCustomers,
         pets,
         addPet,
         updatePet,
         deletePet,
+        mergePets,
         services,
         addService,
         updateService,

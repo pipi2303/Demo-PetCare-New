@@ -4,6 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import { sendWhatsAppNotification } from '../../utils/sendWhatsApp';
 import { usePermissions } from '../../hooks/usePermissions';
 import { Reminder, Customer } from '../../types';
+import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import {
   MessageSquare,
   Send,
@@ -194,55 +195,18 @@ export const CRMModule: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Banner Header */}
-      <div className="bg-[#1B2A45] rounded-xl p-5 text-[#FFFDF9] border border-[#E1D6BE]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
-        <div>
-          <span className="px-2.5 py-0.5 rounded-full bg-[#E1D6BE]/20 text-[#E1D6BE] border border-[#E1D6BE]/30 text-[11px] font-bold uppercase tracking-wider">
-            CRM & Customer Engagement Center
-          </span>
-          <h2 className="text-xl font-bold mt-1 text-[#FFFDF9]">
-            CRM Pelanggan, Broadcast WA & Pengingat Otomatis
-          </h2>
-          <p className="text-xs text-[#FFFDF9]/80 mt-0.5">
-            Pengelolaan retensi klien 360°, poin loyalitas member, pengingat vaksin & broadcast WhatsApp terintegrasi.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('reminders')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'reminders'
-                ? 'bg-[#E1D6BE] text-[#1B2A45] shadow-xs'
-                : 'bg-[#101A2C] text-[#FFFDF9] border border-[#E1D6BE]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <Bell className="w-4 h-4" /> Pengingat Otomatis
-          </button>
-
-          <button
-            onClick={() => setActiveTab('broadcast')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'broadcast'
-                ? 'bg-[#E1D6BE] text-[#1B2A45] shadow-xs'
-                : 'bg-[#101A2C] text-[#FFFDF9] border border-[#E1D6BE]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <Send className="w-4 h-4" /> WA Broadcast
-          </button>
-
-          <button
-            onClick={() => setActiveTab('customer360')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'customer360'
-                ? 'bg-[#E1D6BE] text-[#1B2A45] shadow-xs'
-                : 'bg-[#101A2C] text-[#FFFDF9] border border-[#E1D6BE]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <HeartHandshake className="w-4 h-4" /> Profil Pelanggan 360°
-          </button>
-        </div>
-      </div>
+      <SystemNotificationHeader
+        icon={HeartHandshake}
+        title="CRM Pelanggan, Broadcast WA & Pengingat Otomatis"
+        description="Pengelolaan retensi klien 360°, poin loyalitas member, pengingat vaksin & broadcast WhatsApp terintegrasi."
+        tabs={[
+          { id: 'reminders', label: 'Pengingat Otomatis', icon: Bell, count: reminders.length },
+          { id: 'broadcast', label: 'WA Broadcast', icon: Send, count: broadcastRecipients.length },
+          { id: 'customer360', label: 'Profil Pelanggan 360°', icon: HeartHandshake, count: customers.length }
+        ]}
+        activeTab={activeTab}
+        onTabChange={(tabId) => setActiveTab(tabId as any)}
+      />
 
       {/* TAB 1: AUTOMATED REMINDERS */}
       {activeTab === 'reminders' && (

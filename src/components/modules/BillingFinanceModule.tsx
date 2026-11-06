@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { createQrisPayment, pollPaymentStatus, PaymentStatus } from '../../utils/payment';
+import { SystemNotificationHeader } from '../common/SystemNotificationHeader';
 import {
   Receipt, QrCode, DollarSign, CreditCard, Building2, TrendingUp, PieChart,
   CheckCircle2, Clock, Printer, Plus, BarChart2, Wallet, ArrowUpRight, ArrowDownRight,
@@ -268,73 +269,20 @@ export const BillingFinanceModule: React.FC<BillingFinanceModuleProps> = ({ acti
 
   return (
     <div className="space-y-6">
-      {/* Banner */}
-      <div className="bg-[#1B2A45] rounded-xl p-5 text-[#FFFDF9] border border-[#B8905A]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
-        <div>
-          <span className="px-2.5 py-0.5 rounded-full bg-[#B8905A]/30 text-[#D9B98A] border border-[#B8905A]/40 text-[11px] font-semibold uppercase tracking-wider">
-            Kasir, Billing & Buku Kas Keuangan
-          </span>
-          <h2 className="text-xl font-bold mt-1 text-[#FFFDF9] font-display">
-            Point of Sales, Buku Kas Jurnal & Laporan Laba Rugi
-          </h2>
-          <p className="text-xs text-[#EDE6D6]/80 mt-0.5">
-            Proses transaksi gabungan klinik, pet shop & hotel dengan simulasi QRIS instan, pencatatan kas masuk/keluar, serta breakdown laba rugi per unit bisnis.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setActiveTab('pos')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'pos'
-                ? 'bg-[#B8905A] text-[#FFFDF9] shadow-2xs'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <Receipt className="w-4 h-4" /> Billing & POS Kasir
-          </button>
-          <button
-            onClick={() => setActiveTab('cashbook')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'cashbook'
-                ? 'bg-[#B8905A] text-[#FFFDF9] shadow-2xs'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <Wallet className="w-4 h-4" /> Buku Kas & Jurnal
-          </button>
-          <button
-            onClick={() => setActiveTab('pl')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'pl'
-                ? 'bg-[#B8905A] text-[#FFFDF9] shadow-2xs'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <PieChart className="w-4 h-4" /> Laba / Rugi Per Unit
-          </button>
-          <button
-            onClick={() => setActiveTab('aging')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'aging'
-                ? 'bg-[#B8905A] text-[#FFFDF9] shadow-2xs'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <AlertCircle className="w-4 h-4" /> Piutang & Aging
-          </button>
-          <button
-            onClick={() => setActiveTab('journal')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'journal'
-                ? 'bg-[#B8905A] text-[#FFFDF9] shadow-2xs'
-                : 'bg-[#101A2C] text-[#D9B98A] border border-[#B8905A]/30 hover:bg-[#101A2C]/80'
-            }`}
-          >
-            <BookOpen className="w-4 h-4" /> Jurnal & Trial Balance
-          </button>
-        </div>
-      </div>
+      <SystemNotificationHeader
+        icon={Receipt}
+        title="Point of Sales, Buku Kas Jurnal & Laporan Laba Rugi"
+        description="Proses transaksi gabungan klinik, pet shop & hotel dengan simulasi QRIS instan, pencatatan kas masuk/keluar, serta breakdown laba rugi per unit bisnis."
+        tabs={[
+          { id: 'pos', label: 'Billing & POS Kasir', icon: Receipt, count: invoices.length },
+          { id: 'cashbook', label: 'Buku Kas & Jurnal', icon: Wallet, count: cashTransactions.length },
+          { id: 'pl', label: 'Laba / Rugi Per Unit', icon: PieChart },
+          { id: 'aging', label: 'Piutang & Aging', icon: AlertCircle },
+          { id: 'journal', label: 'Jurnal & Trial Balance', icon: BookOpen, count: journalEntries.length }
+        ]}
+        activeTab={activeTab}
+        onTabChange={(tabId) => setActiveTab(tabId as any)}
+      />
 
       {activeTab === 'pos' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
